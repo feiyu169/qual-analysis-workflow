@@ -1,5 +1,5 @@
 """
-quality/reasoning/__init__.py — 推理引擎模块
+quality/reasoning/ — 推理引擎模块
 
 包含：
 - CausalModeler: 因果建模器（Granger检验+敏感性分析+模板匹配）
