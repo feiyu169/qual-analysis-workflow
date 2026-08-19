@@ -1,0 +1,11 @@
+{
+  "name": "Logic Puzzle - Knights and Knaves",
+  "type": "general",
+  "language": "en",
+  "reason_k": 8,
+  "summary_k": 4,
+  "iterations": 1,
+  "problem": "On an island, knights always tell the truth and knaves always lie. You meet three inhabitants: A, B, and C. A says: 'Exactly one of us is a knight.' B says: 'Exactly two of us are knights.' C says: 'All three of us are knights.' How many knights are there?",
+  "expected_answer": "1",
+  "notes": "Classic logic puzzle. Multiple trajectories can test each possible configuration (0, 1, 2, 3 knights) independently and verify consistency."
+}

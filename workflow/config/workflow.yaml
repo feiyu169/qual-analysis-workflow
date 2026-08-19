@@ -1,0 +1,140 @@
+# 工作流配置 - V3.3.1（版本号与 workflow/__init__.py 一致）
+workflow:
+  name: "Hermes Agent Workflow"
+  version: "3.3.1"
+  
+  # 关键模块配置
+  critical_modules:
+    - "auth"
+    - "authentication"
+    - "authorization"
+    - "payment"
+    - "billing"
+    - "database"
+    - "db"
+    - "migration"
+    - "core"
+    - "kernel"
+    - "engine"
+    - "security"
+    - "crypto"
+  
+  # 文件过滤规则
+  ignore_patterns:
+    - "vendor/"
+    - "node_modules/"
+    - "*.pb.go"
+    - "*.min.js"
+    - "tests/"
+    - "test/"
+    - "__tests__/"
+    - "spec/"
+    - ".git/"
+    - "__pycache__/"
+    - "*.pyc"
+  
+  # 等级排序
+  level_order:
+    L0: 5
+    L3: 4
+    L3_LITE: 3
+    L2: 2
+    L1: 1
+    DOCS: 0
+    CONFIG: 0
+    IAC: 0
+  
+  # 规模阈值
+  thresholds:
+    L1:
+      max_files: 3
+      max_lines: 100
+    L2:
+      max_files: 10
+      max_lines: 500
+    L3:
+      min_files: 10
+      min_lines: 500
+  
+  # 风险阈值
+  risk_thresholds:
+    low: 3
+    medium: 5
+    high: 8
+  
+  # 热修复关键词
+  hotfix_keywords:
+    - "hotfix"
+    - "emergency"
+    - "urgent"
+    - "critical"
+    - "线上故障"
+    - "安全漏洞"
+    - "数据损坏"
+    - "紧急修复"
+    - "sev0"
+    - "sev1"
+    - "incident"
+    - "outage"
+  
+  # 失败处理
+  failure_handling:
+    gate_retry:
+      max_retries: 3
+      retry_delay: 5s
+      scope: "single_gate"
+      backoff: "exponential"
+      retryable_failures:
+        - "network_error"
+        - "timeout"
+        - "rate_limit"
+      non_retryable_failures:
+        - "code_error"
+        - "test_failure"
+        - "security_vulnerability"
+    
+    pipeline_retry:
+      max_retries: 1
+      retry_delay: 60s
+      scope: "full_pipeline"
+      trigger: "manual"
+    
+    timeout:
+      L0: "1h"
+      L1: "2h"
+      L2: "4h"
+      L3: "24h"
+      L3_LITE: "4h"
+      IAC: "2h"
+      CONFIG: "1h"
+      DOCS: "1h"
+    
+    escalation:
+      - condition: "单个门禁连续失败 2 次"
+        action: "通知技术负责人"
+      - condition: "单个门禁连续失败 3 次"
+        action: "冻结流程，人工介入"
+      - condition: "整个流水线失败"
+        action: "添加 do-not-merge 标签"
+  
+  # 门禁豁免
+  exemption_rules:
+    conditions:
+      - type: "known_vulnerability"
+        description: "已知漏洞，已有修复计划"
+        approval: "tech_lead"
+        expiry: "30d"
+        auto_revoke: true
+      - type: "legacy_code"
+        description: "存量代码，不影响本次变更"
+        approval: "tech_lead"
+        scope: "incremental_only"
+        expiry: "90d"
+      - type: "false_positive"
+        description: "工具误报"
+        approval: "security_team"
+        permanent: true
+      - type: "emergency_fix"
+        description: "紧急修复，风险可接受"
+        approval: "tech_lead"
+        expiry: "7d"

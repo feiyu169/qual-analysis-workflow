@@ -1,0 +1,28 @@
+# 扁平布局 + 裸 pytest 命令（HGF 门禁插件执行方式）下，
+# 把项目根加入 sys.path，否则测试模块无法 import workflow 模块。
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+# HGF 门禁的 ruff 规则集固定（V3.1 接入）。
+# 原因：ruff 0.16 起默认 select 随版本漂移（含 RUF001/002/003 等会把中文
+# 注释标为歧义 unicode 的规则），门禁标准必须可复现（HGF 纪律：标准稳定
+# 才能重跑同一标准验证）。
+# 已按规则修复的：E722/F401/F601/PLW1510/SIM/PERF（见 git 变更）。
+# 保留忽略并说明理由：
+# - DTZ005：本库 SQLite 场景刻意使用 naive datetime（P17 教训：aware/naive 比较崩溃）
+# - RUF012/RUF013：遗留配置表/隐式 Optional，属现代化风格；新代码已用 frozenset/显式 None
+# - BLE001/S110：遗留防御式解析（JSON 容错、工具探测），保留原语义
+[tool.ruff]
+# 归档目录与运行产物不参与静态检查（_legacy 是历史代码，见 _legacy/README.md）
+# mcp_server.py 是 hermes 兼容遗留入口（WSL 时代代码，保留原样），不纳入门禁标准
+extend-exclude = ["_legacy", ".hgf", ".checkov-test", "mcp_server.py"]
+
+[tool.ruff.lint]
+select = [
+    "E4", "E7", "E9", "F", "I",
+    "UP006", "UP045", "UP035", "RUF010", "RUF012", "RUF013",
+    "PIE790", "SIM102", "SIM103", "SIM114", "PERF102", "PLW1510",
+    "BLE001", "S110", "DTZ005",
+]
+ignore = ["DTZ005", "RUF012", "RUF013", "BLE001", "S110"]

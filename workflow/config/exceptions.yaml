@@ -1,0 +1,149 @@
+# 误报处理配置 - V3.0 方案
+# .mcp-gates-exceptions.yaml
+
+# 已知误报
+known_false_positives:
+  - id: "fp-001"
+    rule: "semgrep/python.lang.security.injection.sql-injection"
+    file: "tests/test_database.py"
+    reason: "测试文件，非生产代码"
+    approved_by: "tech_lead"
+    approved_date: "2025-01-01"
+    expiry: "2025-12-31"
+    permanent: false
+  
+  - id: "fp-002"
+    rule: "detect-secrets/ApiKeyDetector"
+    file: "config/test.yaml"
+    reason: "测试配置，非真实密钥"
+    approved_by: "security_team"
+    approved_date: "2025-01-01"
+    expiry: null
+    permanent: true
+  
+  - id: "fp-003"
+    rule: "safety/Pillow"
+    file: "requirements.txt"
+    reason: "已评估风险可接受，等待上游修复"
+    approved_by: "tech_lead"
+    approved_date: "2025-06-01"
+    expiry: "2025-12-31"
+    permanent: false
+
+# 豁免规则
+exemptions:
+  # 存量代码豁免
+  - id: "ex-001"
+    type: "legacy_code"
+    description: "存量代码豁免，仅适用于增量变更"
+    scope: "incremental_only"
+    approved_by: "tech_lead"
+    approved_date: "2025-01-01"
+    expiry: "2025-12-31"
+    conditions:
+      - "不涉及安全敏感代码"
+      - "不影响核心功能"
+  
+  # 紧急修复豁免
+  - id: "ex-002"
+    type: "emergency_fix"
+    description: "紧急修复豁免，限单次提交"
+    scope: "single_commit"
+    approved_by: "cto"
+    approved_date: "2025-06-01"
+    expiry: "2025-06-30"
+    conditions:
+      - "必须有回滚预案"
+      - "必须在48小时内补齐门禁"
+  
+  # 第三方依赖豁免
+  - id: "ex-003"
+    type: "third_party"
+    description: "第三方依赖漏洞豁免"
+    scope: "specific_package"
+    approved_by: "security_team"
+    approved_date: "2025-06-01"
+    expiry: "2025-12-31"
+    conditions:
+      - "已有缓解措施"
+      - "定期评估风险"
+
+# 误报处理流程
+false_positive_process:
+  steps:
+    - step: 1
+      name: "提交申请"
+      actor: "developer"
+      action: "填写误报申请表"
+      fields:
+        - "rule: 门禁规则"
+        - "file: 文件路径"
+        - "reason: 原因说明"
+        - "evidence: 证据材料"
+    
+    - step: 2
+      name: "技术审核"
+      actor: "tech_lead"
+      action: "审核误报申请"
+      criteria:
+        - "是否确实是误报"
+        - "风险是否可接受"
+        - "是否有替代方案"
+    
+    - step: 3
+      name: "安全确认"
+      actor: "security_team"
+      action: "确认安全风险"
+      required_when:
+        - "涉及安全规则"
+        - "涉及密钥检测"
+        - "涉及依赖漏洞"
+    
+    - step: 4
+      name: "记录存档"
+      actor: "system"
+      action: "记录到 exceptions 文件"
+      fields:
+        - "id: 唯一标识"
+        - "approved_by: 审批人"
+        - "approved_date: 审批日期"
+        - "expiry: 过期时间"
+    
+    - step: 5
+      name: "定期复查"
+      actor: "security_team"
+      action: "每月复查误报记录"
+      frequency: "monthly"
+      checks:
+        - "误报是否仍然有效"
+        - "风险是否变化"
+        - "是否有新的修复方案"
+
+# 审计配置
+audit:
+  # 记录误报审批
+  log_false_positive_approval:
+    fields:
+      - "timestamp"
+      - "fp_id"
+      - "rule"
+      - "file"
+      - "approved_by"
+      - "reason"
+  
+  # 记录豁免使用
+  log_exemption_usage:
+    fields:
+      - "timestamp"
+      - "exemption_id"
+      - "type"
+      - "context"
+      - "used_by"
+  
+  # 定期报告
+  monthly_report:
+    include:
+      - "误报数量统计"
+      - "豁免使用统计"
+      - "过期误报清理"
+      - "风险评估更新"

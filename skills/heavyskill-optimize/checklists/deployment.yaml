@@ -1,0 +1,269 @@
+domain: deployment
+name: "部署审查清单"
+version: "1.0"
+description: "针对部署方案的专项检查清单"
+source: builtin
+
+items:
+  # ==================== 健康检查 ====================
+  - id: "DEP-01"
+    question: "是否有健康检查？"
+    severity: "P1"
+    category: "可靠性"
+    check_points:
+      - "是否有存活探针？（liveness）"
+      - "是否有就绪探针？（readiness）"
+      - "是否有启动探针？（startup）"
+      - "检查间隔和超时？"
+    fix_suggestion: "配置Kubernetes健康检查探针"
+    references:
+      - "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/"
+  
+  - id: "DEP-02"
+    question: "健康检查是否全面？"
+    severity: "P1"
+    category: "可靠性"
+    check_points:
+      - "是否检查依赖服务？"
+      - "是否检查数据库连接？"
+      - "是否检查缓存连接？"
+      - "是否检查磁盘空间？"
+    fix_suggestion: "实现深度健康检查"
+    references:
+      - "https://microservices.io/patterns/observability/health-check-api.html"
+
+  # ==================== 滚动更新 ====================
+  - id: "DEP-03"
+    question: "是否有滚动更新？"
+    severity: "P1"
+    category: "发布策略"
+    check_points:
+      - "是否有滚动更新策略？"
+      - "最大不可用Pod数？"
+      - "最大超出Pod数？"
+      - "更新间隔？"
+    fix_suggestion: "配置Kubernetes滚动更新策略"
+    references:
+      - "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-update-deployment"
+  
+  - id: "DEP-04"
+    question: "是否有回滚机制？"
+    severity: "P1"
+    category: "发布策略"
+    check_points:
+      - "是否支持快速回滚？"
+      - "回滚是否自动化？"
+      - "是否有版本历史？"
+    fix_suggestion: "使用kubectl rollout undo或CI/CD回滚"
+    references:
+      - "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-back-a-deployment"
+  
+  - id: "DEP-05"
+    question: "是否有蓝绿部署/金丝雀部署？"
+    severity: "P2"
+    category: "发布策略"
+    check_points:
+      - "是否支持蓝绿部署？"
+      - "是否支持金丝雀部署？"
+      - "是否有流量切换？"
+    fix_suggestion: "使用Istio/Argo Rollouts实现高级发布策略"
+    references:
+      - "https://istio.io/latest/docs/traffic-management/"
+
+  # ==================== 资源限制 ====================
+  - id: "DEP-06"
+    question: "是否有资源限制？"
+    severity: "P1"
+    category: "资源管理"
+    check_points:
+      - "是否有CPU限制？"
+      - "是否有内存限制？"
+      - "是否有资源请求？"
+      - "是否有资源配额？"
+    fix_suggestion: "配置Kubernetes资源限制"
+    references:
+      - "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"
+  
+  - id: "DEP-07"
+    question: "是否有自动扩缩容？"
+    severity: "P2"
+    category: "资源管理"
+    check_points:
+      - "是否有HPA？"
+      - "是否有VPA？"
+      - "扩缩容策略？"
+    fix_suggestion: "配置HPA自动扩缩容"
+    references:
+      - "https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/"
+
+  # ==================== 日志收集 ====================
+  - id: "DEP-08"
+    question: "是否有日志收集？"
+    severity: "P1"
+    category: "可观测性"
+    check_points:
+      - "是否输出到stdout/stderr？"
+      - "是否有日志收集器？"
+      - "是否有日志格式规范？"
+      - "是否有日志级别？"
+    fix_suggestion: "使用Fluentd/Filebeat收集日志"
+    references:
+      - "https://www.fluentd.org/"
+  
+  - id: "DEP-09"
+    question: "是否有结构化日志？"
+    severity: "P2"
+    category: "可观测性"
+    check_points:
+      - "是否使用JSON格式？"
+      - "是否有Trace ID？"
+      - "是否有Request ID？"
+      - "是否有时间戳？"
+    fix_suggestion: "使用结构化日志格式"
+    references:
+      - "https://www.structlog.org/"
+
+  # ==================== 监控告警 ====================
+  - id: "DEP-10"
+    question: "是否有监控告警？"
+    severity: "P1"
+    category: "可观测性"
+    check_points:
+      - "是否有Prometheus指标？"
+      - "是否有Grafana可视化？"
+      - "是否有告警规则？"
+      - "是否有告警通知？"
+    fix_suggestion: "集成Prometheus + Grafana + AlertManager"
+    references:
+      - "https://prometheus.io/docs/introduction/overview/"
+  
+  - id: "DEP-11"
+    question: "是否有应用指标？"
+    severity: "P2"
+    category: "可观测性"
+    check_points:
+      - "是否有请求量指标？"
+      - "是否有响应时间指标？"
+      - "是否有错误率指标？"
+      - "是否有业务指标？"
+    fix_suggestion: "暴露应用指标端点"
+    references:
+      - "https://prometheus.io/docs/practices/instrumentation/"
+
+  # ==================== 配置管理 ====================
+  - id: "DEP-12"
+    question: "是否有配置管理？"
+    severity: "P1"
+    category: "配置"
+    check_points:
+      - "是否使用ConfigMap？"
+      - "是否使用Secret？"
+      - "是否支持热更新？"
+      - "是否加密敏感配置？"
+    fix_suggestion: "使用Kubernetes ConfigMap和Secret"
+    references:
+      - "https://kubernetes.io/docs/concepts/configuration/configmap/"
+  
+  - id: "DEP-13"
+    question: "是否有环境变量管理？"
+    severity: "P2"
+    category: "配置"
+    check_points:
+      - "是否有默认值？"
+      - "是否验证必填？"
+      - "是否有类型检查？"
+    fix_suggestion: "使用pydantic-settings管理环境变量"
+    references:
+      - "https://docs.pydantic.dev/latest/usage/pydantic_settings/"
+
+  # ==================== 密钥管理 ====================
+  - id: "DEP-14"
+    question: "是否有密钥管理？"
+    severity: "P1"
+    category: "安全"
+    check_points:
+      - "是否使用Kubernetes Secret？"
+      - "是否加密存储？"
+      - "是否有密钥轮换？"
+      - "是否有访问控制？"
+    fix_suggestion: "使用外部密钥管理服务（Vault/AWS Secrets Manager）"
+    references:
+      - "https://www.vaultproject.io/"
+  
+  - id: "DEP-15"
+    question: "是否有证书管理？"
+    severity: "P2"
+    category: "安全"
+    check_points:
+      - "是否有TLS证书？"
+      - "是否有自动续期？"
+      - "是否有证书管理工具？"
+    fix_suggestion: "使用cert-manager管理证书"
+    references:
+      - "https://cert-manager.io/"
+
+  # ==================== CI/CD ====================
+  - id: "DEP-16"
+    question: "是否有CI/CD？"
+    severity: "P2"
+    category: "自动化"
+    check_points:
+      - "是否有持续集成？"
+      - "是否有持续部署？"
+      - "是否有自动化测试？"
+      - "是否有自动化部署？"
+    fix_suggestion: "使用GitHub Actions/GitLab CI实现CI/CD"
+    references:
+      - "https://docs.github.com/en/actions"
+  
+  - id: "DEP-17"
+    question: "是否有部署前检查？"
+    severity: "P2"
+    category: "自动化"
+    check_points:
+      - "是否有代码检查？"
+      - "是否有安全扫描？"
+      - "是否有镜像扫描？"
+    fix_suggestion: "在CI/CD中集成代码检查和安全扫描"
+    references:
+      - "https://trivy.dev/"
+
+  # ==================== 网络 ====================
+  - id: "DEP-18"
+    question: "是否有网络策略？"
+    severity: "P2"
+    category: "网络"
+    check_points:
+      - "是否有NetworkPolicy？"
+      - "是否限制Pod间通信？"
+      - "是否有入口控制？"
+    fix_suggestion: "配置Kubernetes NetworkPolicy"
+    references:
+      - "https://kubernetes.io/docs/concepts/services-networking/network-policies/"
+  
+  - id: "DEP-19"
+    question: "是否有Ingress配置？"
+    severity: "P2"
+    category: "网络"
+    check_points:
+      - "是否有Ingress Controller？"
+      - "是否有路由规则？"
+      - "是否有TLS终止？"
+      - "是否有速率限制？"
+    fix_suggestion: "配置Nginx Ingress Controller"
+    references:
+      - "https://kubernetes.github.io/ingress-nginx/"
+
+  # ==================== 灾备 ====================
+  - id: "DEP-20"
+    question: "是否有灾备方案？"
+    severity: "P2"
+    category: "可靠性"
+    check_points:
+      - "是否有跨区域部署？"
+      - "是否有数据备份？"
+      - "是否有灾难恢复计划？"
+      - "是否有恢复时间目标（RTO）？"
+    fix_suggestion: "制定灾备方案"
+    references:
+      - "https://kubernetes.io/docs/setup/best-practices/cluster-large/"

@@ -1,0 +1,265 @@
+domain: frontend
+name: "前端审查清单"
+version: "1.0"
+description: "针对前端代码的专项检查清单"
+source: builtin
+updated: 2026-06-21
+
+items:
+  # ==================== 可访问性 ====================
+  - id: "FE-01"
+    question: "是否有可访问性问题？"
+    severity: "P1"
+    category: "可访问性"
+    check_scope: [code]
+    languages: [jsx, tsx, vue, html]
+    check_points:
+      - "图片是否有 alt 属性？"
+      - "是否有 ARIA 标签？"
+      - "是否支持键盘导航？"
+      - "颜色对比度是否足够？"
+      - "是否有表单标签？"
+    fix_suggestion:
+      steps:
+        - "1. 为所有图片添加 alt 属性"
+        - "2. 为交互元素添加 ARIA 标签"
+        - "3. 确保所有功能可通过键盘访问"
+        - "4. 检查颜色对比度（至少 4.5:1）"
+        - "5. 为表单元素添加 label"
+      example: |
+        <!-- 图片 alt -->
+        <img src="logo.png" alt="Company Logo">
+        
+        <!-- ARIA 标签 -->
+        <button aria-label="Close dialog">×</button>
+        
+        <!-- 表单标签 -->
+        <label for="email">Email</label>
+        <input id="email" type="email">
+    references:
+      - "https://www.w3.org/WAI/WCAG21/quickref/"
+  
+  - id: "FE-02"
+    question: "是否有响应式设计问题？"
+    severity: "P2"
+    category: "响应式设计"
+    check_scope: [code, config]
+    languages: [css, scss, less, jsx, tsx, vue]
+    check_points:
+      - "是否支持移动端？"
+      - "是否有媒体查询？"
+      - "是否有固定宽度？"
+      - "是否有溢出处理？"
+    fix_suggestion:
+      steps:
+        - "1. 使用相对单位（rem, em, %）而非固定像素"
+        - "2. 添加媒体查询支持不同屏幕尺寸"
+        - "3. 使用 Flexbox 或 Grid 布局"
+        - "4. 测试不同设备尺寸"
+      example: |
+        /* 媒体查询 */
+        @media (max-width: 768px) {
+          .container {
+            padding: 1rem;
+          }
+        }
+        
+        /* Flexbox 布局 */
+        .container {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 1rem;
+        }
+    references:
+      - "https://developer.mozilla.org/en-US/docs/Learn/CSS/CSS_layout/Responsive_Design"
+
+  # ==================== 前端安全 ====================
+  - id: "FE-03"
+    question: "是否有前端安全问题？"
+    severity: "P1"
+    category: "安全"
+    check_scope: [code]
+    languages: [js, ts, jsx, tsx, vue]
+    check_points:
+      - "是否有 XSS 风险？"
+      - "是否有 CSRF Token？"
+      - "是否有敏感数据暴露？"
+      - "是否有不安全的第三方脚本？"
+    fix_suggestion:
+      steps:
+        - "1. 避免使用 innerHTML/dangerouslySetInnerHTML"
+        - "2. 在表单中添加 CSRF Token"
+        - "3. 不在前端存储敏感数据"
+        - "4. 使用 SRI 验证第三方脚本"
+      example: |
+        <!-- CSRF Token -->
+        <input type="hidden" name="_csrf" value="{{csrfToken}}">
+        
+        <!-- SRI -->
+        <script src="https://cdn.example.com/lib.js" 
+                integrity="sha384-..." 
+                crossorigin="anonymous"></script>
+    references:
+      - "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html"
+  
+  - id: "FE-04"
+    question: "是否有包管理安全问题？"
+    severity: "P1"
+    category: "依赖安全"
+    check_scope: [config]
+    languages: [js, ts]
+    check_points:
+      - "是否有 npm audit？"
+      - "是否有 lock 文件？"
+      - "是否有不必要的依赖？"
+      - "是否有过时的依赖？"
+    fix_suggestion:
+      steps:
+        - "1. 运行 npm audit 检查漏洞"
+        - "2. 使用 npm audit fix 修复"
+        - "3. 提交 package-lock.json"
+        - "4. 定期更新依赖"
+      example: |
+        # 检查漏洞
+        npm audit
+        
+        # 自动修复
+        npm audit fix
+        
+        # 强制修复
+        npm audit fix --force
+    references:
+      - "https://docs.npmjs.com/auditing-package-dependencies-for-security-vulnerabilities"
+
+  # ==================== 性能 ====================
+  - id: "FE-05"
+    question: "是否有前端性能问题？"
+    severity: "P1"
+    category: "性能"
+    check_scope: [code, config]
+    languages: [js, ts, jsx, tsx, vue, css]
+    check_points:
+      - "是否有代码分割？"
+      - "是否有懒加载？"
+      - "是否有图片优化？"
+      - "是否有缓存策略？"
+      - "是否有 bundle 大小优化？"
+    fix_suggestion:
+      steps:
+        - "1. 使用动态 import 实现代码分割"
+        - "2. 使用 React.lazy/Suspense 实现懒加载"
+        - "3. 压缩图片，使用 WebP 格式"
+        - "4. 配置缓存策略"
+        - "5. 使用 Tree Shaking 移除未使用代码"
+      example: |
+        // 代码分割
+        const LazyComponent = React.lazy(() => import('./LazyComponent'));
+        
+        // 图片懒加载
+        <img loading="lazy" src="image.jpg" alt="...">
+        
+        // WebP
+        <picture>
+          <source srcset="image.webp" type="image/webp">
+          <img src="image.jpg" alt="...">
+        </picture>
+    references:
+      - "https://web.dev/performance/"
+  
+  - id: "FE-06"
+    question: "是否有状态管理问题？"
+    severity: "P2"
+    category: "状态管理"
+    check_scope: [code]
+    languages: [js, ts, jsx, tsx, vue]
+    check_points:
+      - "是否有全局状态？"
+      - "是否有状态泄漏？"
+      - "是否有不必要的重渲染？"
+      - "是否有状态同步问题？"
+    fix_suggestion:
+      steps:
+        - "1. 使用状态管理库（Redux/Zustand/Pinia）"
+        - "2. 避免在组件外存储状态"
+        - "3. 使用 useMemo/useCallback 优化重渲染"
+        - "4. 使用 React DevTools 分析状态"
+      example: |
+        // Zustand 状态管理
+        import create from 'zustand'
+        
+        const useStore = create((set) => ({
+          count: 0,
+          increment: () => set((state) => ({ count: state.count + 1 })),
+        }))
+        
+        // useMemo 优化
+        const memoizedValue = useMemo(() => computeExpensiveValue(a, b), [a, b]);
+    references:
+      - "https://react.dev/reference/react/useMemo"
+
+  # ==================== 代码质量 ====================
+  - id: "FE-07"
+    question: "是否有代码质量问题？"
+    severity: "P2"
+    category: "代码质量"
+    check_scope: [code]
+    languages: [js, ts, jsx, tsx, vue, css]
+    check_points:
+      - "是否有 ESLint 配置？"
+      - "是否有 Prettier 配置？"
+      - "是否有 TypeScript 类型？"
+      - "是否有注释？"
+    fix_suggestion:
+      steps:
+        - "1. 配置 ESLint 规则"
+        - "2. 配置 Prettier 格式化"
+        - "3. 使用 TypeScript 添加类型"
+        - "4. 添加必要的注释"
+      example: |
+        // ESLint 配置
+        {
+          "extends": ["eslint:recommended", "plugin:react/recommended"],
+          "rules": {
+            "no-unused-vars": "error",
+            "no-console": "warn"
+          }
+        }
+        
+        // TypeScript 类型
+        interface User {
+          id: number;
+          name: string;
+          email: string;
+        }
+    references:
+      - "https://eslint.org/docs/latest/use/getting-started"
+
+  # ==================== 测试 ====================
+  - id: "FE-08"
+    question: "是否有前端测试？"
+    severity: "P2"
+    category: "测试"
+    check_scope: [code]
+    languages: [js, ts, jsx, tsx, vue]
+    check_points:
+      - "是否有单元测试？"
+      - "是否有集成测试？"
+      - "是否有 E2E 测试？"
+      - "测试覆盖率是否足够？"
+    fix_suggestion:
+      steps:
+        - "1. 使用 Jest/Vitest 编写单元测试"
+        - "2. 使用 Testing Library 编写集成测试"
+        - "3. 使用 Cypress/Playwright 编写 E2E 测试"
+        - "4. 设置测试覆盖率阈值"
+      example: |
+        // Jest 单元测试
+        import { render, screen } from '@testing-library/react';
+        import Button from './Button';
+        
+        test('renders button with text', () => {
+          render(<Button>Click me</Button>);
+          expect(screen.getByText('Click me')).toBeInTheDocument();
+        });
+    references:
+      - "https://testing-library.com/docs/react-testing-library/intro/"

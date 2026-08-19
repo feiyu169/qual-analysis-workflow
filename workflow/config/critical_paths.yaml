@@ -1,0 +1,46 @@
+# 关键路径配置 - L0 紧急热修复必须通过的测试
+# 格式：pytest 测试文件路径或测试标记
+
+critical_paths:
+  # 认证相关测试
+  - "tests/test_auth.py"
+  - "tests/test_login.py"
+  - "tests/test_session.py"
+  
+  # 支付相关测试
+  - "tests/test_payment.py"
+  - "tests/test_billing.py"
+  - "tests/test_checkout.py"
+  
+  # 数据库相关测试
+  - "tests/test_database.py"
+  - "tests/test_migration.py"
+  
+  # 核心 API 测试
+  - "tests/test_core_api.py"
+  - "tests/test_health.py"
+  
+  # 安全相关测试
+  - "tests/test_security.py"
+  - "tests/test_encryption.py"
+
+# pytest 标记（用于 -k 参数）
+critical_markers:
+  - "critical"
+  - "auth"
+  - "payment"
+  - "security"
+  - "database"
+
+# 说明
+description: |
+  关键路径配置用于 L0 紧急热修复的质量门禁。
+  紧急修复必须通过这些测试才能部署。
+  
+  配置方式：
+  1. 添加测试文件路径
+  2. 或添加 pytest 标记（通过 -k 参数使用）
+  
+  示例：
+  - pytest tests/test_auth.py -v
+  - pytest tests/ -v -k 'critical or auth'

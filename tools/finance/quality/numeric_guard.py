@@ -1,0 +1,335 @@
+"""
+numeric_guard.py — 前端数值闸门（HGF 驱动，L2）
+
+按 HeavySkill K=6 评审修订（v2）：6 道闸门合一
+  闸门1 数值量级校验（类别锚点，非全局 closest；普通10倍/估值5倍）
+  闸门2 空章检测（去空白 < 800 字符）
+  闸门3 财年一致性校验（ch5 必须锚 FY2025，程序化强制）
+  闸门4 币值/单位语义校验（估值章每股价值币种对齐市场）
+  闸门5 空壳检测（财务章长度达标但小数数字计数=0 → 空壳）
+  闸门6 组装前调用（全过才组装 + 无锚点数字标注）
+
+核心：LLM 模板残留（1427.8 vs 实际73.66）是确定性的量级违规，机器校验无法绕过。
+"""
+
+import logging
+import re
+from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
+
+
+# ====================================================================
+# 数据模型
+# ====================================================================
+
+@dataclass
+class GateViolation:
+    """闸门违规"""
+    gate: str                 # "numeric" / "empty" / "fiscal" / "currency" / "shell"
+    chapter: int
+    message: str
+    severity: str = "critical"   # critical=阻断 / warning=提示
+
+
+@dataclass
+class GateResult:
+    """闸门结果"""
+    passed: bool
+    violations: list[GateViolation] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    def __bool__(self):
+        return self.passed
+
+
+# ====================================================================
+# 常量
+# ====================================================================
+
+# 空章阈值：去空白后最小有效字符数
+MIN_CHAPTER_CHARS = 800
+# 空壳阈值：财务章(ch6)至少应有 N 个小数数字（如 18.2、73.66）
+MIN_FINANCIAL_NUMBERS = 3
+# 财务章编号
+FINANCIAL_CHAPTERS = {5, 6}
+# 估值章编号
+VALUATION_CHAPTERS = {7}
+# 财年铁律章节（ch5 经营表现 / ch4 最近变化）
+FISCAL_STRICT_CHAPTERS = {4, 5}
+# 币值敏感章节
+CURRENCY_CHAPTERS = {7}
+
+# 量级阈值
+GENERAL_RATIO = 10.0     # 普通章：数字与锚点差 >10 倍 → 模板残留
+VALUATION_RATIO = 5.0    # 估值章：>5 倍
+
+# 白名单：这些上下文中的数字不参与量级校验
+WHITELIST_CONTEXT = [
+    r"\d{4}年",                 # 年份（2025年）
+    r"^\d+\.?\d*\s*%$",         # 纯百分数
+    r"股本|总股本|亿股|万股|股$",   # 股本
+    r"发行价|上市价|招股价|港元|港币|每股收益|价格带|价格区间|售价|定价|价格$|细分市场|市场$|纯电|新能源",  # 价格/币种/市场定位
+    r"ARPU|ARPPU|MAU|DAU|MPU|付费用户|用户数",  # 运营指标
+    r"市盈率|市净率|PE\b|PB\b|PS\b|EV\b|ROE|ROIC|毛利率|净利率",  # 比率
+    r"汇率|折算",
+    # 行业/市场规模等外部数据（非公司财务，如"IP改编市场超2600亿元"）
+    r"市场规模|行业规模|全产业链|产业链产值|市场空间|行业产值|总规模|市场规模达",
+    # 比例/示例/倍数（如"100万次阅读比10万次多1倍"中的 0.01/0.001）
+    r"倍$|次$|比例|示例|举例|每\S{0,4}就|相当于|约为.{0,4}倍",
+]
+
+# 币值关键词
+_CURRENCY_CNY = ["人民币", "元", "CNY", "RMB"]
+_CURRENCY_HKD = ["港元", "港币", "HKD", "HK$"]
+
+
+# ====================================================================
+# 闸门类
+# ====================================================================
+
+class NumericGuard:
+    """前端数值闸门合集"""
+
+    # ------------------------------------------------------------
+    # 闸门1：数值量级校验（类别锚点）
+    # ------------------------------------------------------------
+    def check_numeric(
+        self,
+        chapter_num: int,
+        content: str,
+        wind_data: dict,
+    ) -> GateResult:
+        """校验章节数字与 Wind 锚点量级一致性（类别锚点：营收对营收、净利对净利）"""
+        result = GateResult(passed=True)
+
+        anchors = self._category_anchors(wind_data)
+        if not anchors:
+            return result  # 无锚点跳过（wind 不可用）
+
+        threshold = VALUATION_RATIO if chapter_num in VALUATION_CHAPTERS else GENERAL_RATIO
+
+        for value, ctx in self._extract_amounts(content):
+            if value == 0:
+                continue
+            # 白名单过滤
+            if any(re.search(p, ctx) for p in WHITELIST_CONTEXT):
+                continue
+            # 万元级数字（<1000万 = <0.1亿）：价格/单价/运营数据（如"25万-40万纯电车型"、
+            # "30万元以上"），不属于亿级财务锚点量级，不参与模板残留校验
+            # （模板残留指亿级财务数字错位：1427.8 vs 73.66；万元级写错也不构成模板残留）
+            if abs(value) < 0.1:
+                continue
+            # 类别锚点：找与该数字**同类别**的锚点（按数量级就近，但要求可解释）
+            # 简化：找所有锚点中与 value 比值在 [1/threshold, threshold] 内的
+            # 若无任何锚点与之同量级 → 模板残留嫌疑
+            matched = any(
+                1.0 / threshold <= abs(value) / max(abs(a), 1e-9) <= threshold
+                for a in anchors
+            )
+            if not matched:
+                closest = min(anchors, key=lambda a: abs(abs(value) - abs(a)))
+                result.violations.append(GateViolation(
+                    gate="numeric",
+                    chapter=chapter_num,
+                    message=(
+                        f"数字 {value} 与 Wind 锚点（最近 {closest}）量级不匹配"
+                        f"（ratio={abs(value)/max(abs(closest),1e-9):.1f} > {threshold}），"
+                        f"疑似模板残留：'{ctx[:40]}...'"
+                    ),
+                ))
+                result.passed = False
+        return result
+
+    def _category_anchors(self, wind_data: dict) -> list[float]:
+        """收集 Wind canonical 锚点数值（各类别指标绝对值）"""
+        anchors: list[float] = []
+        for section in ("income", "balance", "cashflow"):
+            table = wind_data.get(section) or {}
+            for v in table.values():
+                if isinstance(v, list):
+                    for x in v:
+                        if isinstance(x, (int, float)) and x is not None:
+                            anchors.append(abs(float(x)))
+        return [a for a in anchors if a > 0]
+
+    def _extract_amounts(self, content: str) -> list[tuple[float, str]]:
+        """提取 "数字+万亿/亿元/亿/万元/万" 及上下文（排除计数词如"100万次/万人/万部"）"""
+        out = []
+        # 万亿 必须单独列在 亿 之前（否则 "1.5万亿" 会被切成 "1.5万" → 0.00015 亿 的假数字）
+        for m in re.finditer(r"(-?\d+\.?\d*)\s*(万亿|亿元|亿|万元|万)", content):
+            value = float(m.group(1))
+            unit = m.group(2)
+            # 单位后跟计数词（次/人/户/部/家/字/本/篇/首/条/个/起/辆/用户…）→ 非金额，跳过
+            after = content[m.end():m.end() + 4]
+            if re.match(r"(次|人|户|部|家|字|本|篇|首|条|个|章|册|张|场|款|项|起|辆|台|位|名|岁|用户|人次|下载|安装|门店|公里|小时|分钟|天|月|年|款车|车型)", after):
+                continue
+            if unit == "万亿":
+                value = value * 10000.0
+            elif unit in ("万元", "万"):
+                value = value / 10000.0
+            # ctx 前后各放宽一些，确保"市场规模/行业规模"等白名单词能被捕获
+            ctx = content[max(0, m.start() - 25):m.end() + 12].replace("\n", " ")
+            out.append((value, ctx))
+        return out
+
+    # ------------------------------------------------------------
+    # 闸门2：空章检测
+    # ------------------------------------------------------------
+    def check_empty(self, chapter_num: int, content: str) -> GateResult:
+        result = GateResult(passed=True)
+        stripped = re.sub(r"\s", "", content or "")
+        if len(stripped) < MIN_CHAPTER_CHARS:
+            result.passed = False
+            result.violations.append(GateViolation(
+                gate="empty", chapter=chapter_num,
+                message=f"疑似空章/半成品（有效内容仅 {len(stripped)} 字符 < {MIN_CHAPTER_CHARS}）",
+            ))
+        return result
+
+    # ------------------------------------------------------------
+    # 闸门5：空壳检测（财务章长度够但无数值）
+    # ------------------------------------------------------------
+    def check_shell(self, chapter_num: int, content: str) -> GateResult:
+        result = GateResult(passed=True)
+        if chapter_num not in FINANCIAL_CHAPTERS:
+            return result
+        stripped = re.sub(r"\s", "", content or "")
+        if len(stripped) >= MIN_CHAPTER_CHARS:
+            decimals = re.findall(r"\d+\.\d+", content)
+            if len(decimals) < MIN_FINANCIAL_NUMBERS:
+                result.passed = False
+                result.violations.append(GateViolation(
+                    gate="shell", chapter=chapter_num,
+                    message=(
+                        f"空壳章：长度 {len(stripped)} 达标但仅 {len(decimals)} 个小数数字"
+                        f"（财务章须 ≥{MIN_FINANCIAL_NUMBERS} 个，如 73.66/-7.76）"
+                    ),
+                ))
+        return result
+
+    # ------------------------------------------------------------
+    # 闸门3：财年一致性（ch4/ch5 必须锚最新财年）
+    # ------------------------------------------------------------
+    def check_fiscal(
+        self,
+        chapter_num: int,
+        content: str,
+        wind_data: dict,
+    ) -> GateResult:
+        result = GateResult(passed=True)
+        if chapter_num not in FISCAL_STRICT_CHAPTERS:
+            return result
+
+        # 最新财年
+        labels = ((wind_data or {}).get("_year_labels") or {}).get("财年") or []
+        if not labels:
+            return result
+        latest_fy = labels[-1]
+        prior_fy = latest_fy - 1
+
+        # ch5 检查：是否把 prior 财年当当期（如"2024年度…经营表现"无"对比/历史"标注）
+        # 违规模式：出现 f"{prior_fy}年度" 或 f"{prior_fy}财年" 且无"对比/历史/上年"标注
+        prior_refs = re.findall(rf"{prior_fy}[年财]度?", content)
+        latest_refs = re.findall(rf"{latest_fy}[年财]度?", content)
+        if prior_refs and not latest_refs:
+            result.passed = False
+            result.violations.append(GateViolation(
+                gate="fiscal", chapter=chapter_num,
+                message=(
+                    f"财年错位：本章大量引用 FY{prior_fy}（{len(prior_refs)} 处）但无 FY{latest_fy} 当期数据，"
+                    f"须以 FY{latest_fy} 为当期（2024 只能作对比/历史）"
+                ),
+            ))
+        return result
+
+    # ------------------------------------------------------------
+    # 闸门4：币值/单位语义（估值章每股价值币种对齐）
+    # ------------------------------------------------------------
+    def check_currency(self, chapter_num: int, content: str, market: str = "hk") -> GateResult:
+        result = GateResult(passed=True)
+        if chapter_num not in CURRENCY_CHAPTERS:
+            return result
+
+        # 港股：每股价值应为港元；"X元/股"或"每股价值X元"无人民币标注 → 违规
+        if market == "hk":
+            per_share = []
+            for m in re.finditer(r"(\d+\.?\d*)\s*元(?:\s*/\s*股)?", content):
+                ctx_b = content[max(0, m.start() - 15):m.start()]
+                ctx_a = content[m.end():m.end() + 15]
+                if re.search(r"每股|/股|股$", ctx_b + ctx_a):
+                    per_share.append(m.group(1))
+            if per_share:
+                has_cny = bool(re.search(r"人民币", content))
+                if not has_cny:
+                    result.passed = False
+                    result.violations.append(GateViolation(
+                        gate="currency", chapter=chapter_num,
+                        message=(
+                            f"港股标的每股价值 {per_share[0]}元 未标注币种/未换算港元"
+                            f"（HK 市场应以港元或显式 RMB→HKD 换算）"
+                        ),
+                    ))
+                else:
+                    result.warnings.append(
+                        f"每股价值 {per_share[0]}元 标注了人民币，但港股市场建议显式换算港元"
+                    )
+        return result
+
+    # ------------------------------------------------------------
+    # 汇总（供 _generate_chapter / 组装闸门调用）
+    # ------------------------------------------------------------
+    def check_all(
+        self,
+        chapter_num: int,
+        content: str,
+        wind_data: dict,
+        market: str = "hk",
+    ) -> GateResult:
+        """全闸门汇总（闸门1-5）"""
+        all_violations = []
+        all_warnings = []
+        checks = [
+            self.check_numeric(chapter_num, content, wind_data),
+            self.check_empty(chapter_num, content),
+            self.check_shell(chapter_num, content),
+            self.check_fiscal(chapter_num, content, wind_data),
+            self.check_currency(chapter_num, content, market),
+        ]
+        for r in checks:
+            all_violations.extend(r.violations)
+            all_warnings.extend(r.warnings)
+        return GateResult(
+            passed=len(all_violations) == 0,
+            violations=all_violations,
+            warnings=all_warnings,
+        )
+
+
+# ====================================================================
+# 模块级便捷函数
+# ====================================================================
+
+def check_chapter_gates(
+    chapter_num: int,
+    content: str,
+    wind_data: dict,
+    market: str = "hk",
+) -> GateResult:
+    """单章前端闸门（供 workflow._generate_chapter 集成）"""
+    return NumericGuard().check_all(chapter_num, content, wind_data, market)
+
+
+def pre_assembly_gate(
+    chapters: dict[int, str],
+    wind_data: dict,
+    market: str = "hk",
+) -> dict[int, list[str]]:
+    """组装前闸门（闸门6）：11 章全过才组装，失败章标注"""
+    guard = NumericGuard()
+    failures: dict[int, list[str]] = {}
+    for num, content in chapters.items():
+        r = guard.check_all(num, content, wind_data, market)
+        if not r.passed:
+            failures[num] = [v.message for v in r.violations]
+    return failures

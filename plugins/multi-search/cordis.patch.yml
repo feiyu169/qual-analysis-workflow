@@ -1,0 +1,7 @@
+# multi-search bundle patch —— 作为 loader 图层追加在 dsh-base / dsh-web-app 之后。
+# 安装：把本包放入 profile 的 node_modules（或 `dsh plugin --profile web add <本目录>`），
+#       并在 profile 的 cordis.patch.yml 里插入下面这行 insert（或直接由 bundle 机制自动加载）。
+- insert:
+    - id: multi-search
+      name: 'multi-search'
+      config: {}

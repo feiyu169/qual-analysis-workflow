@@ -1,0 +1,4 @@
+[run]
+# 门禁覆盖率只度量被测单元（calc.py）；hgf_demo.py 是调用 HGF API 的
+# 驱动脚本（脚手架），不是生产代码，排除在覆盖率统计之外。
+omit = hgf_demo.py

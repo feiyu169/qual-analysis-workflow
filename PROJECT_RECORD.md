@@ -1,0 +1,195 @@
+# HGF 项目记录（会话持久化存档）
+
+> 本文件是 HGF（Hermes Gate Flow）在 DSH 中全部工作的持久化记录，供下次会话恢复上下文。
+> 最后更新：2026-08-18（V3.3.1 架构复审修复完成）
+
+---
+
+## 一、项目全貌
+
+HGF 是门禁驱动开发工作流，部署于 DSH（Cordis 插件宿主）。代码在：
+`D:\OneDrive\文档\deepseek harness workspace\workflow\`
+
+**版本**：`workflow/__init__.py` = **3.3.0**（V3.3.0 架构重构：原子写入 + 统一检查器 + lifecycle 拆分 + 矩阵解耦）
+
+**git 仓库**：仅 `workflow/` 目录是 git 仓库（`D:\OneDrive\文档\deepseek harness workspace\workflow\.git`）。
+工作区根目录**不是** git 仓库。pre-push hook 已安装（core.hooksPath=workflow/git_hooks）。
+
+---
+
+## 二、版本演进史（按时间顺序）
+
+| 版本 | 内容 | commit |
+|------|------|--------|
+| V3.2 基线 | 门禁引擎/纪律门禁/生命周期/插件桥（106 测试） | `6ef38be` |
+| V3.2.8 收尾 | 金丝雀(canary.py) | `6e8e999` |
+| V3.2.8 收尾 | CI 演练(ci_simulate.sh) + pre-push hook | `b26671b` |
+| V3.2.8 收尾 | tdd_evidence 真检查器（git 历史） | `07006b9` |
+| V3.2.8 收尾 | 评审工具链(review.py 审查包+双签名) | `782d1d0` |
+| V3.2.8-A | 失败记录"已解决"口径（re_run_result 非空=已解决，CLI --failures） | `8c3fbd0` |
+| V3.2.9 | 架构评审修复：安全准出真跑(A/J)+verify_tdd强实现(B)+误报接线(C)+路径/argv/hook卫生(D/F/G)+版本观测收敛(E/H/I) | `ed7766e` |
+| V3.2.10 | 插件效能：hgf_bridge --serve 长驻桥（11-32× 提速）+命令级超时+排队+结构化错误+env fail-fast | `c0716b7` |
+| V3.2.11 P1 | 诚实化：文档语义校验器+integration真验L2+DAG接电(auto_advance)+reopen回路 | `d2f4e86` |
+| V3.2.11 P2-4 | 权威化+规模化+持续：评审kind语义+流程度量+健康探针+门禁健康报告 | `e1a2730` |
+| V3.2.11 待办 | 版本号 3.2.11 + 集成测试套件 + 狗粮化修复(shell参数数组/零依赖直通) + user_acceptance 人工通道 | `db2a548`/`024d1f5`/`72d361f` |
+| **V3.3.0** | **架构重构（架构专家评审 6.8/10 的 R1-R4）**：原子写入(state_io) + 统一检查器(tool_runner) + lifecycle 拆分(dag/checkers/metrics) + 矩阵-生命周期解耦(注入回调) | `3dc9c3c` |
+| **V3.3.1** | **架构复审修复（复审共识 7.6/10 的建议 1-4）**：_run_command 委托 tool_runner + mcp_server.check_security 改走 tool_runner + 删 gate_results 死表 + atomic_append_jsonl 诚实化(fsync) + re-export 收敛(__all__) + reopen 异常改 warning | `00faa14` |
+
+### V3.3.0 架构重构明细（2026-08-18，架构专家 8 轨迹评审后实施）
+
+| 项 | 内容 | 效果 |
+|----|------|------|
+| R1 原子写入 | state_io.py（write-temp+os.replace）；hgf_state/baseline/lifecycle/review/record_matrix_evidence 全接入；update_failure 消除"先删后写" | 崩溃不丢数据 |
+| R2 统一检查器 | tool_runner.py（safe_run argv+shell=False/split_command）；_check_tool_scan/_check_static/_check_health 改走它 | 消除 shell=True 遗留 + 双重执行路径 |
+| R3 拆分 lifecycle | lifecycle_dag(176行)+lifecycle_checkers(634行)+lifecycle_metrics(189行)+lifecycle re-export 壳 | 970 行上帝模块 → 单一职责 |
+| R4 矩阵解耦 | gate_executor 加 matrix_evidence_callback 注入（默认 None）；CLI/bridge/mcp 注入回调 | 消除执行层↔生命周期双向耦合 |
+
+**验证**：185 tests / 86% cov / ruff 全绿 / 净减 786 行 / 狗粮化状态完好（gate_3_1 done）
+
+---
+
+## 三、当前运行状态（会话级，DSH 重启即失）
+
+**动态插件**（重启后需从 `workflow/plugin/` 源码重建，idPrefix 会变）：
+
+| 插件 | 源码 | 平台 | 用途 | 重建 |
+|------|------|------|------|------|
+| hgf-tools | `workflow/plugin/hgf-tools.js` | Host | 5 个 HGF 原生工具（长驻 stdio 桥 V3.2.10） | define(kind new, idPrefix hgf) + run |
+| codex-sidebar | `workflow/plugin/codex-sidebar.js` | Client | 仿 Codex 左侧边栏 | define(kind new, idPrefix cdx) + run（需浏览器批准） |
+| ~~codex-workspace~~ | `workflow/plugin/codex-workspace*.js` | Host+Client | 右侧工作台（**已按用户要求删除**，源码保留备查） | — |
+
+**重建要点**：
+- hgf-tools.js 有 `inject: ['timer']`（沙箱无 setTimeout，超时用 ctx.timeout）
+- BRIDGE 路径硬编码回退：`D:\OneDrive\文档\deepseek harness workspace\workflow\hgf_bridge.py`（env HGF_BRIDGE/HGF_PYTHON 优先）
+- Client 插件 cordis_run 返回 awaiting-approval 是正常流程
+
+**可用工具注意**：heavyskill 原生工具在最近一次 DSH 重启后**不可用**（工具集变化），但 `heavyskill` 技能仍在（模式1=DSH 子代理 K 路并行审议，模式2=Python 流水线需 DEEPSEEK_API_KEY + venv，当前两者均不可用——模式1 子代理是可用路径）。
+
+---
+
+## 四、关键架构事实（下次会话免重复梳理）
+
+### 门禁矩阵（config/mcp-gates.yaml）
+- MUST_PASS：static_analysis(ruff)/unit_test(pytest ≥80%)/secret_scan(detect-secrets)/test_quality(AST拒空桩)/failure_log
+- SHOULD_PASS：security_scan(semgrep)/dependency_scan(safety，环境限制降级)/integration_probe
+- OPTIONAL：performance_test/iac_scan(checkov)/format_check/docs_check/pin_check
+- 等级：L0-L3/L3_LITE/IAC/CONFIG/DOCS
+
+### 生命周期（config/gates.yaml，16 gate Phase 0-5）
+- V3.2.11 后：文档类 gate 用 `_check_document_semantic`（9 类结构模板，长度不作通过依据）
+- integration_test_passed → `_check_integration_tests`（需 tests/integration/ 或 @pytest.mark.integration）
+- 安全类真跑：sast→semgrep、dependency→safety、iac→checkov、dast→需外部报告
+- 健康/监控 → `_check_health`（probe_command/scripts/probes/<type>.py/--file；**裸 --confirm 已禁止**）
+- 评审类 → `_check_review`（双签名 + kind 语义，user_acceptance 拒绝 self-check）
+- DAG 接电：`record_matrix_evidence` + `auto_advance`（矩阵全绿自动推进纯矩阵 gate）
+- 迭代回路：`--lifecycle reopen <gate>`（级联下游 + 返工计数 + 写 failure_log）
+
+### 其他机制
+- 失败纪律：failures.jsonl 必须 root_cause/fix，否则 failure_log 门禁 FAIL；re_run_result 非空=已解决
+- 金丝雀：canary.py（工具版本漂移→轻量回归集）；CI：ci_simulate.sh + .github/workflows/hgf-gates.yml
+- 度量：`--metrics`（phase_time/rework_count/escape_rate）、`--history` 门禁健康报告（always_failed 逃逸舱口）
+- 评审工具链：`--review-build`/`--review-record --kind`/`--review-fresh`
+
+### 环境（Windows，系统 Python 3.14）
+- Python：`C:\Users\79902\AppData\Local\Programs\Python\Python314\python.exe`
+- PYTHONPATH=workflow；测试：`python -m pytest tests\ -q --cov=. --cov-config=.coveragerc`
+- 工具：ruff 0.16.3/pytest 9.1.1/pytest-cov 7.1.0/detect-secrets 1.5.0/safety 3.8.1(SAFETY_API_KEY)/semgrep 1.173.0/checkov 3.3.11/PyYAML 6.0.3/structlog 26.1.0
+- pip 镜像：https://pypi.tuna.tsinghua.edu.cn/simple
+- Git Bash：`C:\Program Files\Git\bin\bash.exe`（bash 脚本用）
+- 会话权限：danger-full-access（不请求沙箱升级）
+- 测试基线：**161 passed / 覆盖率 85% / ruff+format 全绿**
+
+---
+
+## 五、用户决策记录（不可违背）
+
+1. **不修补**系统 Python 的 51 个已知漏洞（output/security-remediation.md，待决策）
+2. 跳过 HGF 意见 #5（fast/deep 模式）
+3. 保留左侧 Codex 侧边栏；**删除**右侧工作台（wkp-4）
+4. heavyskill 作为评审引擎（内容必须内联，子代理读不了本地文件）
+5. 评审后修复方案选择：架构评审→全修(A)；插件评审→按 ROI 全修；全流程评审→四阶段全实施(A)
+6. 之前"6 项待处理"误报→采用方案 A（re_run_result 非空=已解决）
+
+---
+
+## 六、已完成的评审记录
+
+1. **架构评审**（heavyskill，6.5/10）→ V3.2.9 修复（安全准出名不副实等 A-J）
+2. **插件效能评审**（heavyskill，6/10）→ V3.2.10 修复（长驻桥等）
+3. **全流程评审**（heavyskill 模式1 K=8 子代理，共识 3.5/10）→ V3.2.11 四阶段
+   - 核心诊断：真实工具箱(7/10) + 纸面生命周期(0-1/10)
+   - 8 条轨迹独立发现：准入无检查器/max_retries 未实现/confirm 死代码/集成探针空转/safety 从未判定/覆盖率未接线/--no-verify 绕过
+
+---
+
+## 七、待办/下次会话候选任务
+
+1. **补真实集成测试套件**（`tests/integration/`）：`_check_integration_tests` 现在诚实拒绝"无集成测试"的 gate_3_1——项目需补真实集成测试才能推进
+2. **版本号同步**：__version__ 更新到 3.2.11
+3. **.github workflow 同步**：工作区根非 git 仓库，CI workflow 更新未提交（若 CI 在其他仓库需同步）
+4. **用语义模板写真实架构/威胁建模文档**：验证 V3.2.11 新校验器在真实项目上的效果
+5. **用户验收通道落地**：user_acceptance 拒绝 AI 自签，需真实人工通道（ask_user_question 或人工文件）
+6. **可选的 heavyskill 模式2 恢复**：配置 DEEPSEEK_API_KEY + venv 后可复用 Python 流水线
+7. **HGF 对自身狗粮化验收**：用 V3.2.11 全流程跑一个真实功能（如实现一个小模块），验证 16 gate 端到端
+
+---
+
+## 八、常见操作速查
+
+```powershell
+# 全量测试
+$env:PYTHONPATH = "D:\OneDrive\文档\deepseek harness workspace\workflow"
+cd "D:\OneDrive\文档\deepseek harness workspace\workflow"
+& "C:\Users\79902\AppData\Local\Programs\Python\Python314\python.exe" -m pytest tests\ -q --cov=. --cov-config=.coveragerc
+
+# 生命周期状态/推进/重开
+& $py workflow_cli.py --lifecycle status --dir .
+& $py workflow_cli.py --lifecycle advance --gate gate_0_1 --file docs/gate_0_1.md --dir .
+& $py workflow_cli.py --lifecycle reopen --gate gate_0_1 --notes "原因" --dir .
+
+# 度量/历史/门禁健康
+& $py workflow_cli.py --metrics --dir .
+& $py workflow_cli.py --history --dir .
+
+# 重建插件（DSH 重启后）
+# 1. cordis_define: kind new, idPrefix hgf/cdx, code.host/client = plugin/*.js 的 return {...} 体
+# 2. cordis_run: mode run
+```
+
+---
+
+## 九、V3.2.11 待办完成记录（2026-08-18，commit db2a548 / 024d1f5 / +）
+
+### 待办 1：真实集成测试套件 ✅
+- `workflow/tests/integration/test_hgf_chain.py`：4 个快速跨模块链路
+  （classify/assess 协作、矩阵证据接电、失败纪律全循环、套件可收集）
+- `demo_hgf/tests/integration/test_cart_flow.py`：3 个业务集成测试
+  （购物车结算流、业务不变量、非法输入）标记 @pytest.mark.integration
+- 效果：`_check_integration_tests` 在 workflow 目录真实通过（L2 准出有证据）
+
+### 待办 2：版本号同步 ✅
+- `__init__.py` / `config/workflow.yaml`：3.2.9 → 3.2.11
+
+### 待办 3：狗粮化验收 ✅（Phase 0→3.1 真实跑通 9/16 gate）
+- 在 `workflow/.hgf-dogfood/`（已 gitignore）建 demo 项目（日志模块）
+- 全流程实测：gate_0_1(需求)→0_2(安全需求)→0_3(需求评审)→1_1(架构+STRIDE)
+  →1_2(接口)→1_3(详细设计)→2_1(代码实现 TDD，tdd_evidence git 历史验证通过)
+  →2_2(代码审查)→3_1(集成测试+脱敏) 全部 done
+- **验收发现并修复 3 个引擎 bug**：
+  1. `_check_unit_tests`/`_check_integration_tests` 的 shell=True 命令引号被拆
+     → 参数数组 + shell=False（"no tests ran" 问题）
+  2. `_check_dependency`：零第三方依赖项目直接通过（无扫描目标客观事实），
+     有依赖才跑 safety；safety 超时 300→120s
+  3. 语义校验器正确拦截缺 STRIDE 的架构文档（gate_1_1 首次被拒，补 STRIDE 后过）
+- metrics 实测：Phase 0 跨度 0.0h、Phase 1 跨度 0.01h、返工 0、逃逸率 0.0
+
+### 待办 4：user_acceptance 人工通道 ✅
+- `_check_review`：user_acceptance 需独立评审记录 **+ 人工验收证据文件**
+  （docs/user_acceptance.md 含"验收"≥100 字符或 --file）——agent 不得仅凭
+  双签名记录通过验收
+- 测试：无证据拒绝 / 有证据通过
+
+### 遗留（下次会话可选）
+- dogfood 继续推进 Phase 3.2-5（gate_3_2 安全测试需 DAST 外部报告）
+- `.github/workflows/hgf-gates.yml` 更新在工作区文件系统（工作区根非 git 仓库）
+

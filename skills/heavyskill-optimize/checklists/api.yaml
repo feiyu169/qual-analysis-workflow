@@ -1,0 +1,237 @@
+domain: api
+name: "API 审查清单"
+version: "1.0"
+description: "针对 API 设计的专项检查清单"
+source: builtin
+
+items:
+  # ==================== 版本管理 ====================
+  - id: "API-01"
+    question: "是否有版本控制？"
+    severity: "P1"
+    category: "版本管理"
+    check_points:
+      - "是否有版本号？"
+      - "版本号格式？（v1/v2 或 1.0/2.0）"
+      - "是否支持多版本并存？"
+      - "是否有版本废弃策略？"
+    fix_suggestion: "使用URL路径版本控制（/api/v1/）"
+    references:
+      - "https://restfulapi.net/versioning/"
+  
+  - id: "API-02"
+    question: "是否有向后兼容性？"
+    severity: "P1"
+    category: "版本管理"
+    check_points:
+      - "是否破坏性变更？"
+      - "是否有废弃通知？"
+      - "是否有迁移指南？"
+    fix_suggestion: "新字段使用可选参数，废弃字段保留至少2个版本"
+    references:
+      - "https://cloud.google.com/docs/best-practices/api-versioning"
+
+  # ==================== 分页设计 ====================
+  - id: "API-03"
+    question: "是否有分页设计？"
+    severity: "P1"
+    category: "数据量"
+    check_points:
+      - "是否有分页参数？（page/offset/cursor）"
+      - "是否有默认分页大小？"
+      - "是否返回总数/has_more？"
+      - "是否有最大分页限制？"
+    fix_suggestion: "实现分页参数，限制最大分页大小"
+    references:
+      - "https://restfulapi.net/pagination/"
+  
+  - id: "API-04"
+    question: "是否有数据过滤？"
+    severity: "P2"
+    category: "数据量"
+    check_points:
+      - "是否支持字段过滤？"
+      - "是否支持条件过滤？"
+      - "是否支持排序？"
+    fix_suggestion: "实现字段选择和条件过滤"
+    references:
+      - "https://restfulapi.net/filtering/"
+
+  # ==================== 错误处理 ====================
+  - id: "API-05"
+    question: "是否有统一错误格式？"
+    severity: "P1"
+    category: "错误处理"
+    check_points:
+      - "是否有统一错误响应格式？"
+      - "是否有错误码？"
+      - "是否有错误信息？"
+      - "是否有错误详情？"
+    fix_suggestion: "定义统一错误响应格式"
+    references:
+      - "https://restfulapi.net/http-status-codes/"
+  
+  - id: "API-06"
+    question: "是否有错误码规范？"
+    severity: "P1"
+    category: "错误处理"
+    check_points:
+      - "是否有业务错误码？"
+      - "是否有HTTP状态码映射？"
+      - "是否有错误码文档？"
+    fix_suggestion: "定义业务错误码规范"
+    references:
+      - "https://httpstatuses.com/"
+
+  # ==================== 幂等性 ====================
+  - id: "API-07"
+    question: "是否有幂等性设计？"
+    severity: "P1"
+    category: "可靠性"
+    check_points:
+      - "POST操作是否幂等？"
+      - "是否有幂等键？"
+      - "是否有去重机制？"
+    fix_suggestion: "实现幂等键机制"
+    references:
+      - "https://restfulapi.net/idempotent-restful-api/"
+  
+  - id: "API-08"
+    question: "是否有重试机制？"
+    severity: "P2"
+    category: "可靠性"
+    check_points:
+      - "客户端是否支持重试？"
+      - "是否有指数退避？"
+      - "是否有最大重试次数？"
+    fix_suggestion: "实现指数退避重试机制"
+    references:
+      - "https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/"
+
+  # ==================== 速率限制 ====================
+  - id: "API-09"
+    question: "有限流机制？"
+    severity: "P1"
+    category: "流量控制"
+    check_points:
+      - "是否有限流配置？"
+      - "有限流响应？（429 Too Many Requests）"
+      - "是否有Retry-After头？"
+      - "是否支持不同粒度限流？"
+    fix_suggestion: "实现令牌桶限流，返回429状态码"
+    references:
+      - "https://tools.ietf.org/id/draft-ietf-httpapi-ratelimit-headers.html"
+  
+  - id: "API-10"
+    question: "是否有请求大小限制？"
+    severity: "P2"
+    category: "流量控制"
+    check_points:
+      - "是否有请求体大小限制？"
+      - "是否有文件上传大小限制？"
+    fix_suggestion: "配置请求大小限制"
+    references:
+      - "https://nginx.org/en/docs/http/ngx_http_core_module.html#client_max_body_size"
+
+  # ==================== 参数验证 ====================
+  - id: "API-11"
+    question: "是否有参数验证？"
+    severity: "P1"
+    category: "输入验证"
+    check_points:
+      - "是否验证必填参数？"
+      - "是否验证参数类型？"
+      - "是否验证参数范围？"
+      - "是否有参数清洗？"
+    fix_suggestion: "使用Schema验证（Pydantic/Marshmallow）"
+    references:
+      - "https://docs.pydantic.dev/"
+  
+  - id: "API-12"
+    question: "是否有请求验证？"
+    severity: "P1"
+    category: "输入验证"
+    check_points:
+      - "是否验证Content-Type？"
+      - "是否验证请求格式？"
+      - "是否有恶意请求检测？"
+    fix_suggestion: "验证请求头和请求格式"
+    references:
+      - "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"
+
+  # ==================== 响应格式 ====================
+  - id: "API-13"
+    question: "是否有响应格式规范？"
+    severity: "P2"
+    category: "规范"
+    check_points:
+      - "是否有统一响应格式？"
+      - "是否有响应字段规范？"
+      - "是否有响应示例？"
+    fix_suggestion: "定义统一响应格式"
+    references:
+      - "https://jsonapi.org/"
+  
+  - id: "API-14"
+    question: "是否有响应压缩？"
+    severity: "P2"
+    category: "性能"
+    check_points:
+      - "是否支持Gzip？"
+      - "是否支持Brotli？"
+      - "是否有压缩配置？"
+    fix_suggestion: "启用响应压缩"
+    references:
+      - "https://developers.google.com/web/fundamentals/performance/optimizing-content/enable-text-compression"
+
+  # ==================== 认证授权 ====================
+  - id: "API-15"
+    question: "是否有认证授权？"
+    severity: "P1"
+    category: "安全"
+    check_points:
+      - "是否有认证机制？"
+      - "是否有授权检查？"
+      - "是否有API Key？"
+      - "是否有OAuth2？"
+    fix_suggestion: "实现JWT/OAuth2认证"
+    references:
+      - "https://oauth.net/2/"
+  
+  - id: "API-16"
+    question: "是否有CORS配置？"
+    severity: "P2"
+    category: "安全"
+    check_points:
+      - "是否有CORS头？"
+      - "是否限制来源？"
+      - "是否限制方法？"
+    fix_suggestion: "配置CORS策略"
+    references:
+      - "https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS"
+
+  # ==================== 文档 ====================
+  - id: "API-17"
+    question: "是否有API文档？"
+    severity: "P2"
+    category: "文档"
+    check_points:
+      - "是否有OpenAPI/Swagger？"
+      - "是否有请求示例？"
+      - "是否有响应示例？"
+      - "是否有错误码说明？"
+    fix_suggestion: "使用OpenAPI生成API文档"
+    references:
+      - "https://swagger.io/specification/"
+  
+  - id: "API-18"
+    question: "是否有变更日志？"
+    severity: "P2"
+    category: "文档"
+    check_points:
+      - "是否有CHANGELOG？"
+      - "是否有版本说明？"
+      - "是否有迁移指南？"
+    fix_suggestion: "维护CHANGELOG"
+    references:
+      - "https://keepachangelog.com/"

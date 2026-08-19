@@ -1,0 +1,15 @@
+# HGF 自身代码仓库忽略规则（workflow/）
+.hgf/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+__pycache__/
+*.pyc
+demo_hgf/.hgf/
+demo_hgf/.pytest_cache/
+demo_hgf/.ruff_cache/
+.checkov-test/
+output/
+workflow.db
+.hgf-dogfood/

@@ -1,0 +1,169 @@
+domain: general
+name: "通用审查清单"
+version: "1.0"
+description: "通用技术方案审查清单"
+source: builtin
+
+items:
+  # ==================== 需求分析 ====================
+  - id: "G-01"
+    question: "需求是否完整？"
+    severity: "P1"
+    category: "需求"
+    check_points:
+      - "是否覆盖所有功能需求？"
+      - "是否覆盖非功能需求？"
+      - "是否有需求遗漏？"
+      - "是否有需求冲突？"
+    fix_suggestion: "完善需求文档"
+  
+  - id: "G-02"
+    question: "需求是否清晰？"
+    severity: "P1"
+    category: "需求"
+    check_points:
+      - "是否有歧义？"
+      - "是否有量化指标？"
+      - "是否有验收标准？"
+    fix_suggestion: "明确需求描述和验收标准"
+
+  # ==================== 设计评审 ====================
+  - id: "G-03"
+    question: "设计是否合理？"
+    severity: "P1"
+    category: "设计"
+    check_points:
+      - "是否满足需求？"
+      - "是否有技术可行性？"
+      - "是否有成本效益？"
+    fix_suggestion: "优化设计方案"
+  
+  - id: "G-04"
+    question: "是否有技术选型？"
+    severity: "P2"
+    category: "设计"
+    check_points:
+      - "技术栈选择？"
+      - "框架选择？"
+      - "第三方库选择？"
+    fix_suggestion: "明确技术选型理由"
+
+  # ==================== 风险评估 ====================
+  - id: "G-05"
+    question: "是否有风险遗漏？"
+    severity: "P1"
+    category: "风险"
+    check_points:
+      - "是否有技术风险？"
+      - "是否有业务风险？"
+      - "是否有安全风险？"
+      - "是否有性能风险？"
+    fix_suggestion: "完善风险评估"
+  
+  - id: "G-06"
+    question: "是否有风险应对？"
+    severity: "P1"
+    category: "风险"
+    check_points:
+      - "是否有风险规避？"
+      - "是否有风险缓解？"
+      - "是否有风险转移？"
+      - "是否有风险接受？"
+    fix_suggestion: "制定风险应对策略"
+
+  # ==================== 实施计划 ====================
+  - id: "G-07"
+    question: "是否有实施计划？"
+    severity: "P2"
+    category: "计划"
+    check_points:
+      - "是否有时间计划？"
+      - "是否有里程碑？"
+      - "是否有资源分配？"
+    fix_suggestion: "制定详细的实施计划"
+  
+  - id: "G-08"
+    question: "是否有测试计划？"
+    severity: "P1"
+    category: "计划"
+    check_points:
+      - "是否有单元测试？"
+      - "是否有集成测试？"
+      - "是否有性能测试？"
+      - "是否有安全测试？"
+    fix_suggestion: "制定完整的测试计划"
+
+  # ==================== 文档 ====================
+  - id: "G-09"
+    question: "是否有设计文档？"
+    severity: "P2"
+    category: "文档"
+    check_points:
+      - "是否有架构文档？"
+      - "是否有API文档？"
+      - "是否有部署文档？"
+      - "是否有运维文档？"
+    fix_suggestion: "编写完整的设计文档"
+  
+  - id: "G-10"
+    question: "是否有变更记录？"
+    severity: "P2"
+    category: "文档"
+    check_points:
+      - "是否有版本历史？"
+      - "是否有变更原因？"
+      - "是否有影响分析？"
+    fix_suggestion: "维护变更记录"
+
+  # ==================== 可维护性 ====================
+  - id: "G-11"
+    question: "是否可维护？"
+    severity: "P2"
+    category: "可维护性"
+    check_points:
+      - "代码是否清晰？"
+      - "是否有注释？"
+      - "是否有命名规范？"
+    fix_suggestion: "遵循编码规范"
+  
+  - id: "G-12"
+    question: "是否可扩展？"
+    severity: "P2"
+    category: "可维护性"
+    check_points:
+      - "是否支持扩展？"
+      - "是否有扩展点？"
+      - "是否松耦合？"
+    fix_suggestion: "设计可扩展的架构"
+
+  # ==================== 可靠性 ====================
+  - id: "G-13"
+    question: "是否可靠？"
+    severity: "P1"
+    category: "可靠性"
+    check_points:
+      - "是否有容错设计？"
+      - "是否有降级策略？"
+      - "是否有重试机制？"
+    fix_suggestion: "实现容错和降级"
+  
+  - id: "G-14"
+    question: "是否可观测？"
+    severity: "P1"
+    category: "可靠性"
+    check_points:
+      - "是否有日志？"
+      - "是否有监控？"
+      - "是否有告警？"
+    fix_suggestion: "实现可观测性"
+
+  # ==================== 合规性 ====================
+  - id: "G-15"
+    question: "是否合规？"
+    severity: "P1"
+    category: "合规"
+    check_points:
+      - "是否符合法规？"
+      - "是否符合标准？"
+      - "是否符合内部规范？"
+    fix_suggestion: "确保合规性"

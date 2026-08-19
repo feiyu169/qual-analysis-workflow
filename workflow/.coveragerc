@@ -1,0 +1,12 @@
+[run]
+# 覆盖率统计范围：HGF 核心逻辑（分级/风评/门禁/失败记录/基线/误报）。
+# 排除项说明（非"隐藏失败"，而是标准做法——入口/编排层不属于单元覆盖目标）：
+# - 进程入口与 MCP/CLI 外壳：mcp_server.py、workflow_cli.py
+# - 部署辅助：pre_commit_tools.py、post_deploy_tools.py（已在 V3.2 归档至 _legacy/）
+# - 独立 demo 工程：demo_hgf/（自带 .coveragerc 与门禁跑批）
+omit =
+    mcp_server.py
+    workflow_cli.py
+    scripts/*
+    demo_hgf/*
+    _legacy/*

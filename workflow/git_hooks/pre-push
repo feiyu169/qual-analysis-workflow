@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# HGF pre-push hook（V3.2.8 / V3.2.9 / V3.2.11）
+# push 前对变更文件运行 HGF 门禁；门禁失败则拒绝 push。
+# 安装：workflow/scripts/install_git_hooks.ps1（设置 core.hooksPath）
+# V3.2.9（修复 G）：无 Python 变更时直接跳过门禁（不再传假文件参数）。
+# V3.2.11（DAG 接电）：门禁全绿时自动映射生命周期准出证据并推进纯矩阵 gate；
+#   若生命周期已有状态，输出当前 Phase 提示（不阻断——Phase 是流程引导非强制）。
+set -euo pipefail
+
+cd "$(dirname "$0")/.."   # git_hooks -> workflow
+
+PY="${HGF_PYTHON:-python}"
+# 变更文件：暂存优先，其次 HEAD~1 差异（简单场景）
+FILES=$(git diff --cached --name-only -- '*.py' | tr '\n' ',' | sed 's/,$//')
+[ -z "$FILES" ] && FILES=$(git diff --name-only HEAD~1 -- '*.py' | tr '\n' ',' | sed 's/,$//')
+
+if [ -z "$FILES" ]; then
+  echo "[HGF pre-push] 无 Python 变更，跳过门禁"
+  exit 0
+fi
+
+echo "[HGF pre-push] changed files: $FILES"
+
+echo "[HGF pre-push] running gates..."
+"$PY" workflow_cli.py --task "pre-push gate" --files "$FILES" --lines 0 --dir . --execute --json >/dev/null 2>&1
+RC=$?
+if [ "$RC" -ne 0 ]; then
+  echo "[HGF pre-push] 门禁未通过（exit $RC），push 被拒绝。修复后重新 push。"
+  exit 1
+fi
+
+# DAG 接电提示（V3.2.11）：矩阵证据自动推进纯矩阵 gate
+if [ -f .hgf/lifecycle.json ]; then
+  "$PY" workflow_cli.py --lifecycle status --dir . --json 2>/dev/null | \
+    grep -o '"gate_[0-9_]*": *"[a-z]*"' | head -5 || true
+  echo "[HGF pre-push] 生命周期已接电（.hgf/lifecycle.json 存在）"
+fi
+
+echo "[HGF pre-push] 门禁通过"

@@ -1,0 +1,11 @@
+{
+  "name": "AIME-style Number Theory",
+  "type": "stem",
+  "language": "en",
+  "reason_k": 8,
+  "summary_k": 4,
+  "iterations": 1,
+  "problem": "Find the number of positive integers n ≤ 2024 such that n^2 + 3n + 5 is divisible by 121.",
+  "expected_answer": "17",
+  "notes": "This requires modular arithmetic and quadratic residues modulo 11^2. Multiple trajectories help explore different algebraic approaches."
+}

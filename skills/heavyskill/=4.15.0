@@ -1,0 +1,5 @@
+Using Python 3.8.10 environment at: /usr
+Resolved 1 package in 176ms
+error: Failed to install: typing_extensions-4.13.2-py3-none-any.whl (typing-extensions==4.13.2)
+  Caused by: Failed to create directory `/usr/local/lib/python3.8/dist-packages/typing_extensions-4.13.2.dist-info`
+  Caused by: failed to create directory `/usr/local/lib/python3.8/dist-packages/typing_extensions-4.13.2.dist-info`: Permission denied (os error 13)

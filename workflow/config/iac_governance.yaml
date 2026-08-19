@@ -1,0 +1,135 @@
+# IAC 治理配置 - V3.0 方案
+# GitHub 分支保护规则配置
+
+branch_protection:
+  # main 分支保护
+  main:
+    # 必须通过状态检查
+    required_status_checks:
+      strict: true  # 必须与分支保持同步
+      contexts:
+        - "quality-gates"  # 质量门禁状态检查
+    
+    # 必须代码审查
+    required_pull_request_reviews:
+      required_approving_review_count: 1  # 至少1个审批
+      dismiss_stale_reviews: true  # 新提交后撤销旧审批
+      require_code_owner_reviews: true  # 需要代码所有者审查
+    
+    # 管理员也必须遵守
+    enforce_admins: true
+    
+    # 限制直接推送
+    restrict_pushes:
+      blocks_creations: false
+      force_pushes: false
+      required_status_checks: true
+    
+    # 限制谁可以合并
+    restrictions:
+      users: []
+      teams: ["maintainers"]
+
+  # develop 分支保护
+  develop:
+    required_status_checks:
+      strict: true
+      contexts:
+        - "quality-gates"
+    
+    required_pull_request_reviews:
+      required_approving_review_count: 1
+      dismiss_stale_reviews: true
+    
+    enforce_admins: false  # 开发分支管理员可豁免
+    restrict_pushes:
+      force_pushes: false
+
+# CI/CD 配置
+ci_cd:
+  github_actions:
+    workflows:
+      - name: "quality-gates"
+        trigger: "pull_request"
+        jobs:
+          - name: "classify"
+            steps:
+              - "任务分级"
+          
+          - name: "execute_gates"
+            steps:
+              - "执行门禁"
+          
+          - name: "check_security"
+            steps:
+              - "安全检查"
+  
+  gitlab_ci:
+    stages:
+      - classify
+      - gates
+      - security
+    
+    classify:
+      stage: classify
+      script:
+        - "python3 mcp_server.py classify --task $CI_COMMIT_TITLE --files $CI_DIFF"
+    
+    gates:
+      stage: gates
+      script:
+        - "python3 mcp_server.py execute_gates --level $LEVEL --files $CI_DIFF"
+    
+    security:
+      stage: security
+      script:
+        - "python3 mcp_server.py check_security --files $CI_DIFF"
+
+# 审计配置
+audit:
+  # 定期审计分支保护规则
+  schedule: "0 0 * * 1"  # 每周一
+  
+  checks:
+    - name: "branch_protection_enabled"
+      description: "检查分支保护是否启用"
+    
+    - name: "required_checks_configured"
+      description: "检查必需的状态检查是否配置"
+    
+    - name: "enforce_admins_enabled"
+      description: "检查管理员是否被强制遵守"
+  
+  # 审计报告
+  report:
+    format: "json"
+    destination: "audit_logs/"
+    retention_days: 90
+
+# 门禁配置治理
+gates_governance:
+  # 门禁配置文件位置
+  config_path: ".mcp-gates.yaml"
+  
+  # 门禁配置变更需要审批
+  change_approval:
+    required: true
+    approvers: ["tech_lead", "security_team"]
+  
+  # 门禁配置版本控制
+  version_control:
+    enabled: true
+    branch: "main"
+  
+  # 门禁配置审计
+  audit:
+    schedule: "0 0 * * 1"  # 每周一
+    checks:
+      - name: "must_pass_gates_configured"
+        description: "检查 MUST_PASS 门禁是否配置"
+      
+      - name: "coverage_threshold_set"
+        description: "检查覆盖率阈值是否设置"
+      
+      - name: "timeout_configured"
+        description: "检查超时是否配置"

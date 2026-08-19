@@ -1,0 +1,16 @@
+# Windows 侧 Python 3.14 依赖（HeavySkill 模式2 / qual-v8 / HGF 运行所需）
+# 安装：py -3 -m pip install -r requirements-windows.txt
+# 说明：docling 已排除（文档解析走 MinerU API / FallbackParser 降级路径）
+
+httpx>=0.24.0        # HeavySkill 异步 LLM 客户端
+pyyaml>=6.0          # 配置加载 (config.yaml / mcp-gates.yaml)
+openai>=1.0          # finance/llm_caller.py (DeepSeek caller)
+pydantic>=2.0        # finance 数据模型
+scipy>=1.11          # finance/quality 统计计算
+structlog>=24.0      # workflow/mcp_server.py (HGF MCP)
+aiosqlite>=0.19      # workflow/async_gate_manager.py
+PyPDF2>=3.0          # parsers/fallback_parser.py 降级链
+pymupdf>=1.24        # parsers 降级链 (import fitz)
+pytest>=7.0          # 测试运行 (HGF / quality 测试)
+
+# 已确认存在（无需安装）：pandas numpy pdfplumber requests openpyxl

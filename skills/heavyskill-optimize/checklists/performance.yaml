@@ -1,0 +1,189 @@
+domain: performance
+name: "性能审查清单"
+version: "1.0"
+description: "针对性能瓶颈的专项检查清单"
+source: builtin
+
+items:
+  # ==================== 数据库性能 ====================
+  - id: "P-01"
+    question: "是否有连接池？"
+    severity: "P1"
+    category: "数据库性能"
+    check_points:
+      - "连接池大小？"
+      - "连接超时？"
+      - "连接回收？"
+      - "连接泄漏检测？"
+    fix_suggestion: "配置合适的连接池参数，启用连接泄漏检测"
+    references:
+      - "https://github.com/brettwooldridge/HikariCP"
+  
+  - id: "P-02"
+    question: "是否有数据库优化？"
+    severity: "P1"
+    category: "数据库性能"
+    check_points:
+      - "索引优化？"
+      - "查询优化？"
+      - "慢查询日志？"
+      - "EXPLAIN分析？"
+    fix_suggestion: "优化索引和查询，开启慢查询日志"
+    references:
+      - "https://use-the-index-luke.com/"
+  
+  - id: "P-03"
+    question: "是否有N+1查询问题？"
+    severity: "P1"
+    category: "数据库性能"
+    check_points:
+      - "是否有循环查询？"
+      - "是否使用批量查询？"
+      - "是否使用预加载？"
+    fix_suggestion: "使用JOIN或批量查询替代循环查询"
+    references:
+      - "https://stackoverflow.com/questions/97197/what-is-the-n1-selects-problem"
+
+  # ==================== 缓存策略 ====================
+  - id: "P-04"
+    question: "是否有缓存策略？"
+    severity: "P1"
+    category: "缓存"
+    check_points:
+      - "缓存层次？"
+      - "缓存失效？"
+      - "缓存穿透？"
+      - "缓存雪崩？"
+    fix_suggestion: "实现多级缓存，处理缓存穿透"
+    references:
+      - "https://redis.io/docs/manual/patterns/"
+  
+  - id: "P-05"
+    question: "是否有Redis使用优化？"
+    severity: "P2"
+    category: "缓存"
+    check_points:
+      - "是否使用Pipeline？"
+      - "是否避免大Key？"
+      - "是否使用合适的数据结构？"
+    fix_suggestion: "使用Pipeline批量操作，避免大Key"
+    references:
+      - "https://redis.io/docs/manual/patterns/"
+
+  # ==================== 并发处理 ====================
+  - id: "P-06"
+    question: "是否有异步处理？"
+    severity: "P1"
+    category: "并发"
+    check_points:
+      - "消息队列？"
+      - "异步任务？"
+      - "回调机制？"
+      - "事件驱动？"
+    fix_suggestion: "使用消息队列处理异步任务"
+    references:
+      - "https://www.rabbitmq.com/getstarted.html"
+  
+  - id: "P-07"
+    question: "是否有并发安全？"
+    severity: "P1"
+    category: "并发"
+    check_points:
+      - "是否有竞态条件？"
+      - "是否有死锁风险？"
+      - "是否有线程安全？"
+    fix_suggestion: "使用锁机制，避免竞态条件"
+    references:
+      - "https://en.wikipedia.org/wiki/Race_condition"
+
+  # ==================== 负载均衡 ====================
+  - id: "P-08"
+    question: "是否有负载均衡？"
+    severity: "P1"
+    category: "分布式"
+    check_points:
+      - "负载均衡策略？"
+      - "会话保持？"
+      - "健康检查？"
+      - "故障转移？"
+    fix_suggestion: "配置合适的负载均衡策略"
+    references:
+      - "https://nginx.org/en/docs/http/load_balancing.html"
+
+  # ==================== 资源管理 ====================
+  - id: "P-09"
+    question: "是否有资源限制？"
+    severity: "P1"
+    category: "资源管理"
+    check_points:
+      - "内存限制？"
+      - "CPU限制？"
+      - "文件描述符限制？"
+      - "网络带宽限制？"
+    fix_suggestion: "配置容器资源限制"
+    references:
+      - "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"
+  
+  - id: "P-10"
+    question: "是否有内存泄漏？"
+    severity: "P1"
+    category: "资源管理"
+    check_points:
+      - "是否有未释放的资源？"
+      - "是否有循环引用？"
+      - "是否有大对象持有？"
+    fix_suggestion: "使用内存分析工具检测泄漏"
+    references:
+      - "https://docs.python.org/3/library/gc.html"
+
+  # ==================== 代码优化 ====================
+  - id: "P-11"
+    question: "是否有算法优化？"
+    severity: "P2"
+    category: "代码质量"
+    check_points:
+      - "算法复杂度？"
+      - "数据结构选择？"
+      - "是否有性能热点？"
+    fix_suggestion: "优化算法和数据结构"
+    references:
+      - "https://wiki.python.org/moin/TimeComplexity"
+  
+  - id: "P-12"
+    question: "是否有序列化优化？"
+    severity: "P2"
+    category: "代码质量"
+    check_points:
+      - "序列化格式？"
+      - "是否压缩？"
+      - "是否批量处理？"
+    fix_suggestion: "使用高效的序列化格式（Protobuf/MessagePack）"
+    references:
+      - "https://developers.google.com/protocol-buffers"
+
+  # ==================== 可观测性 ====================
+  - id: "P-13"
+    question: "是否有性能监控？"
+    severity: "P2"
+    category: "可观测性"
+    check_points:
+      - "APM工具？"
+      - "性能指标？"
+      - "告警规则？"
+      - "性能基线？"
+    fix_suggestion: "集成APM工具监控性能"
+    references:
+      - "https://www.elastic.co/observability"
+  
+  - id: "P-14"
+    question: "是否有压力测试？"
+    severity: "P2"
+    category: "测试"
+    check_points:
+      - "压力测试工具？"
+      - "测试场景？"
+      - "性能基线？"
+      - "瓶颈分析？"
+    fix_suggestion: "定期进行压力测试"
+    references:
+      - "https://locust.io/"

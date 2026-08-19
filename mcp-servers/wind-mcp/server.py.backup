@@ -1,0 +1,547 @@
+#!/usr/bin/env python3
+"""
+Wind MCP Server - 万得金融数据 MCP 服务
+
+提供股票行情、财务数据、估值指标、行业数据、宏观经济、财经新闻等金融数据查询功能。
+使用 Wind AIFin Market API (https://mcp.wind.com.cn/vserver_1/mcp)
+
+股票代码格式: 600519.SH, 1810.HK, AAPL.OQ
+日期格式: YYYY-MM-DD
+"""
+
+import asyncio
+import json
+import os
+import urllib.request
+import urllib.error
+import urllib.parse
+from pathlib import Path
+from datetime import datetime, timedelta
+
+
+# ─── API Configuration ─────────────────────────────────────────────────────────
+
+WIND_API_URL = "https://mcp.wind.com.cn/vserver_1/mcp"
+
+
+def _get_api_key() -> str:
+    """读取 API Key，优先从环境变量，其次从配置文件。"""
+    # 1. 环境变量
+    key = os.environ.get("WIND_API_KEY", "").strip()
+    if key:
+        return key
+
+    # 2. 配置文件 ~/.wind-aifinmarket/config
+    config_path = Path.home() / ".wind-aifinmarket" / "config"
+    if config_path.exists():
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("WIND_API_KEY="):
+                        key = line.split("=", 1)[1].strip()
+                        if key:
+                            return key
+        except Exception:
+            pass
+
+    return ""
+
+
+def _call_wind_api(tool_name: str, params: dict) -> dict:
+    """
+    调用 Wind AIFin Market API。
+
+    Args:
+        tool_name: 工具名称
+        params: 工具参数
+
+    Returns:
+        dict: {"success": True, "data": ...} 或 {"success": False, "error": "..."}
+    """
+    api_key = _get_api_key()
+    if not api_key:
+        return {
+            "success": False,
+            "error": "未找到 Wind API Key。请设置环境变量 WIND_API_KEY 或在 ~/.wind-aifinmarket/config 文件中配置 WIND_API_KEY=xxx"
+        }
+
+    # 构建 JSON-RPC 请求
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": params
+        }
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+
+    try:
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(WIND_API_URL, data=data, headers=headers, method="POST")
+
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+
+        # 解析 JSON-RPC 响应
+        if "error" in body:
+            return {"success": False, "error": body["error"].get("message", str(body["error"]))}
+
+        result = body.get("result", {})
+        # MCP tool result 格式
+        if isinstance(result, dict) and "content" in result:
+            content_list = result["content"]
+            if isinstance(content_list, list) and content_list:
+                text_content = content_list[0].get("text", "")
+                try:
+                    parsed = json.loads(text_content)
+                    return {"success": True, "data": parsed}
+                except (json.JSONDecodeError, TypeError):
+                    return {"success": True, "data": text_content}
+
+        return {"success": True, "data": result}
+
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = e.read().decode("utf-8")
+            return {"success": False, "error": f"HTTP {e.code}: {err_body}"}
+        except Exception:
+            return {"success": False, "error": f"HTTP {e.code}: {e.reason}"}
+    except urllib.error.URLError as e:
+        return {"success": False, "error": f"网络错误: {e.reason}"}
+    except json.JSONDecodeError as e:
+        return {"success": False, "error": f"JSON 解析错误: {e}"}
+    except Exception as e:
+        return {"success": False, "error": f"未知错误: {e}"}
+
+
+# ─── Tool Handler Functions ─────────────────────────────────────────────────────
+
+async def _wind_stock_quote(params: dict) -> dict:
+    """股票实时行情。获取指定股票的实时价格、涨跌幅等信息。"""
+    windcode = params.get("windcode", "").strip()
+    if not windcode:
+        return {"success": False, "error": "缺少参数 windcode，格式: 600519.SH, 1810.HK, AAPL.OQ"}
+
+    return await asyncio.get_event_loop().run_in_executor(None, _call_wind_api, "wind_stock_quote", {
+        "windcode": windcode
+    })
+
+
+async def _wind_stock_history(params: dict) -> dict:
+    """股票历史行情。获取指定股票在时间区间内的历史K线数据。"""
+    windcode = params.get("windcode", "").strip()
+    startdate = params.get("startdate", "").strip()
+    enddate = params.get("enddate", "").strip()
+    period = params.get("period", "day").strip()
+
+    if not windcode:
+        return {"success": False, "error": "缺少参数 windcode，格式: 600519.SH, 1810.HK, AAPL.OQ"}
+    if not startdate:
+        return {"success": False, "error": "缺少参数 startdate，格式: YYYY-MM-DD"}
+    if not enddate:
+        enddate = datetime.now().strftime("%Y-%m-%d")
+
+    return await asyncio.get_event_loop().run_in_executor(None, _call_wind_api, "wind_stock_history", {
+        "windcode": windcode,
+        "startdate": startdate,
+        "enddate": enddate,
+        "period": period
+    })
+
+
+async def _wind_financial_data(params: dict) -> dict:
+    """财务数据。获取上市公司的财务报表数据（利润表/资产负债表/现金流量表）。"""
+    windcode = params.get("windcode", "").strip()
+    statement_type = params.get("statement_type", "income").strip()
+    report_date = params.get("report_date", "").strip()
+
+    if not windcode:
+        return {"success": False, "error": "缺少参数 windcode，格式: 600519.SH"}
+    if statement_type not in ("income", "balance", "cashflow"):
+        return {"success": False, "error": "statement_type 必须为 income/balance/cashflow"}
+
+    api_params = {
+        "windcode": windcode,
+        "statement_type": statement_type
+    }
+    if report_date:
+        api_params["report_date"] = report_date
+
+    return await asyncio.get_event_loop().run_in_executor(None, _call_wind_api, "wind_financial_data", api_params)
+
+
+async def _wind_valuation(params: dict) -> dict:
+    """估值指标。获取股票的 PE、PB、PS、股息率等估值指标。"""
+    windcode = params.get("windcode", "").strip()
+    date = params.get("date", "").strip()
+
+    if not windcode:
+        return {"success": False, "error": "缺少参数 windcode，格式: 600519.SH"}
+
+    api_params = {"windcode": windcode}
+    if date:
+        api_params["date"] = date
+
+    return await asyncio.get_event_loop().run_in_executor(None, _call_wind_api, "wind_valuation", api_params)
+
+
+async def _wind_industry_data(params: dict) -> dict:
+    """行业数据。获取行业分类、行业指数、行业成分股等信息。"""
+    action = params.get("action", "classify").strip()
+    industry_name = params.get("industry_name", "").strip()
+    windcode = params.get("windcode", "").strip()
+    index_code = params.get("index_code", "").strip()
+
+    api_params = {"action": action}
+    if industry_name:
+        api_params["industry_name"] = industry_name
+    if windcode:
+        api_params["windcode"] = windcode
+    if index_code:
+        api_params["index_code"] = index_code
+
+    return await asyncio.get_event_loop().run_in_executor(None, _call_wind_api, "wind_industry_data", api_params)
+
+
+async def _wind_macro_data(params: dict) -> dict:
+    """宏观经济数据。获取 GDP、CPI、PMI、利率等宏观经济指标。"""
+    indicator = params.get("indicator", "").strip()
+    region = params.get("region", "china").strip()
+    startdate = params.get("startdate", "").strip()
+    enddate = params.get("enddate", "").strip()
+
+    if not indicator:
+        return {"success": False, "error": "缺少参数 indicator，如: GDP, CPI, PMI, M2 等"}
+
+    api_params = {
+        "indicator": indicator,
+        "region": region
+    }
+    if startdate:
+        api_params["startdate"] = startdate
+    if enddate:
+        api_params["enddate"] = enddate
+
+    return await asyncio.get_event_loop().run_in_executor(None, _call_wind_api, "wind_macro_data", api_params)
+
+
+async def _wind_financial_news(params: dict) -> dict:
+    """财经新闻。获取最新的财经新闻、公告、研报等信息。"""
+    query = params.get("query", "").strip()
+    category = params.get("category", "all").strip()
+    limit = max(1, min(100, int(params.get("limit", 20))))
+    windcode = params.get("windcode", "").strip()
+
+    api_params = {
+        "category": category,
+        "limit": limit
+    }
+    if query:
+        api_params["query"] = query
+    if windcode:
+        api_params["windcode"] = windcode
+
+    return await asyncio.get_event_loop().run_in_executor(None, _call_wind_api, "wind_financial_news", api_params)
+
+
+async def _wind_health_check(params: dict) -> dict:
+    """健康检查。测试 API 连接状态和 API Key 有效性。"""
+    api_key = _get_api_key()
+    if not api_key:
+        return {
+            "success": False,
+            "error": "未找到 Wind API Key。请设置环境变量 WIND_API_KEY 或在 ~/.wind-aifinmarket/config 文件中配置"
+        }
+
+    # 尝试调用 API 做一个轻量级查询来验证连通性
+    result = await asyncio.get_event_loop().run_in_executor(None, _call_wind_api, "wind_health_check", {})
+    if result.get("success"):
+        return {
+            "success": True,
+            "data": {
+                "status": "ok",
+                "api_key_configured": True,
+                "api_url": WIND_API_URL,
+                "timestamp": datetime.now().isoformat(),
+                "detail": result.get("data", {})
+            }
+        }
+    else:
+        return result
+
+
+# ─── MCP Tool Definitions ──────────────────────────────────────────────────────
+
+WIND_TOOLS = [
+    {
+        "name": "wind_stock_quote",
+        "description": "股票实时行情。获取指定股票的最新价格、涨跌幅、成交量、成交额等实时数据。",
+        "handler": _wind_stock_quote,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "windcode": {
+                    "type": "string",
+                    "description": "Wind 股票代码，格式: 600519.SH (A股), 1810.HK (港股), AAPL.OQ (美股)"
+                }
+            },
+            "required": ["windcode"]
+        }
+    },
+    {
+        "name": "wind_stock_history",
+        "description": "股票历史行情。获取指定股票在时间区间内的历史K线数据（开高低收、成交量、成交额等）。",
+        "handler": _wind_stock_history,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "windcode": {
+                    "type": "string",
+                    "description": "Wind 股票代码，格式: 600519.SH, 1810.HK, AAPL.OQ"
+                },
+                "startdate": {
+                    "type": "string",
+                    "description": "开始日期，格式: YYYY-MM-DD"
+                },
+                "enddate": {
+                    "type": "string",
+                    "description": "结束日期，格式: YYYY-MM-DD（默认今天）"
+                },
+                "period": {
+                    "type": "string",
+                    "description": "数据周期: day(日线), week(周线), month(月线)",
+                    "enum": ["day", "week", "month"],
+                    "default": "day"
+                }
+            },
+            "required": ["windcode", "startdate"]
+        }
+    },
+    {
+        "name": "wind_financial_data",
+        "description": "财务数据。获取上市公司财务报表数据，包括利润表(income)、资产负债表(balance)、现金流量表(cashflow)。",
+        "handler": _wind_financial_data,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "windcode": {
+                    "type": "string",
+                    "description": "Wind 股票代码，格式: 600519.SH"
+                },
+                "statement_type": {
+                    "type": "string",
+                    "description": "报表类型: income(利润表), balance(资产负债表), cashflow(现金流量表)",
+                    "enum": ["income", "balance", "cashflow"],
+                    "default": "income"
+                },
+                "report_date": {
+                    "type": "string",
+                    "description": "报告日期，格式: YYYY-MM-DD（可选，默认获取最新）"
+                }
+            },
+            "required": ["windcode"]
+        }
+    },
+    {
+        "name": "wind_valuation",
+        "description": "估值指标。获取股票的 PE(市盈率)、PB(市净率)、PS(市销率)、股息率、总市值、流通市值等估值数据。",
+        "handler": _wind_valuation,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "windcode": {
+                    "type": "string",
+                    "description": "Wind 股票代码，格式: 600519.SH, 1810.HK, AAPL.OQ"
+                },
+                "date": {
+                    "type": "string",
+                    "description": "查询日期，格式: YYYY-MM-DD（可选，默认最新）"
+                }
+            },
+            "required": ["windcode"]
+        }
+    },
+    {
+        "name": "wind_industry_data",
+        "description": "行业数据。获取行业分类、行业指数行情、行业成分股列表等信息。action 可选: classify(行业分类), index(行业指数), members(成分股)。",
+        "handler": _wind_industry_data,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "操作类型: classify(行业分类), index(行业指数), members(成分股)",
+                    "enum": ["classify", "index", "members"],
+                    "default": "classify"
+                },
+                "industry_name": {
+                    "type": "string",
+                    "description": "行业名称（如: 银行, 电子, 医药生物）"
+                },
+                "windcode": {
+                    "type": "string",
+                    "description": "股票代码（用于查询所属行业）"
+                },
+                "index_code": {
+                    "type": "string",
+                    "description": "行业指数代码（用于查询成分股）"
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "wind_macro_data",
+        "description": "宏观经济数据。获取 GDP、CPI、PPI、PMI、M2、社融、利率、汇率等宏观经济指标数据。",
+        "handler": _wind_macro_data,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "indicator": {
+                    "type": "string",
+                    "description": "指标名称，如: GDP, CPI, PPI, PMI, M2, LPR, 社融, 外汇储备 等"
+                },
+                "region": {
+                    "type": "string",
+                    "description": "地区: china(中国), usa(美国), europe(欧洲), japan(日本)",
+                    "default": "china"
+                },
+                "startdate": {
+                    "type": "string",
+                    "description": "开始日期，格式: YYYY-MM-DD"
+                },
+                "enddate": {
+                    "type": "string",
+                    "description": "结束日期，格式: YYYY-MM-DD"
+                }
+            },
+            "required": ["indicator"]
+        }
+    },
+    {
+        "name": "wind_financial_news",
+        "description": "财经新闻。获取最新的财经新闻、公司公告、研究报告等信息。可按关键词、股票代码、新闻类别筛选。",
+        "handler": _wind_financial_news,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "搜索关键词（如: 人工智能, 新能源, 并购重组）"
+                },
+                "category": {
+                    "type": "string",
+                    "description": "新闻类别: all(全部), news(新闻), announcement(公告), research(研报)",
+                    "enum": ["all", "news", "announcement", "research"],
+                    "default": "all"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "返回条数（默认20，最大100）",
+                    "default": 20
+                },
+                "windcode": {
+                    "type": "string",
+                    "description": "Wind 股票代码（筛选特定公司的新闻）"
+                }
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "wind_health_check",
+        "description": "健康检查。测试 Wind API 连接状态和 API Key 有效性。",
+        "handler": _wind_health_check,
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+    }
+]
+
+
+# ─── MCP Server Registration ───────────────────────────────────────────────────
+
+def register_wind_tools(server) -> None:
+    """
+    将所有 Wind 金融数据 tools 注册到 MCP server。
+
+    Args:
+        server: MCP server 实例，需要支持 @server.tool() 装饰器或类似注册机制。
+    """
+    for tool_def in WIND_TOOLS:
+        tool_name = tool_def["name"]
+        tool_handler = tool_def["handler"]
+        tool_description = tool_def["description"]
+        tool_schema = tool_def["inputSchema"]
+
+        # 尝试多种注册方式以兼容不同的 MCP server 实现
+        if hasattr(server, "tool"):
+            # FastMCP 风格: @server.tool()
+            decorated = server.tool(
+                name=tool_name,
+                description=tool_description,
+            )(tool_handler)
+        elif hasattr(server, "register_tool"):
+            # 通用注册接口
+            server.register_tool(
+                name=tool_name,
+                description=tool_description,
+                input_schema=tool_schema,
+                handler=tool_handler,
+            )
+        elif hasattr(server, "add_tool"):
+            # 另一种注册接口
+            server.add_tool(
+                name=tool_name,
+                description=tool_description,
+                input_schema=tool_schema,
+                handler=tool_handler,
+            )
+        else:
+            # 回退: 直接设置属性
+            setattr(server, f"_tool_{tool_name}", tool_handler)
+
+
+# ─── Standalone Server (when run directly) ─────────────────────────────────────
+
+def main():
+    """独立运行模式 - 启动 MCP Server。"""
+    try:
+        from mcp.server.fastmcp import FastMCP
+    except ImportError:
+        print("错误: 需要安装 mcp 包。请运行: pip install mcp")
+        print("或使用 uv: uv pip install mcp")
+        return
+
+    mcp_server = FastMCP(
+        "Wind Financial Data",
+        instructions="万得金融数据 MCP Server - 提供股票行情、财务数据、估值指标、行业数据、宏观经济、财经新闻等数据服务"
+    )
+
+    # 注册所有 tools
+    register_wind_tools(mcp_server)
+
+    print("Wind MCP Server 已启动")
+    print(f"API URL: {WIND_API_URL}")
+    api_key = _get_api_key()
+    if api_key:
+        masked = api_key[:8] + "..." + api_key[-4:] if len(api_key) > 12 else "***"
+        print(f"API Key: {masked}")
+    else:
+        print("警告: 未找到 API Key，请设置 WIND_API_KEY 环境变量或配置 ~/.wind-aifinmarket/config")
+    print("Tools: " + ", ".join(t["name"] for t in WIND_TOOLS))
+
+    mcp_server.run()
+
+
+if __name__ == "__main__":
+    main()

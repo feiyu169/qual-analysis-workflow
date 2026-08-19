@@ -1,0 +1,179 @@
+domain: architecture
+name: "架构审查清单"
+version: "1.0"
+description: "针对代码架构的专项检查清单"
+source: builtin
+
+items:
+  # ==================== 依赖管理 ====================
+  - id: "A-01"
+    question: "是否存在循环依赖？"
+    severity: "P0"
+    category: "依赖管理"
+    check_points:
+      - "模块依赖关系是否清晰？"
+      - "是否有依赖图分析？"
+      - "是否有解耦方案？"
+      - "是否有依赖注入？"
+    fix_suggestion: "使用依赖倒置原则，引入接口层解耦"
+    references:
+      - "https://en.wikipedia.org/wiki/Circular_dependency"
+  
+  - id: "A-02"
+    question: "模块职责是否清晰？"
+    severity: "P1"
+    category: "模块设计"
+    check_points:
+      - "是否遵循单一职责原则？"
+      - "模块是否过大？"
+      - "模块是否过小？"
+      - "是否有上帝类/上帝模块？"
+    fix_suggestion: "遵循SOLID原则，拆分过大的模块"
+    references:
+      - "https://en.wikipedia.org/wiki/Single_responsibility_principle"
+  
+  - id: "A-03"
+    question: "是否有分层架构？"
+    severity: "P1"
+    category: "架构模式"
+    check_points:
+      - "是否有清晰的分层？"
+      - "层之间是否有依赖？"
+      - "是否有跨层调用？"
+    fix_suggestion: "实现清晰的分层架构，禁止跨层调用"
+    references:
+      - "https://en.wikipedia.org/wiki/Multitier_architecture"
+
+  # ==================== 服务治理 ====================
+  - id: "A-04"
+    question: "是否有服务发现机制？"
+    severity: "P1"
+    category: "服务治理"
+    check_points:
+      - "服务注册中心？"
+      - "健康检查？"
+      - "负载均衡？"
+      - "服务版本管理？"
+    fix_suggestion: "使用Consul/Eureka/Nacos等服务发现组件"
+    references:
+      - "https://microservices.io/patterns/service-registry.html"
+  
+  - id: "A-05"
+    question: "是否有熔断机制？"
+    severity: "P1"
+    category: "服务治理"
+    check_points:
+      - "熔断器配置？"
+      - "降级策略？"
+      - "重试机制？"
+      - "超时控制？"
+    fix_suggestion: "使用Hystrix/Resilience4j等熔断组件"
+    references:
+      - "https://microservices.io/patterns/reliability/circuit-breaker.html"
+  
+  - id: "A-06"
+    question: "有限流机制？"
+    severity: "P1"
+    category: "服务治理"
+    check_points:
+      - "限流算法？"
+      - "限流粒度？"
+      - "限流响应？"
+      - "是否支持动态调整？"
+    fix_suggestion: "实现令牌桶/漏桶限流"
+    references:
+      - "https://en.wikipedia.org/wiki/Token_bucket"
+
+  # ==================== 可观测性 ====================
+  - id: "A-07"
+    question: "是否有日志体系？"
+    severity: "P1"
+    category: "可观测性"
+    check_points:
+      - "日志级别？"
+      - "日志格式？"
+      - "日志收集？"
+      - "日志脱敏？"
+    fix_suggestion: "使用结构化日志，集成ELK/Loki"
+    references:
+      - "https://12factor.net/logs"
+  
+  - id: "A-08"
+    question: "是否有监控告警？"
+    severity: "P1"
+    category: "可观测性"
+    check_points:
+      - "指标采集？"
+      - "告警规则？"
+      - "可视化？"
+      - "告警通知？"
+    fix_suggestion: "集成Prometheus + Grafana"
+    references:
+      - "https://prometheus.io/docs/introduction/overview/"
+  
+  - id: "A-09"
+    question: "是否有链路追踪？"
+    severity: "P2"
+    category: "可观测性"
+    check_points:
+      - "是否有Trace ID？"
+      - "是否支持跨服务追踪？"
+      - "是否有采样策略？"
+    fix_suggestion: "集成Jaeger/Zipkin/SkyWalking"
+    references:
+      - "https://www.jaegertracing.io/docs/latest/architecture/"
+
+  # ==================== 配置管理 ====================
+  - id: "A-10"
+    question: "是否有配置管理？"
+    severity: "P1"
+    category: "配置管理"
+    check_points:
+      - "配置中心？"
+      - "配置版本？"
+      - "配置热更新？"
+      - "配置加密？"
+    fix_suggestion: "使用配置中心管理配置"
+    references:
+      - "https://12factor.net/config"
+
+  # ==================== 可靠性 ====================
+  - id: "A-11"
+    question: "是否有容错设计？"
+    severity: "P1"
+    category: "可靠性"
+    check_points:
+      - "异常处理？"
+      - "超时控制？"
+      - "重试机制？"
+      - "幂等设计？"
+    fix_suggestion: "实现统一的异常处理和超时控制"
+    references:
+      - "https://microservices.io/patterns/reliability/"
+  
+  - id: "A-12"
+    question: "是否有扩展性设计？"
+    severity: "P2"
+    category: "模块设计"
+    check_points:
+      - "是否支持插件化？"
+      - "是否支持热插拔？"
+      - "是否有扩展点？"
+      - "是否使用策略模式？"
+    fix_suggestion: "使用策略模式/插件模式"
+    references:
+      - "https://en.wikipedia.org/wiki/Strategy_pattern"
+
+  # ==================== 文档 ====================
+  - id: "A-13"
+    question: "是否有架构文档？"
+    severity: "P2"
+    category: "文档"
+    check_points:
+      - "架构文档？"
+      - "API文档？"
+      - "部署文档？"
+      - "运维文档？"
+    fix_suggestion: "编写完整的架构和API文档"
+    references:
+      - "https://arc42.org/"

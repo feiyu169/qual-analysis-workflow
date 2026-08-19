@@ -1,0 +1,61 @@
+# HGF 门禁 CI（V3.2.0 / V3.2.11）
+# PR/推送时对变更文件跑完整 HGF 流程（分级→风评→门禁），退出码即门禁结果。
+# V3.2.11（Phase 2 权威化，修评审共识：CI 缺失强制点）：
+#   - 空变更跳过门禁（不再传 __no_change__ 假文件——修 G）；
+#   - 矩阵全绿后自动写入生命周期准出证据（DAG 接电）；
+#   - 本 job 作为 PR 的 required status check（分支保护里勾选 "HGF Gates"），
+#     未通过即阻断合并——门禁从"报告"变为"控制"。
+# 本地与 CI 同一标准：规则集由 workflow/pyproject.toml 固定（ruff），
+# 覆盖率门槛由 config/mcp-gates.yaml 的 unit_test 门禁定义。
+
+name: HGF Gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  hgf-gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install HGF gate tools
+        run: |
+          python -m pip install --quiet \
+            ruff pytest pytest-cov detect-secrets safety semgrep checkov
+
+      - name: Run HGF gates on changed files
+        id: hgf
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          FILES=$(git diff --name-only "$BASE_REF"...HEAD -- '*.py' 2>/dev/null || \
+                  git diff --name-only HEAD~1 -- '*.py')
+          FILES=$(echo "$FILES" | tr '\n' ',' | sed 's/,$//')
+          if [ -z "$FILES" ]; then
+            echo "no python changes; gates skipped"
+            exit 0
+          fi
+          echo "changed files: $FILES"
+          python workflow/workflow_cli.py \
+            --task "CI: HGF gates" \
+            --files "$FILES" \
+            --lines 0 \
+            --dir . \
+            --execute \
+            --json
+
+      - name: Fail loudly on gate result
+        if: steps.hgf.outcome != 'success'
+        run: |
+          echo "HGF 门禁未通过（退出码非 0）。修复后重新推送，或按失败记录补充 root_cause。"
+          exit 1

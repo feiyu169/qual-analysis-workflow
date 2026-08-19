@@ -1,0 +1,44 @@
+# ===== 密钥与敏感信息 =====
+config/.env
+**/.env
+!.env.template
+!**/.env.example
+!**/.env.template
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+**/.venv/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+build/
+dist/
+
+# ===== 运行产物与临时 =====
+.pip-tmp/
+output/
+desktop/node_modules/
+node_modules/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.dsh-web.log
+*.log
+
+# ===== HGF 运行状态（本地保留，非源码） =====
+.hgf/
+workflow/.hgf/
+workflow/.hgf-dogfood/
+workflow/demo_hgf/.hgf/
+
+# ===== OneDrive 云占位符（git 无法读取，非源码） =====
+**/Screenshots
+
+# ===== OS =====
+Thumbs.db
+.DS_Store

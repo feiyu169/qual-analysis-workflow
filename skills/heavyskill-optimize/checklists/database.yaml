@@ -1,0 +1,243 @@
+domain: database
+name: "数据库审查清单"
+version: "1.0"
+description: "针对数据库设计的专项检查清单"
+source: builtin
+
+items:
+  # ==================== 索引设计 ====================
+  - id: "D-01"
+    question: "索引设计是否合理？"
+    severity: "P1"
+    category: "索引"
+    check_points:
+      - "是否有主键索引？"
+      - "是否有唯一索引？"
+      - "是否有复合索引？"
+      - "是否有冗余索引？"
+      - "是否有未使用的索引？"
+    fix_suggestion: "分析查询模式，优化索引设计"
+    references:
+      - "https://use-the-index-luke.com/"
+  
+  - id: "D-02"
+    question: "是否有索引失效风险？"
+    severity: "P1"
+    category: "索引"
+    check_points:
+      - "是否有函数操作索引列？"
+      - "是否有隐式类型转换？"
+      - "是否有前导通配符？"
+    fix_suggestion: "避免索引失效的常见模式"
+    references:
+      - "https://dev.mysql.com/doc/refman/8.0/en/mysql-indexes.html"
+
+  # ==================== 查询优化 ====================
+  - id: "D-03"
+    question: "是否有慢查询？"
+    severity: "P1"
+    category: "查询优化"
+    check_points:
+      - "是否有慢查询日志？"
+      - "是否有EXPLAIN分析？"
+      - "是否有全表扫描？"
+      - "是否有临时表？"
+    fix_suggestion: "开启慢查询日志，优化慢查询"
+    references:
+      - "https://dev.mysql.com/doc/refman/8.0/en/slow-query-log.html"
+  
+  - id: "D-04"
+    question: "是否有N+1查询问题？"
+    severity: "P1"
+    category: "查询优化"
+    check_points:
+      - "是否有循环查询？"
+      - "是否使用批量查询？"
+      - "是否使用预加载？"
+    fix_suggestion: "使用JOIN或批量查询替代循环查询"
+    references:
+      - "https://stackoverflow.com/questions/97197/what-is-the-n1-selects-problem"
+
+  # ==================== 数据模型 ====================
+  - id: "D-05"
+    question: "表结构设计是否合理？"
+    severity: "P1"
+    category: "数据模型"
+    check_points:
+      - "是否遵循范式？"
+      - "是否有数据冗余？"
+      - "是否有字段类型优化？"
+      - "是否有注释？"
+    fix_suggestion: "遵循数据库设计范式"
+    references:
+      - "https://en.wikipedia.org/wiki/Database_normalization"
+  
+  - id: "D-06"
+    question: "是否有数据完整性约束？"
+    severity: "P1"
+    category: "数据模型"
+    check_points:
+      - "是否有主键约束？"
+      - "是否有外键约束？"
+      - "是否有唯一约束？"
+      - "是否有非空约束？"
+    fix_suggestion: "添加必要的约束"
+    references:
+      - "https://dev.mysql.com/doc/refman/8.0/en/constraints.html"
+
+  # ==================== 事务管理 ====================
+  - id: "D-07"
+    question: "是否有事务管理？"
+    severity: "P1"
+    category: "事务"
+    check_points:
+      - "是否使用事务？"
+      - "事务隔离级别？"
+      - "是否有死锁风险？"
+      - "事务是否过长？"
+    fix_suggestion: "合理使用事务，避免长事务"
+    references:
+      - "https://dev.mysql.com/doc/refman/8.0/en/innodb-transaction-isolation-levels.html"
+  
+  - id: "D-08"
+    question: "是否有分布式事务？"
+    severity: "P2"
+    category: "事务"
+    check_points:
+      - "是否有跨库事务？"
+      - "是否有最终一致性？"
+      - "是否有补偿机制？"
+    fix_suggestion: "使用Saga模式或TCC模式"
+    references:
+      - "https://microservices.io/patterns/data/saga.html"
+
+  # ==================== 数据归档 ====================
+  - id: "D-09"
+    question: "是否有数据归档策略？"
+    severity: "P2"
+    category: "数据管理"
+    check_points:
+      - "是否有历史数据归档？"
+      - "归档周期？"
+      - "归档存储位置？"
+      - "归档数据可查询？"
+    fix_suggestion: "制定数据归档策略"
+    references:
+      - "https://en.wikipedia.org/wiki/Data_archiving"
+  
+  - id: "D-10"
+    question: "是否有数据清理策略？"
+    severity: "P2"
+    category: "数据管理"
+    check_points:
+      - "是否有过期数据清理？"
+      - "清理周期？"
+      - "是否有软删除？"
+    fix_suggestion: "制定数据清理策略"
+    references:
+      - "https://en.wikipedia.org/wiki/Data_retention"
+
+  # ==================== 读写分离 ====================
+  - id: "D-11"
+    question: "是否有读写分离？"
+    severity: "P1"
+    category: "架构"
+    check_points:
+      - "是否有主从复制？"
+      - "读写是否分离？"
+      - "是否有数据一致性？"
+      - "是否有延迟问题？"
+    fix_suggestion: "实现读写分离"
+    references:
+      - "https://dev.mysql.com/doc/refman/8.0/en/replication.html"
+  
+  - id: "D-12"
+    question: "是否有分库分表？"
+    severity: "P2"
+    category: "架构"
+    check_points:
+      - "是否有水平拆分？"
+      - "是否有垂直拆分？"
+      - "分片键选择？"
+      - "跨分片查询？"
+    fix_suggestion: "根据业务场景选择分库分表策略"
+    references:
+      - "https://shardingsphere.apache.org/"
+
+  # ==================== 备份恢复 ====================
+  - id: "D-13"
+    question: "是否有备份恢复机制？"
+    severity: "P1"
+    category: "可靠性"
+    check_points:
+      - "是否有定期备份？"
+      - "备份频率？"
+      - "备份存储位置？"
+      - "是否有恢复测试？"
+    fix_suggestion: "制定备份恢复策略"
+    references:
+      - "https://dev.mysql.com/doc/refman/8.0/en/backup-and-recovery.html"
+  
+  - id: "D-14"
+    question: "是否有高可用方案？"
+    severity: "P1"
+    category: "可靠性"
+    check_points:
+      - "是否有主从切换？"
+      - "是否有故障转移？"
+      - "是否有数据同步？"
+    fix_suggestion: "实现数据库高可用"
+    references:
+      - "https://dev.mysql.com/doc/refman/8.0/en/ha-overview.html"
+
+  # ==================== 迁移策略 ====================
+  - id: "D-15"
+    question: "是否有数据库迁移？"
+    severity: "P2"
+    category: "运维"
+    check_points:
+      - "是否有迁移工具？"
+      - "是否有版本管理？"
+      - "是否有回滚机制？"
+      - "是否有迁移测试？"
+    fix_suggestion: "使用Alembic/Flyway等迁移工具"
+    references:
+      - "https://alembic.sqlalchemy.org/"
+  
+  - id: "D-16"
+    question: "是否有数据加密？"
+    severity: "P1"
+    category: "安全"
+    check_points:
+      - "是否加密存储？"
+      - "是否加密传输？"
+      - "是否有密钥管理？"
+    fix_suggestion: "敏感数据加密存储"
+    references:
+      - "https://dev.mysql.com/doc/refman/8.0/en/data-encryption.html"
+
+  # ==================== 监控 ====================
+  - id: "D-17"
+    question: "是否有数据库监控？"
+    severity: "P2"
+    category: "可观测性"
+    check_points:
+      - "是否有性能监控？"
+      - "是否有慢查询监控？"
+      - "是否有连接数监控？"
+      - "是否有告警？"
+    fix_suggestion: "集成数据库监控工具"
+    references:
+      - "https://www.percona.com/software/database-tools/percona-monitoring-and-management"
+  
+  - id: "D-18"
+    question: "是否有连接池监控？"
+    severity: "P2"
+    category: "可观测性"
+    check_points:
+      - "连接池使用率？"
+      - "连接泄漏检测？"
+      - "连接等待时间？"
+    fix_suggestion: "监控连接池状态"
+    references:
+      - "https://github.com/brettwooldridge/HikariCP"

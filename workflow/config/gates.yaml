@@ -1,0 +1,257 @@
+gates:
+  gate_0_1:
+    depends_on: []
+    entry_criteria:
+    - description: 用户提出需求
+      type: user_request
+    exit_criteria:
+    - description: 需求文档生成
+      type: document_generated
+      verification: L1
+    max_retries: 3
+    name: Grill Session
+    phase: 0
+    timeout: 3600
+  gate_0_2:
+    depends_on:
+    - gate_0_1
+    entry_criteria:
+    - description: 需求文档生成
+      type: document_generated
+    exit_criteria:
+    - description: 安全需求清单
+      type: security_requirements
+      verification: L1
+    max_retries: 3
+    name: 安全需求评审
+    phase: 0
+    timeout: 3600
+  gate_0_3:
+    depends_on:
+    - gate_0_1
+    - gate_0_2
+    entry_criteria:
+    - description: 需求文档
+      type: document_generated
+    - description: 安全需求
+      type: security_requirements
+    exit_criteria:
+    - description: 第三方审查通过
+      type: review_passed
+      verification: L1
+    max_retries: 3
+    name: 需求评审
+    phase: 0
+    timeout: 86400
+  gate_1_1:
+    depends_on:
+    - gate_0_3
+    entry_criteria:
+    - description: 需求确认
+      type: requirements_confirmed
+    exit_criteria:
+    - description: 架构设计文档
+      type: architecture_document
+    - description: 威胁建模评审
+      type: threat_model
+      verification: L1
+    max_retries: 3
+    name: 架构设计 + 威胁建模
+    phase: 1
+    timeout: 7200
+  gate_1_2:
+    depends_on:
+    - gate_1_1
+    entry_criteria:
+    - description: 架构设计文档
+      type: architecture_document
+    exit_criteria:
+    - description: 接口定义文档
+      type: api_definition
+      verification: L1
+    max_retries: 3
+    name: 接口设计
+    phase: 1
+    timeout: 3600
+  gate_1_3:
+    depends_on:
+    - gate_1_2
+    entry_criteria:
+    - description: 接口定义文档
+      type: api_definition
+    exit_criteria:
+    - description: 详细设计文档
+      type: detailed_design
+      verification: L1
+    max_retries: 3
+    name: 详细设计
+    phase: 1
+    timeout: 3600
+  gate_2_1:
+    depends_on:
+    - gate_1_3
+    entry_criteria:
+    - description: 详细设计文档
+      type: detailed_design
+    exit_criteria:
+    - description: L1 单元测试通过（覆盖率 ≥ 80%）
+      type: unit_test_passed
+      verification: L1
+    - description: TDD 证据（测试先于代码的 Git 记录）
+      type: tdd_evidence
+      verification: L1
+    - description: 静态分析通过（无严重告警）
+      type: static_analysis
+      verification: L1
+    - description: SAST 扫描通过
+      type: sast_scan
+      verification: L1
+    - description: 依赖漏洞扫描通过
+      type: dependency_scan
+      verification: L1
+    max_retries: 3
+    name: 代码实现 (TDD)
+    phase: 2
+    timeout: 14400
+  gate_2_2:
+    depends_on:
+    - gate_2_1
+    entry_criteria:
+    - description: 代码完成
+      type: code_completed
+    exit_criteria:
+    - description: 自动化审查（lint、覆盖率、安全扫描）
+      type: automated_review
+      verification: L1
+    - description: 人工审查（正确性、安全、性能、可维护性）
+      type: manual_review
+      verification: L1
+    - description: 审查清单逐项勾选
+      type: review_checklist
+      verification: L1
+    max_retries: 3
+    name: 代码审查 (第三方)
+    phase: 2
+    timeout: 172800
+  gate_3_1:
+    depends_on:
+    - gate_2_2
+    entry_criteria:
+    - description: 审查通过
+      type: review_passed
+    exit_criteria:
+    - description: L2 真实数据端到端测试
+      type: integration_test_passed
+      verification: L2
+    - description: 测试数据脱敏检查
+      type: data_desensitization
+      verification: L1
+    max_retries: 3
+    name: 集成测试
+    phase: 3
+    timeout: 7200
+  gate_3_2:
+    depends_on:
+    - gate_3_1
+    entry_criteria:
+    - description: 集成测试通过
+      type: integration_test_passed
+    exit_criteria:
+    - description: DAST 扫描通过
+      type: dast_scan
+      verification: L1
+    max_retries: 3
+    name: 安全测试
+    phase: 3
+    timeout: 7200
+  gate_3_3:
+    depends_on:
+    - gate_3_1
+    - gate_3_2
+    entry_criteria:
+    - description: 安全测试通过
+      type: security_test_passed
+    exit_criteria:
+    - description: 用户验收确认
+      type: user_acceptance
+      verification: L1
+    max_retries: 3
+    name: 验收测试
+    phase: 3
+    timeout: 259200
+  gate_4_1:
+    depends_on:
+    - gate_3_3
+    entry_criteria:
+    - description: 验收通过
+      type: acceptance_passed
+    exit_criteria:
+    - description: 部署检查清单通过
+      type: deployment_checklist
+      verification: L1
+    - description: IaC 安全审计通过
+      type: iac_security_audit
+      verification: L1
+    - description: 密钥轮转检查
+      type: key_rotation
+      verification: L1
+    max_retries: 3
+    name: 部署准备 + 安全审计
+    phase: 4
+    timeout: 3600
+  gate_4_2:
+    depends_on:
+    - gate_4_1
+    entry_criteria:
+    - description: 部署就绪
+      type: deployment_ready
+    exit_criteria:
+    - description: 健康检查通过
+      type: health_check
+      verification: L1
+    max_retries: 3
+    name: 上线验证
+    phase: 4
+    timeout: 1800
+  gate_4_3:
+    depends_on:
+    - gate_4_2
+    entry_criteria:
+    - description: 上线成功
+      type: deployment_success
+    exit_criteria:
+    - description: 监控告警配置完成
+      type: monitoring_configured
+      verification: L1
+    max_retries: 3
+    name: 监控配置
+    phase: 4
+    timeout: 1800
+  gate_5_1:
+    depends_on:
+    - gate_4_3
+    entry_criteria:
+    - description: 监控就绪
+      type: monitoring_ready
+    exit_criteria:
+    - description: 监控数据正常
+      type: monitoring_normal
+      verification: L1
+    max_retries: 3
+    name: 线上监控
+    phase: 5
+    timeout: 3600
+  gate_5_2:
+    depends_on:
+    - gate_5_1
+    entry_criteria:
+    - description: 监控正常
+      type: monitoring_normal
+    exit_criteria:
+    - description: 反馈收集完成
+      type: feedback_collected
+      verification: L1
+    max_retries: 3
+    name: 反馈收集
+    phase: 5
+    timeout: 86400

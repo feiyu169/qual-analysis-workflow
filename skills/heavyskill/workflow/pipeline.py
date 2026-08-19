@@ -1,0 +1,274 @@
+"""
+HeavySkill Pipeline
+
+Orchestrates the complete two-stage pipeline:
+  Stage 1: Parallel Reasoning → Generate K independent trajectories
+  Cache: Store and select trajectories
+  Stage 2: Sequential Deliberation → Synthesize final answer
+  Optional: Iterative refinement (feed deliberation back as trajectory)
+
+Returns a HeavySkillResult dataclass with the complete result.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from configuration import HeavySkillConfig, SelectionStrategy
+from .memory_cache import MemoryCache
+from .parallel_reasoning import ParallelReasoner, ReasoningResult
+from .sequential_deliberation import DeliberationResult, SequentialDeliberator
+from .utils import estimate_total_tokens, filter_trajectories
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class HeavySkillResult:
+    """Complete result from the HeavySkill pipeline.
+
+    Attributes:
+        query: The original question.
+        final_answer: The synthesized final answer.
+        consensus_answer: Most frequent answer across trajectories.
+        reasoning_result: Result from Stage 1 (parallel reasoning).
+        deliberation_results: Results from Stage 2 (deliberation iterations).
+        cache_stats: Statistics from the memory cache.
+        total_tokens: Total tokens used across all stages.
+        total_latency: Total wall-clock time in seconds.
+        iterations_completed: Number of deliberation iterations completed.
+    """
+
+    query: str
+    final_answer: Optional[str]
+    consensus_answer: Optional[str]
+    reasoning_result: Optional[ReasoningResult] = None
+    deliberation_results: List[DeliberationResult] = field(default_factory=list)
+    cache_stats: Dict[str, Any] = field(default_factory=dict)
+    total_tokens: int = 0
+    total_latency: float = 0.0
+    iterations_completed: int = 0
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to dictionary for JSON output."""
+        result = {
+            "query": self.query,
+            "final_answer": self.final_answer,
+            "consensus_answer": self.consensus_answer,
+            "total_tokens": self.total_tokens,
+            "total_latency_seconds": round(self.total_latency, 2),
+            "iterations_completed": self.iterations_completed,
+            "cache_stats": self.cache_stats,
+        }
+
+        if self.reasoning_result:
+            result["reasoning"] = self.reasoning_result.to_dict()
+
+        if self.deliberation_results:
+            result["deliberation"] = [d.to_dict() for d in self.deliberation_results]
+
+        return result
+
+    def to_json(self, indent: int = 2) -> str:
+        """Serialize to JSON string."""
+        return json.dumps(self.to_dict(), indent=indent, ensure_ascii=False)
+
+    def summary(self) -> str:
+        """Generate a human-readable summary."""
+        lines = [
+            "=" * 60,
+            "HeavySkill Pipeline Result",
+            "=" * 60,
+            f"Query: {self.query[:200]}{'...' if len(self.query) > 200 else ''}",
+            f"",
+            f"Final Answer: {self.final_answer}",
+            f"Consensus Answer: {self.consensus_answer}",
+            f"",
+            f"Iterations: {self.iterations_completed}",
+            f"Total Tokens: {self.total_tokens:,}",
+            f"Total Latency: {self.total_latency:.2f}s",
+        ]
+
+        if self.reasoning_result:
+            lines.extend(
+                [
+                    f"",
+                    f"Stage 1 - Parallel Reasoning:",
+                    f"  Trajectories: {self.reasoning_result.successful_count}/{len(self.reasoning_result.trajectories)} successful",
+                    f"  Tokens: {self.reasoning_result.total_tokens:,}",
+                    f"  Latency: {self.reasoning_result.total_latency:.2f}s",
+                ]
+            )
+
+        if self.cache_stats:
+            answer_freq = self.cache_stats.get("answer_frequencies", {})
+            if answer_freq:
+                lines.append(f"")
+                lines.append(f"Answer Distribution:")
+                for answer, count in list(answer_freq.items())[:5]:
+                    lines.append(f"  '{answer}': {count} votes")
+
+        lines.append("=" * 60)
+        return "\n".join(lines)
+
+
+@dataclass
+class HeavySkillPipeline:
+    """Complete HeavySkill pipeline orchestrator.
+
+    Executes the two-stage process:
+    1. Parallel Reasoning: Generate K independent reasoning trajectories
+    2. Sequential Deliberation: Analyze and synthesize final answer
+
+    Supports iterative refinement where deliberation results are fed
+    back as additional context for subsequent deliberation rounds.
+
+    Usage:
+        config = HeavySkillConfig(query="What is 2+2?")
+        pipeline = HeavySkillPipeline(config)
+        result = await pipeline.run()
+        print(result.summary())
+    """
+
+    config: HeavySkillConfig
+
+    async def run(self, query: Optional[str] = None) -> HeavySkillResult:
+        """Execute the complete HeavySkill pipeline.
+
+        Args:
+            query: The question to reason about. Uses config query if None.
+
+        Returns:
+            HeavySkillResult with the complete pipeline output.
+        """
+        if query is None:
+            raise ValueError("Query must be provided")
+
+        pipeline_start = time.monotonic()
+        total_tokens = 0
+
+        logger.info(f"Starting HeavySkill pipeline")
+        logger.info(f"  Query: {query[:100]}{'...' if len(query) > 100 else ''}")
+        logger.info(f"  Reason K: {self.config.reason_k}")
+        logger.info(f"  Summary K: {self.config.summary_k}")
+        logger.info(f"  Iterations: {self.config.max_iterations}")
+        logger.info(f"  Strategy: {self.config.selection_strategy.value}")
+
+        # Initialize memory cache
+        cache = MemoryCache(query=query)
+
+        # Stage 1: Parallel Reasoning
+        logger.info("=" * 40)
+        logger.info("STAGE 1: Parallel Reasoning")
+        logger.info("=" * 40)
+
+        reasoning_result: Optional[ReasoningResult] = None
+        async with ParallelReasoner(self.config) as reasoner:
+            reasoning_result = await reasoner.reason(query)
+
+        # Store trajectories in cache
+        cache.add_trajectories(reasoning_result.trajectories)
+        total_tokens += reasoning_result.total_tokens
+
+        # Filter trajectories for quality
+        valid_trajectories, valid_indices = filter_trajectories(
+            reasoning_result.trajectories,
+            reasoning_result.answers,
+        )
+
+        if not valid_trajectories:
+            logger.warning("No valid trajectories after filtering")
+            return HeavySkillResult(
+                query=query,
+                final_answer=None,
+                consensus_answer=None,
+                reasoning_result=reasoning_result,
+                cache_stats=cache.get_stats(),
+                total_tokens=total_tokens,
+                total_latency=time.monotonic() - pipeline_start,
+                iterations_completed=0,
+            )
+
+        # Stage 2: Sequential Deliberation (with optional iteration)
+        logger.info("=" * 40)
+        logger.info("STAGE 2: Sequential Deliberation")
+        logger.info("=" * 40)
+
+        deliberation_results: List[DeliberationResult] = []
+        previous_deliberation: Optional[str] = None
+
+        async with SequentialDeliberator(self.config) as deliberator:
+            for iteration in range(self.config.max_iterations):
+                logger.info(f"Deliberation iteration {iteration + 1}/{self.config.max_iterations}")
+
+                delib_result = await deliberator.deliberate(
+                    query=query,
+                    cache=cache,
+                    iteration=iteration,
+                    previous_deliberation=previous_deliberation,
+                )
+
+                deliberation_results.append(delib_result)
+                total_tokens += delib_result.tokens
+                previous_deliberation = delib_result.deliberation_response
+
+                # If we got a confident answer, we can stop early
+                if delib_result.final_answer and iteration > 0:
+                    logger.info(f"Got answer on iteration {iteration + 1}, stopping early")
+                    break
+
+        # Determine final answer
+        final_answer = None
+        if deliberation_results:
+            # Use the last deliberation's answer
+            final_answer = deliberation_results[-1].final_answer
+
+        # Fallback to consensus if deliberation didn't produce an answer
+        if final_answer is None:
+            final_answer = cache.get_consensus_answer()
+            if final_answer:
+                logger.info("Using consensus answer as final fallback")
+
+        total_latency = time.monotonic() - pipeline_start
+
+        logger.info("=" * 40)
+        logger.info("PIPELINE COMPLETE")
+        logger.info(f"  Final Answer: {final_answer}")
+        logger.info(f"  Total Tokens: {total_tokens:,}")
+        logger.info(f"  Total Latency: {total_latency:.2f}s")
+        logger.info("=" * 40)
+
+        return HeavySkillResult(
+            query=query,
+            final_answer=final_answer,
+            consensus_answer=cache.get_consensus_answer(),
+            reasoning_result=reasoning_result,
+            deliberation_results=deliberation_results,
+            cache_stats=cache.get_stats(),
+            total_tokens=total_tokens,
+            total_latency=total_latency,
+            iterations_completed=len(deliberation_results),
+        )
+
+    async def run_with_progress(
+        self, query: str, progress_callback: Optional[Any] = None
+    ) -> HeavySkillResult:
+        """Execute pipeline with progress callbacks.
+
+        Args:
+            query: The question to reason about.
+            progress_callback: Optional async callable(stage, progress, total).
+
+        Returns:
+            HeavySkillResult with the complete pipeline output.
+        """
+        # For now, delegates to run(). Can be extended for progress tracking.
+        return await self.run(query)

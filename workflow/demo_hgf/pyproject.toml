@@ -1,0 +1,5 @@
+# 扁平布局（calc.py 与 tests/ 同级）下，裸 `pytest` 命令不会自动把
+# 项目根加入 sys.path（`python -m pytest` 才会）。HGF 门禁插件用裸命令
+# 执行，故在此声明 pythonpath，否则测试收集报 ModuleNotFoundError。
+[tool.pytest.ini_options]
+pythonpath = ["."]

@@ -1,0 +1,191 @@
+# CI/CD 配置模板
+# 基于 Hermes Agent 编程 Workflow 方案 V2.0
+# GitHub Actions 示例
+
+name: Gate-Driven CI/CD
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # Phase 0: 需求对齐
+  gate-0:
+    name: "Phase 0: 需求对齐"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: 需求文档检查
+        run: |
+          # 检查需求文档是否存在
+          if [ ! -f "docs/requirements.md" ]; then
+            echo "需求文档不存在"
+            exit 1
+          fi
+      
+      - name: 安全需求检查
+        run: |
+          # 检查安全需求文档
+          if [ ! -f "docs/security_requirements.md" ]; then
+            echo "安全需求文档不存在"
+            exit 1
+          fi
+
+  # Phase 1: 设计
+  gate-1:
+    name: "Phase 1: 设计"
+    needs: gate-0
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: 架构评审
+        run: |
+          # 检查架构设计文档
+          if [ ! -f "docs/architecture.md" ]; then
+            echo "架构设计文档不存在"
+            exit 1
+          fi
+      
+      - name: 威胁建模
+        run: |
+          # 检查威胁建模文档
+          if [ ! -f "docs/threat_model.md" ]; then
+            echo "威胁建模文档不存在"
+            exit 1
+          fi
+
+  # Phase 2: 实现
+  gate-2:
+    name: "Phase 2: 实现"
+    needs: gate-1
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov ruff safety
+      
+      - name: TDD 验证
+        run: |
+          # 检查 TDD 证据
+          python -m pytest tests/ -v --tb=short
+      
+      - name: 静态分析
+        run: |
+          # 运行 ruff 静态分析
+          ruff check .
+      
+      - name: 依赖扫描
+        run: |
+          # 运行 safety 依赖扫描
+          safety check
+      
+      - name: 覆盖率检查
+        run: |
+          # 运行测试并检查覆盖率
+          python -m pytest tests/ --cov=. --cov-report=xml
+          
+          # 检查覆盖率是否 ≥ 80%
+          coverage=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); root = tree.getroot(); print(root.attrib['line-rate'])")
+          coverage_percent=$(echo "$coverage * 100" | bc)
+          
+          if (( $(echo "$coverage_percent < 80" | bc -l) )); then
+            echo "覆盖率 $coverage_percent% < 80%"
+            exit 1
+          fi
+
+  # Phase 3: 验证
+  gate-3:
+    name: "Phase 3: 验证"
+    needs: gate-2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+      
+      - name: 集成测试
+        run: |
+          # 运行集成测试
+          python -m pytest tests/integration/ -v --tb=short
+      
+      - name: DAST 扫描
+        run: |
+          # 运行 DAST 扫描（示例）
+          echo "DAST 扫描通过"
+
+  # Phase 4: 部署
+  gate-4:
+    name: "Phase 4: 部署"
+    needs: gate-3
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: 部署准备
+        run: |
+          # 检查部署清单
+          if [ ! -f "deploy/checklist.md" ]; then
+            echo "部署清单不存在"
+            exit 1
+          fi
+      
+      - name: IaC 安全审计
+        run: |
+          # 运行 checkov 安全审计
+          pip install checkov
+          checkov -d .
+      
+      - name: 部署
+        run: |
+          # 部署到生产环境
+          echo "部署完成"
+      
+      - name: 健康检查
+        run: |
+          # 等待服务启动
+          sleep 30
+          
+          # 健康检查
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://api.example.com/health)
+          if [ "$response" != "200" ]; then
+            echo "健康检查失败: $response"
+            exit 1
+          fi
+
+  # 监控配置
+  monitoring:
+    name: "监控配置"
+    needs: gate-4
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: 配置监控
+        run: |
+          # 配置监控告警
+          echo "监控配置完成"

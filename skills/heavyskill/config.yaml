@@ -1,0 +1,17 @@
+api_base: https://api.deepseek.com
+api_key: <YOUR_DEEPSEEK_API_KEY>
+iterations: 1
+language: cn
+max_tokens: 80000
+model: deepseek-v4-pro
+output_dir: /tmp/heavyskill_output
+prompt_type: general
+reason_k: 8
+save_trajectories: false
+summary_k: 4
+summary_max_tokens: 4000
+summary_model: deepseek-v4-pro
+summary_temperature: 0.3
+temperature: 0.7
+timeout: 300
+top_p: 0.95

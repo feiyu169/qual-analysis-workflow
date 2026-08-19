@@ -1,0 +1,113 @@
+# 代码审查清单
+# 基于 Hermes Agent 编程 Workflow 方案 V2.0
+
+checklist:
+  # 正确性
+  correctness:
+    - id: COR-1
+      description: "功能是否正确实现"
+      check: "验证功能符合需求文档"
+      severity: "critical"
+    
+    - id: COR-2
+      description: "边界条件是否处理"
+      check: "检查空值、溢出、越界等边界情况"
+      severity: "critical"
+    
+    - id: COR-3
+      description: "异常处理是否完善"
+      check: "检查 try-catch 覆盖率和异常类型"
+      severity: "critical"
+    
+    - id: COR-4
+      description: "返回值是否正确"
+      check: "验证返回类型和值符合接口定义"
+      severity: "critical"
+
+  # 安全性
+  security:
+    - id: SEC-1
+      description: "是否有注入漏洞"
+      check: "检查 SQL 注入、XSS、命令注入等"
+      severity: "critical"
+    
+    - id: SEC-2
+      description: "是否有越权访问"
+      check: "检查权限控制和访问控制"
+      severity: "critical"
+    
+    - id: SEC-3
+      description: "敏感数据是否加密"
+      check: "检查密码、密钥等敏感数据处理"
+      severity: "critical"
+    
+    - id: SEC-4
+      description: "日志是否脱敏"
+      check: "检查日志中是否包含敏感信息"
+      severity: "high"
+
+  # 性能
+  performance:
+    - id: PERF-1
+      description: "是否有 N+1 查询"
+      check: "检查数据库查询效率"
+      severity: "high"
+    
+    - id: PERF-2
+      description: "是否有内存泄漏"
+      check: "检查资源释放和内存管理"
+      severity: "high"
+    
+    - id: PERF-3
+      description: "是否有阻塞操作"
+      check: "检查 I/O 操作和同步调用"
+      severity: "medium"
+    
+    - id: PERF-4
+      description: "缓存是否合理"
+      check: "检查缓存策略和失效机制"
+      severity: "medium"
+
+  # 可维护性
+  maintainability:
+    - id: MAINT-1
+      description: "代码是否可读"
+      check: "检查命名规范和代码结构"
+      severity: "medium"
+    
+    - id: MAINT-2
+      description: "命名是否规范"
+      check: "检查变量、函数、类命名"
+      severity: "medium"
+    
+    - id: MAINT-3
+      description: "注释是否充分"
+      check: "检查关键逻辑注释"
+      severity: "low"
+    
+    - id: MAINT-4
+      description: "是否遵循 SOLID 原则"
+      check: "检查单一职责、开闭原则等"
+      severity: "medium"
+
+  # 测试
+  testing:
+    - id: TEST-1
+      description: "单元测试覆盖率 ≥ 80%"
+      check: "检查测试覆盖率报告"
+      severity: "critical"
+    
+    - id: TEST-2
+      description: "测试用例是否充分"
+      check: "检查测试用例数量和覆盖场景"
+      severity: "high"
+    
+    - id: TEST-3
+      description: "边界条件是否测试"
+      check: "检查边界测试用例"
+      severity: "high"
+    
+    - id: TEST-4
+      description: "异常情况是否测试"
+      check: "检查异常测试用例"
+      severity: "high"

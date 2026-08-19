@@ -1,0 +1,109 @@
+# 安全检查清单
+# 基于 Hermes Agent 编程 Workflow 方案 V2.0
+
+checklist:
+  # Phase 0: 安全需求
+  phase_0:
+    - id: SEC-0.1
+      description: "识别敏感数据"
+      check: "列出所有敏感数据类型和存储位置"
+      verification: "数据分类文档"
+      severity: "critical"
+    
+    - id: SEC-0.2
+      description: "识别合规要求"
+      check: "确定适用的合规标准（GDPR、SOC2等）"
+      verification: "合规检查清单"
+      severity: "critical"
+
+  # Phase 1: 威胁建模
+  phase_1:
+    - id: SEC-1.1
+      description: "威胁建模"
+      check: "识别威胁、评估风险、制定缓解措施"
+      verification: "威胁建模文档"
+      severity: "critical"
+    
+    - id: SEC-1.2
+      description: "安全设计评审"
+      check: "评审安全设计和架构"
+      verification: "安全评审通过"
+      severity: "critical"
+
+  # Phase 2: 安全编码
+  phase_2:
+    - id: SEC-2.1
+      description: "SAST 扫描"
+      check: "静态应用安全测试"
+      verification: "无高危漏洞"
+      command: "semgrep --config=auto"
+      severity: "critical"
+    
+    - id: SEC-2.2
+      description: "依赖漏洞扫描"
+      check: "检查第三方依赖漏洞"
+      verification: "无已知漏洞"
+      command: "safety check"
+      severity: "critical"
+    
+    - id: SEC-2.3
+      description: "安全编码规范"
+      check: "遵循安全编码最佳实践"
+      verification: "代码审查通过"
+      severity: "high"
+
+  # Phase 3: 安全测试
+  phase_3:
+    - id: SEC-3.1
+      description: "DAST 扫描"
+      check: "动态应用安全测试"
+      verification: "无高危漏洞"
+      command: "zap-cli scan"
+      severity: "critical"
+    
+    - id: SEC-3.2
+      description: "安全配置检查"
+      check: "检查安全配置和硬化"
+      verification: "配置合规"
+      severity: "high"
+    
+    - id: SEC-3.3
+      description: "渗透测试"
+      check: "模拟攻击测试"
+      verification: "无严重漏洞"
+      severity: "high"
+
+  # Phase 4: 安全部署
+  phase_4:
+    - id: SEC-4.1
+      description: "IaC 安全审计"
+      check: "基础设施即代码安全检查"
+      verification: "无安全问题"
+      command: "checkov -d ."
+      severity: "critical"
+    
+    - id: SEC-4.2
+      description: "密钥轮转检查"
+      check: "检查密钥管理和轮转策略"
+      verification: "密钥已轮转"
+      severity: "critical"
+    
+    - id: SEC-4.3
+      description: "最小权限验证"
+      check: "验证服务账号权限最小化"
+      verification: "权限合规"
+      severity: "high"
+
+  # 测试数据安全
+  test_data:
+    - id: SEC-DATA-1
+      description: "测试数据脱敏"
+      check: "确保测试数据不包含真实敏感信息"
+      verification: "数据已脱敏"
+      severity: "critical"
+    
+    - id: SEC-DATA-2
+      description: "数据访问控制"
+      check: "限制测试数据访问范围"
+      verification: "访问控制合规"
+      severity: "high"

@@ -1,0 +1,140 @@
+# 监控配置模板
+# 基于 Hermes Agent 编程 Workflow 方案 V2.0
+
+monitoring:
+  # 健康检查
+  health_check:
+    endpoint: "/health"
+    interval: 30s
+    timeout: 5s
+    expected_status: 200
+    expected_body: '{"status": "ok"}'
+
+  # 指标收集
+  metrics:
+    # 请求延迟
+    - name: "request_latency"
+      type: "histogram"
+      description: "请求延迟分布"
+      buckets: [0.1, 0.5, 1, 2, 5]
+      thresholds:
+        p95: 500ms
+        p99: 1000ms
+    
+    # 错误率
+    - name: "error_rate"
+      type: "counter"
+      description: "错误请求计数"
+      thresholds:
+        max: 0.01
+    
+    # 请求量
+    - name: "request_count"
+      type: "counter"
+      description: "请求总量"
+    
+    # 数据库查询延迟
+    - name: "db_query_latency"
+      type: "histogram"
+      description: "数据库查询延迟"
+      thresholds:
+        p95: 100ms
+        p99: 200ms
+    
+    # 缓存命中率
+    - name: "cache_hit_rate"
+      type: "gauge"
+      description: "缓存命中率"
+      thresholds:
+        min: 0.8
+
+  # 告警规则
+  alerts:
+    # 高错误率
+    - name: "high_error_rate"
+      condition: "error_rate > 0.05"
+      duration: "5m"
+      severity: "critical"
+      action: "notify_owner"
+      message: "错误率超过 5%"
+    
+    # 高延迟
+    - name: "high_latency"
+      condition: "p95 > 1000ms"
+      duration: "5m"
+      severity: "warning"
+      action: "notify_owner"
+      message: "P95 延迟超过 1 秒"
+    
+    # 服务不可用
+    - name: "service_down"
+      condition: "health_check_failed"
+      duration: "1m"
+      severity: "critical"
+      action: "notify_owner"
+      message: "服务不可用"
+    
+    # 数据库延迟
+    - name: "high_db_latency"
+      condition: "db_query_latency_p95 > 200ms"
+      duration: "5m"
+      severity: "warning"
+      action: "notify_owner"
+      message: "数据库查询延迟过高"
+    
+    # 缓存命中率低
+    - name: "low_cache_hit_rate"
+      condition: "cache_hit_rate < 0.8"
+      duration: "10m"
+      severity: "warning"
+      action: "notify_owner"
+      message: "缓存命中率低于 80%"
+
+  # 通知渠道
+  notifications:
+    # 邮件
+    email:
+      enabled: true
+      recipients:
+        - "admin@example.com"
+    
+    # Slack
+    slack:
+      enabled: true
+      webhook: "https://hooks.slack.com/services/xxx"
+      channel: "#alerts"
+    
+    # 钉钉
+    dingtalk:
+      enabled: true
+      webhook: "https://oapi.dingtalk.com/robot/send?access_token=xxx"
+
+  # 仪表板
+  dashboards:
+    # 概览仪表板
+    overview:
+      title: "系统概览"
+      panels:
+        - title: "请求量"
+          metric: "request_count"
+          type: "graph"
+        
+        - title: "错误率"
+          metric: "error_rate"
+          type: "graph"
+        
+        - title: "延迟分布"
+          metric: "request_latency"
+          type: "heatmap"
+    
+    # 性能仪表板
+    performance:
+      title: "性能监控"
+      panels:
+        - title: "数据库延迟"
+          metric: "db_query_latency"
+          type: "graph"
+        
+        - title: "缓存命中率"
+          metric: "cache_hit_rate"
+          type: "gauge"

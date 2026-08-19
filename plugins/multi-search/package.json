@@ -1,0 +1,16 @@
+{
+  "name": "multi-search",
+  "version": "0.1.0",
+  "description": "DSH 多信息源聚合搜索插件：Tavily + AnySearch + 小红书 + 知乎",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "license": "MIT"
+}

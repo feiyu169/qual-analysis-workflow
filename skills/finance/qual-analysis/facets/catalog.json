@@ -1,0 +1,588 @@
+{
+  "version": "2.0.0",
+  "updated": "2026-06-23",
+  "business_models": [
+    {
+      "id": "platform",
+      "name": "平台经济",
+      "description": "连接双边/多边用户的平台，通过网络效应创造价值",
+      "examples": ["腾讯", "阿里巴巴", "Meta", "Uber"],
+      "key_metrics": ["MAU/DAU", "take_rate", "GMV", "ARPU"],
+      "lens": "platform"
+    },
+    {
+      "id": "saas",
+      "name": "软件即服务",
+      "description": "基于订阅的软件交付模式，按期收费",
+      "examples": ["Salesforce", "Adobe", "金蝶", "用友"],
+      "key_metrics": ["ARR", "NDR", "LTV/CAC", "Churn Rate"],
+      "lens": "saas"
+    },
+    {
+      "id": "marketplace",
+      "name": "市场平台",
+      "description": "撮合买卖双方交易的平台，收取佣金",
+      "examples": ["美团", "拼多多", "Amazon Marketplace", "eBay"],
+      "key_metrics": ["GMV", "take_rate", "AOV", "复购率"],
+      "lens": "marketplace"
+    },
+    {
+      "id": "ecommerce",
+      "name": "电商",
+      "description": "在线零售，自营或平台模式",
+      "examples": ["京东", "Amazon", "Shopify"],
+      "key_metrics": ["GMV", "客单价", "复购率", "履约成本"],
+      "lens": "marketplace"
+    },
+    {
+      "id": "social_media",
+      "name": "社交媒体",
+      "description": "基于社交关系的内容平台，通过广告变现",
+      "examples": ["微信", "抖音", "Facebook", "Twitter"],
+      "key_metrics": ["DAU", "时长", "广告加载率", "eCPM"],
+      "lens": "platform"
+    },
+    {
+      "id": "search_engine",
+      "name": "搜索引擎",
+      "description": "信息检索平台，通过广告变现",
+      "examples": ["百度", "Google", "Bing"],
+      "key_metrics": ["搜索量", "CPC", "广告收入占比"],
+      "lens": "platform"
+    },
+    {
+      "id": "gaming",
+      "name": "游戏",
+      "description": "游戏开发和运营，包括端游、手游、主机",
+      "examples": ["腾讯游戏", "网易", "EA", "Roblox"],
+      "key_metrics": ["MAU", "付费率", "ARPU", "DAU/MAU"],
+      "lens": "consumer"
+    },
+    {
+      "id": "streaming",
+      "name": "流媒体",
+      "description": "视频/音乐流媒体订阅服务",
+      "examples": ["Netflix", "Spotify", "爱奇艺", "B站"],
+      "key_metrics": ["订阅用户", "ARPU", "Churn Rate", "内容成本"],
+      "lens": "consumer"
+    },
+    {
+      "id": "brand_consumer",
+      "name": "品牌消费",
+      "description": "面向消费者的品牌产品，依赖品牌力和渠道",
+      "examples": ["茅台", "苹果", "Nike", "LVMH"],
+      "key_metrics": ["品牌力", "渠道覆盖率", "复购率", "ASP"],
+      "lens": "brand"
+    },
+    {
+      "id": "luxury",
+      "name": "奢侈品",
+      "description": "高端消费品，依赖品牌稀缺性和体验",
+      "examples": ["LVMH", "爱马仕", "茅台"],
+      "key_metrics": ["品牌力", "ASP", "门店效率", "提价能力"],
+      "lens": "brand"
+    },
+    {
+      "id": "fmcg",
+      "name": "快消品",
+      "description": "快速消费品，高频低客单价",
+      "examples": ["宝洁", "联合利华", "伊利", "海天"],
+      "key_metrics": ["市占率", "渠道深度", "新品成功率", "营销ROI"],
+      "lens": "brand"
+    },
+    {
+      "id": "restaurant",
+      "name": "餐饮",
+      "description": "餐饮服务，包括连锁和单店",
+      "examples": ["海底捞", "麦当劳", "星巴克"],
+      "key_metrics": ["同店销售", "翻台率", "客单价", "门店数"],
+      "lens": "consumer"
+    },
+    {
+      "id": "retail",
+      "name": "零售",
+      "description": "线下零售，包括百货、超市、便利店",
+      "examples": ["永辉超市", "沃尔玛", "7-11"],
+      "key_metrics": ["同店销售", "坪效", "库存周转", "毛利率"],
+      "lens": "consumer"
+    },
+    {
+      "id": "tech_hardware",
+      "name": "科技硬件",
+      "description": "硬件产品，包括消费电子、半导体设备",
+      "examples": ["苹果", "华为", "台积电", "ASML"],
+      "key_metrics": ["ASP", "出货量", "产品周期", "供应链效率"],
+      "lens": "tech_hardware"
+    },
+    {
+      "id": "semiconductor",
+      "name": "半导体",
+      "description": "芯片设计、制造、封测",
+      "examples": ["台积电", "英伟达", "中芯国际", "高通"],
+      "key_metrics": ["制程", "产能利用率", "ASP", "研发投入"],
+      "lens": "tech_hardware"
+    },
+    {
+      "id": "ev",
+      "name": "新能源汽车",
+      "description": "电动汽车及相关产业链",
+      "examples": ["特斯拉", "比亚迪", "蔚来", "宁德时代"],
+      "key_metrics": ["交付量", "ASP", "毛利率", "产能"],
+      "lens": "tech_hardware"
+    },
+    {
+      "id": "battery",
+      "name": "动力电池",
+      "description": "电池制造，包括动力电池和储能",
+      "examples": ["宁德时代", "比亚迪", "LG新能源"],
+      "key_metrics": ["产能", "市占率", "能量密度", "成本"],
+      "lens": "tech_hardware"
+    },
+    {
+      "id": "solar",
+      "name": "光伏",
+      "description": "太阳能产业链，包括硅料、组件、电站",
+      "examples": ["隆基绿能", "通威股份", "阳光电源"],
+      "key_metrics": ["产能", "转换效率", "成本", "装机量"],
+      "lens": "tech_hardware"
+    },
+    {
+      "id": "telecom",
+      "name": "电信",
+      "description": "电信运营商，提供通信服务",
+      "examples": ["中国移动", "AT&T", "Verizon"],
+      "key_metrics": ["ARPU", "用户数", "5G渗透率", "资本支出"],
+      "lens": "tech_hardware"
+    },
+    {
+      "id": "cloud",
+      "name": "云计算",
+      "description": "云基础设施和云服务",
+      "examples": ["AWS", "Azure", "阿里云", "华为云"],
+      "key_metrics": ["IaaS收入", "PaaS收入", "客户数", "留存率"],
+      "lens": "saas"
+    },
+    {
+      "id": "ai",
+      "name": "人工智能",
+      "description": "AI 技术和应用，包括大模型、AI 芯片",
+      "examples": ["OpenAI", "英伟达", "百度", "商汤"],
+      "key_metrics": ["模型性能", "推理成本", "API调用量", "研发投入"],
+      "lens": "tech_hardware"
+    },
+    {
+      "id": "pharma",
+      "name": "创新药",
+      "description": "创新药物研发和销售",
+      "examples": ["恒瑞医药", "百济神州", "辉瑞", "默沙东"],
+      "key_metrics": ["管线数量", "临床阶段", "研发投入", "峰值销售"],
+      "lens": "pharma"
+    },
+    {
+      "id": "generic_pharma",
+      "name": "仿制药",
+      "description": "仿制药生产和销售",
+      "examples": ["中国生物制药", "石药集团", "Teva"],
+      "key_metrics": ["品种数量", "过评数量", "集采中标", "毛利率"],
+      "lens": "pharma"
+    },
+    {
+      "id": "medical_device",
+      "name": "医疗器械",
+      "description": "医疗设备和耗材",
+      "examples": ["迈瑞医疗", "微创医疗", "美敦力"],
+      "key_metrics": ["产品线", "研发投入", "海外收入占比", "毛利率"],
+      "lens": "pharma"
+    },
+    {
+      "id": "cxo",
+      "name": "医药外包",
+      "description": "CRO/CDMO/CMO 服务",
+      "examples": ["药明康德", "凯莱英", "泰格医药"],
+      "key_metrics": ["订单量", "产能利用率", "客户数", "人均产出"],
+      "lens": "pharma"
+    },
+    {
+      "id": "bank",
+      "name": "银行",
+      "description": "商业银行，包括零售银行和对公银行",
+      "examples": ["招商银行", "工商银行", "摩根大通"],
+      "key_metrics": ["NIM", "不良率", "拨备覆盖率", "资本充足率"],
+      "lens": "bank"
+    },
+    {
+      "id": "insurance",
+      "name": "保险",
+      "description": "寿险、财险、再保险",
+      "examples": ["中国平安", "中国人寿", "伯克希尔"],
+      "key_metrics": ["保费收入", "综合成本率", "投资收益率", "偿付能力"],
+      "lens": "insurance"
+    },
+    {
+      "id": "securities",
+      "name": "证券",
+      "description": "证券公司，包括经纪、投行、资管",
+      "examples": ["中信证券", "高盛", "摩根士丹利"],
+      "key_metrics": ["佣金率", "投行承销额", "资管规模", "ROE"],
+      "lens": "financial"
+    },
+    {
+      "id": "real_estate",
+      "name": "房地产",
+      "description": "房地产开发和运营",
+      "examples": ["万科", "保利", "华润置地"],
+      "key_metrics": ["销售额", "土储", "负债率", "毛利率"],
+      "lens": "real_estate"
+    },
+    {
+      "id": "reit",
+      "name": "房地产信托",
+      "description": "房地产投资信托",
+      "examples": ["领展", "越秀房产信托"],
+      "key_metrics": ["出租率", "租金增长", "分派率", "NAV"],
+      "lens": "real_estate"
+    },
+    {
+      "id": "construction",
+      "name": "建筑工程",
+      "description": "建筑施工和工程服务",
+      "examples": ["中国建筑", "中国中铁"],
+      "key_metrics": ["订单量", "在手合同", "回款率", "毛利率"],
+      "lens": "industrial"
+    },
+    {
+      "id": "industrial",
+      "name": "工业制造",
+      "description": "通用工业制造，包括机械、材料",
+      "examples": ["三一重工", "海螺水泥", "宝钢"],
+      "key_metrics": ["产能利用率", "市占率", "毛利率", "资本支出"],
+      "lens": "industrial"
+    },
+    {
+      "id": "auto",
+      "name": "汽车",
+      "description": "传统汽车制造",
+      "examples": ["丰田", "大众", "上汽集团"],
+      "key_metrics": ["销量", "ASP", "毛利率", "产能利用率"],
+      "lens": "industrial"
+    },
+    {
+      "id": "airline",
+      "name": "航空",
+      "description": "航空客运和货运",
+      "examples": ["国航", "南航", "Delta"],
+      "key_metrics": ["客座率", "ASK", "RASK", "油价敏感度"],
+      "lens": "cyclical"
+    },
+    {
+      "id": "shipping",
+      "name": "航运",
+      "description": "海运和内河运输",
+      "examples": ["中远海控", "马士基"],
+      "key_metrics": ["运价", "运力", "租约", "油价"],
+      "lens": "cyclical"
+    },
+    {
+      "id": "mining",
+      "name": "矿业",
+      "description": "矿产资源开采和加工",
+      "examples": ["紫金矿业", "中国神华", "必和必拓"],
+      "key_metrics": ["产量", "成本", "储量", "商品价格"],
+      "lens": "cyclical"
+    },
+    {
+      "id": "utility",
+      "name": "公用事业",
+      "description": "电力、水务、燃气等公用事业",
+      "examples": ["长江电力", "中国燃气"],
+      "key_metrics": ["装机容量", "利用小时", "电价", "分红率"],
+      "lens": "value"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "capex_intensive",
+      "name": "高资本支出",
+      "description": "需要大量资本支出维持运营和增长",
+      "impact": "自由现金流受限，分红能力弱",
+      "examples": ["半导体", "电信", "航空"]
+    },
+    {
+      "id": "rnd_intensive",
+      "name": "高研发投入",
+      "description": "研发投入占收入比例高",
+      "impact": "短期盈利受压，长期依赖研发成功率",
+      "examples": ["创新药", "芯片设计", "AI"]
+    },
+    {
+      "id": "high_leverage",
+      "name": "高杠杆",
+      "description": "债务水平较高",
+      "impact": "财务风险高，利率敏感",
+      "examples": ["房地产", "航空", "电信"]
+    },
+    {
+      "id": "regulated",
+      "name": "强监管",
+      "description": "受政府严格监管",
+      "impact": "合规成本高，政策风险大",
+      "examples": ["金融", "医疗", "教育", "电信"]
+    },
+    {
+      "id": "cyclical",
+      "name": "周期性",
+      "description": "业绩随经济周期波动",
+      "impact": "盈利不稳定，估值波动大",
+      "examples": ["半导体", "航运", "有色金属", "汽车"]
+    },
+    {
+      "id": "geopolitical_risk",
+      "name": "地缘政治风险",
+      "description": "受地缘政治影响大",
+      "impact": "供应链风险，市场准入风险",
+      "examples": ["中概股", "半导体", "能源"]
+    },
+    {
+      "id": "concentration_risk",
+      "name": "集中度风险",
+      "description": "客户/供应商/地区集中度高",
+      "impact": "单一大客户/供应商依赖",
+      "examples": ["苹果供应链", "单一市场公司"]
+    },
+    {
+      "id": "disruption_risk",
+      "name": "颠覆风险",
+      "description": "面临技术或商业模式颠覆风险",
+      "impact": "现有业务可能被替代",
+      "examples": ["传统汽车", "传统零售", "传统媒体"]
+    },
+    {
+      "id": "esg_risk",
+      "name": "ESG 风险",
+      "description": "环境、社会、治理风险",
+      "impact": "声誉风险，监管风险",
+      "examples": ["煤炭", "烟草", "博彩"]
+    },
+    {
+      "id": "currency_risk",
+      "name": "汇率风险",
+      "description": "收入/成本币种不匹配",
+      "impact": "盈利受汇率波动影响",
+      "examples": ["出口企业", "跨国公司"]
+    },
+    {
+      "id": "commodity_risk",
+      "name": "大宗商品风险",
+      "description": "原材料价格波动影响",
+      "impact": "成本不稳定，盈利波动",
+      "examples": ["航空", "食品", "化工"]
+    },
+    {
+      "id": "talent_dependence",
+      "name": "人才依赖",
+      "description": "核心竞争力依赖关键人才",
+      "impact": "人才流失风险",
+      "examples": ["咨询", "投行", "科技公司"]
+    },
+    {
+      "id": "ip_risk",
+      "name": "知识产权风险",
+      "description": "专利诉讼或技术泄露风险",
+      "impact": "法律风险，竞争优势受损",
+      "examples": ["制药", "芯片", "软件"]
+    },
+    {
+      "id": "platform_risk",
+      "name": "平台依赖风险",
+      "description": "依赖第三方平台获取流量/用户",
+      "impact": "平台政策变化风险",
+      "examples": ["电商平台商家", "应用开发者"]
+    },
+    {
+      "id": "network_effect",
+      "name": "网络效应",
+      "description": "用户越多价值越大",
+      "impact": "赢家通吃，后来者难以进入",
+      "examples": ["社交平台", "支付网络", "操作系统"]
+    },
+    {
+      "id": "switching_cost",
+      "name": "高转换成本",
+      "description": "客户转换供应商成本高",
+      "impact": "客户粘性强，定价能力强",
+      "examples": ["企业软件", "云计算", "数据库"]
+    },
+    {
+      "id": "brand_moat",
+      "name": "品牌护城河",
+      "description": "品牌具有强溢价能力",
+      "impact": "定价能力强，复购率高",
+      "examples": ["茅台", "苹果", "爱马仕"]
+    },
+    {
+      "id": "scale_economy",
+      "name": "规模经济",
+      "description": "规模越大成本越低",
+      "impact": "龙头优势明显",
+      "examples": ["零售", "物流", "制造"]
+    },
+    {
+      "id": "regulatory_moit",
+      "name": "监管壁垒",
+      "description": "牌照/资质构成进入壁垒",
+      "impact": "竞争受保护，但政策变化风险",
+      "examples": ["金融", "医疗", "教育"]
+    },
+    {
+      "id": "data_moat",
+      "name": "数据护城河",
+      "description": "独有的数据资产构成竞争壁垒",
+      "impact": "数据越多模型越好",
+      "examples": ["搜索引擎", "推荐系统", "AI"]
+    },
+    {
+      "id": "negative_working_capital",
+      "name": "负营运资本",
+      "description": "先收款后交付，现金流好",
+      "impact": "现金流优于利润",
+      "examples": ["预付费模式", "会员制"]
+    },
+    {
+      "id": "recurring_revenue",
+      "name": "经常性收入",
+      "description": "收入具有高可预测性和持续性",
+      "impact": "盈利稳定，估值溢价",
+      "examples": ["SaaS", "订阅", "会员"]
+    },
+    {
+      "id": "asset_light",
+      "name": "轻资产",
+      "description": "资产周转率高，资本效率好",
+      "impact": "ROE 高，扩张快",
+      "examples": ["平台", "咨询", "软件"]
+    },
+    {
+      "id": "asset_heavy",
+      "name": "重资产",
+      "description": "固定资产占比高",
+      "impact": "折旧大，产能利用率关键",
+      "examples": ["制造", "地产", "基建"]
+    },
+    {
+      "id": "global_operation",
+      "name": "全球化运营",
+      "description": "业务覆盖多个国家和地区",
+      "impact": "收入多元化，但管理复杂",
+      "examples": ["苹果", "可口可乐", "台积电"]
+    },
+    {
+      "id": "single_market",
+      "name": "单一市场",
+      "description": "业务集中在单一市场",
+      "impact": "受单一市场影响大",
+      "examples": ["中国地产", "中国教育"]
+    }
+  ],
+  "lens_mapping": {
+    "platform": {
+      "description": "平台经济视角",
+      "focus": ["网络效应", "双边市场", "take rate", "用户增长"],
+      "key_frameworks": ["梅特卡夫定律", "双边市场理论", "平台生命周期"]
+    },
+    "saas": {
+      "description": "SaaS 视角",
+      "focus": ["ARR", "NDR", "LTV/CAC", "Rule of 40"],
+      "key_frameworks": ["SaaS 指标体系", "单位经济模型", "增长效率"]
+    },
+    "marketplace": {
+      "description": "市场平台视角",
+      "focus": ["GMV", "take rate", "供需匹配", "履约效率"],
+      "key_frameworks": ["市场平台飞轮", "供需平衡", "市场设计"]
+    },
+    "brand": {
+      "description": "品牌消费视角",
+      "focus": ["品牌力", "渠道", "复购率", "提价能力"],
+      "key_frameworks": ["品牌资产评估", "渠道管理", "消费者行为"]
+    },
+    "tech_hardware": {
+      "description": "科技硬件视角",
+      "focus": ["产品周期", "供应链", "ASP", "技术迭代"],
+      "key_frameworks": ["产品生命周期", "供应链管理", "技术采用曲线"]
+    },
+    "pharma": {
+      "description": "医药视角",
+      "focus": ["管线", "临床阶段", "专利悬崖", "峰值销售"],
+      "key_frameworks": ["药物开发管线", "专利策略", "商业化路径"]
+    },
+    "bank": {
+      "description": "银行视角",
+      "focus": ["NIM", "资产质量", "资本充足率", "拨备"],
+      "key_frameworks": ["银行估值模型", "资产质量分析", "资本管理"]
+    },
+    "insurance": {
+      "description": "保险视角",
+      "focus": ["承保利润", "投资收益", "准备金", "偿付能力"],
+      "key_frameworks": ["保险精算", "投资策略", "风险管理"]
+    },
+    "real_estate": {
+      "description": "地产视角",
+      "focus": ["土储", "销售", "负债率", "现金流"],
+      "key_frameworks": ["地产估值", "土地储备分析", "杠杆管理"]
+    },
+    "industrial": {
+      "description": "工业视角",
+      "focus": ["产能利用率", "订单", "毛利率", "资本支出"],
+      "key_frameworks": ["产能周期", "订单分析", "成本结构"]
+    },
+    "consumer": {
+      "description": "消费视角",
+      "focus": ["品牌力", "渠道", "复购率", "客单价"],
+      "key_frameworks": ["消费者洞察", "渠道管理", "品牌建设"]
+    },
+    "cyclical": {
+      "description": "周期视角",
+      "focus": ["周期位置", "库存", "产能", "商品价格"],
+      "key_frameworks": ["周期分析", "库存周期", "产能周期"]
+    },
+    "value": {
+      "description": "价值视角",
+      "focus": ["自由现金流", "分红", "估值", "安全边际"],
+      "key_frameworks": ["价值投资", "现金流折现", "安全边际"]
+    },
+    "growth": {
+      "description": "成长视角",
+      "focus": ["收入增速", "用户增长", "TAM", "市场份额"],
+      "key_frameworks": ["成长股估值", "市场空间", "增长驱动"]
+    },
+    "turnaround": {
+      "description": "困境反转视角",
+      "focus": ["问题诊断", "改革措施", "催化剂", "估值修复"],
+      "key_frameworks": ["困境分析", "改革评估", "催化剂识别"]
+    },
+    "financial": {
+      "description": "金融视角",
+      "focus": ["净息差", "资产质量", "资本充足率", "监管"],
+      "key_frameworks": ["金融监管", "风险管理", "资本管理"]
+    },
+    "regulatory": {
+      "description": "监管视角",
+      "focus": ["牌照", "合规", "政策变化", "监管趋势"],
+      "key_frameworks": ["监管分析", "合规评估", "政策预测"]
+    },
+    "geopolitical": {
+      "description": "地缘政治视角",
+      "focus": ["贸易摩擦", "制裁", "供应链安全", "本地化"],
+      "key_frameworks": ["地缘政治风险", "供应链分析", "本地化策略"]
+    },
+    "technology": {
+      "description": "技术视角",
+      "focus": ["技术路线", "颠覆风险", "技术壁垒", "研发投入"],
+      "key_frameworks": ["技术生命周期", "颠覆理论", "技术壁垒"]
+    },
+    "concentration": {
+      "description": "集中度视角",
+      "focus": ["客户集中", "供应商集中", "地区集中", "产品集中"],
+      "key_frameworks": ["集中度分析", "多元化评估", "风险分散"]
+    }
+  }
+}

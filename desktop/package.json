@@ -1,0 +1,14 @@
+{
+  "name": "dsh-desktop",
+  "version": "0.1.0",
+  "description": "DeepSeek Harness 桌面壳（单窗口内嵌现有 Web UI，HGF Phase 1 POC）",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron . --no-sandbox",
+    "smoke": "electron . --no-sandbox",
+    "check": "node --check main.js"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0"
+  }
+}

@@ -1,0 +1,110 @@
+# 架构审查清单
+# 基于 Hermes Agent 编程 Workflow 方案 V2.0
+
+checklist:
+  # 设计
+  design:
+    - id: ARCH-1
+      description: "架构是否合理"
+      check: "验证架构符合需求和约束"
+      severity: "critical"
+    
+    - id: ARCH-2
+      description: "模块划分是否清晰"
+      check: "检查模块职责和依赖关系"
+      severity: "critical"
+    
+    - id: ARCH-3
+      description: "依赖方向是否正确"
+      check: "检查依赖注入和控制反转"
+      severity: "high"
+    
+    - id: ARCH-4
+      description: "是否遵循 SOLID 原则"
+      check: "检查单一职责、开闭原则等"
+      severity: "high"
+
+  # 可扩展性
+  scalability:
+    - id: SCALE-1
+      description: "是否支持水平扩展"
+      check: "检查无状态设计和负载均衡"
+      severity: "high"
+    
+    - id: SCALE-2
+      description: "是否有性能瓶颈"
+      check: "检查数据库、缓存、网络等瓶颈"
+      severity: "high"
+    
+    - id: SCALE-3
+      description: "是否有单点故障"
+      check: "检查高可用和容错设计"
+      severity: "critical"
+
+  # 安全性
+  security:
+    - id: SEC-ARCH-1
+      description: "是否有安全设计"
+      check: "检查认证、授权、加密等安全机制"
+      severity: "critical"
+    
+    - id: SEC-ARCH-2
+      description: "是否有威胁建模"
+      check: "检查威胁建模文档和缓解措施"
+      severity: "high"
+    
+    - id: SEC-ARCH-3
+      description: "是否有最小权限"
+      check: "检查权限最小化原则"
+      severity: "high"
+
+  # 可观测性
+  observability:
+    - id: OBS-1
+      description: "是否有日志"
+      check: "检查日志级别、格式和聚合"
+      severity: "high"
+    
+    - id: OBS-2
+      description: "是否有监控"
+      check: "检查指标收集和告警"
+      severity: "high"
+    
+    - id: OBS-3
+      description: "是否有告警"
+      check: "检查告警规则和通知机制"
+      severity: "medium"
+
+  # 数据设计
+  data:
+    - id: DATA-1
+      description: "数据模型是否合理"
+      check: "检查实体关系和范式"
+      severity: "critical"
+    
+    - id: DATA-2
+      description: "数据一致性是否保证"
+      check: "检查事务和并发控制"
+      severity: "critical"
+    
+    - id: DATA-3
+      description: "数据备份和恢复"
+      check: "检查备份策略和恢复流程"
+      severity: "high"
+
+  # 接口设计
+  api:
+    - id: API-1
+      description: "接口是否 RESTful"
+      check: "检查 HTTP 方法和状态码"
+      severity: "medium"
+    
+    - id: API-2
+      description: "接口版本管理"
+      check: "检查版本控制和兼容性"
+      severity: "medium"
+    
+    - id: API-3
+      description: "接口文档是否完整"
+      check: "检查 OpenAPI/Swagger 文档"
+      severity: "medium"

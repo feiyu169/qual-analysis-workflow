@@ -1,0 +1,234 @@
+# 风险映射配置 - V5 方案
+# 目录名/模块名 → 风险因素
+
+risk_mapping:
+  # 认证相关
+  auth: "auth"
+  authentication: "authentication"
+  authorization: "authorization"
+  login: "auth"
+  signup: "auth"
+  register: "auth"
+  oauth: "auth"
+  sso: "auth"
+  jwt: "auth"
+  session: "auth"
+  cookie: "auth"
+  
+  # 支付相关
+  payment: "payment"
+  billing: "billing"
+  checkout: "payment"
+  invoice: "billing"
+  subscription: "billing"
+  stripe: "payment"
+  paypal: "payment"
+  
+  # 数据相关
+  database: "database"
+  db: "database"
+  migration: "migration"
+  schema: "database"
+  sql: "database"
+  mongo: "database"
+  redis: "database"
+  
+  # 安全相关
+  security: "security"
+  crypto: "crypto"
+  encryption: "encryption"
+  hash: "crypto"
+  password: "security"
+  secret: "security"
+  token: "security"
+  cors: "security"
+  csrf: "security"
+  xss: "xss"
+  
+  # 核心相关
+  core: "core"
+  kernel: "kernel"
+  engine: "core"
+  framework: "core"
+  
+  # API 相关
+  api: "external_api"
+  webhook: "external_api"
+  integration: "external_api"
+  rest: "external_api"
+  graphql: "external_api"
+  
+  # 配置相关
+  config: "config"
+  settings: "config"
+  env: "config"
+  dotenv: "config"
+  
+  # 用户相关
+  user: "user_impact"
+  admin: "user_impact"
+  profile: "user_impact"
+  account: "user_impact"
+  
+  # 订单相关
+  order: "business"
+  cart: "business"
+  product: "business"
+  inventory: "business"
+  
+  # 性能相关
+  performance: "performance"
+  cache: "performance"
+  optimization: "performance"
+  
+  # 隐私相关
+  privacy: "privacy"
+  gdpr: "privacy"
+  pii: "privacy"
+  personal: "privacy"
+
+# 中文关键词映射
+keyword_mapping:
+  # 支付相关
+  "支付": "payment"
+  "付款": "payment"
+  "账单": "billing"
+  "转账": "payment"
+  
+  # 认证相关
+  "鉴权": "auth"
+  "认证": "authentication"
+  "授权": "authorization"
+  "登录": "auth"
+  "注册": "auth"
+  "越权": "auth"
+  
+  # 数据相关
+  "数据库": "database"
+  "迁移": "migration"
+  "数据": "database"
+  
+  # 安全相关
+  "安全": "security"
+  "加密": "encryption"
+  "密码": "security"
+  "密钥": "crypto"
+  "漏洞": "security"
+  "注入": "injection"
+  
+  # 隐私相关
+  "隐私": "privacy"
+  "个人": "privacy"
+  "敏感": "privacy"
+  
+  # 性能相关
+  "性能": "performance"
+  "缓存": "cache"
+  
+  # 配置相关
+  "配置": "config"
+  "设置": "config"
+  
+  # 用户相关
+  "用户": "user_impact"
+  "管理员": "user_impact"
+  
+  # 业务相关
+  "订单": "business"
+  "商品": "business"
+  "库存": "business"
+  
+  # API 相关
+  "接口": "external_api"
+  "webhook": "external_api"
+
+# 风险因素权重
+risk_factors:
+  # 安全类（权重 3）
+  security: 3
+  auth: 3
+  authentication: 3
+  authorization: 3
+  payment: 3
+  billing: 3
+  privacy: 3
+  crypto: 3
+  encryption: 3
+  
+  # 数据类（权重 2-3）
+  database: 2
+  migration: 3
+  concurrency: 2
+  transaction: 2
+  
+  # 依赖类（权重 2）
+  external_api: 2
+  third_party: 2
+  config: 2
+  
+  # 接口类（权重 3）
+  breaking_change: 3
+  core_algorithm: 3
+  public_library: 3
+  core: 3
+  kernel: 3
+  
+  # 业务类（权重 2）
+  user_impact: 2
+  performance: 2
+  compliance: 2
+  
+  # 其他风险因素
+  command_execution: 3
+  file_operation: 2
+  log_sensitive: 2
+  serialization: 2
+  xss: 3
+  injection: 3
+  rate_limiting: 2
+  date_time: 1
+
+# 高风险因子列表（安全护栏）
+high_risk_factors:
+  - "security"
+  - "auth"
+  - "authentication"
+  - "authorization"
+  - "payment"
+  - "billing"
+  - "crypto"
+  - "encryption"
+  - "injection"
+  - "xss"
+  - "command_execution"
+
+# 组合加成规则
+combination_rules:
+  - factors: ["auth", "payment"]
+    bonus: 3
+  - factors: ["privacy", "external_api"]
+    bonus: 2
+  - factors: ["crypto", "database"]
+    bonus: 2
+  - factors: ["security", "auth"]
+    bonus: 2
+  - factors: ["payment", "external_api"]
+    bonus: 2
+  - factors: ["auth", "database"]
+    bonus: 2
+  - factors: ["security", "database"]
+    bonus: 2
+  - factors: ["injection", "database"]
+    bonus: 2
+
+# 风险降低关键词
+reduction_keywords:
+  "fix": -1
+  "patch": -1
+  "refactor": -1
+  "rename": -1
+  "format": -2
+  "style": -2
+  "typo": -2
+  "comment": -2
+  "readme": -2
