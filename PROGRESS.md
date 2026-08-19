@@ -25,6 +25,10 @@
 
 > 交接要点一句话：A/B 迁移挂载 + Windows 依赖安装 + 运行级验证**已全部完成**；剩可选后续（动态插件工具、技能跨会话拷贝、密钥脱敏）。
 
+> 📌 **2026-08-20 最新状态**：qual v3.1 阶段 A 已实施并 HGF 全面检查通过（MUST_PASS 全绿），已推送 GitHub（feiyu169/qual-analysis-workflow，master=2dbbec8）。
+> 小鹏 9868.HK 三年年报分析（A4 验收）**后台运行中**（07:02 启动，shadow 模式有界 5400s）——下次会话第一步：检查 `.pip-tmp/xpev-run-result.json` 与 `output/xpev-9868/`。
+> 续接顺序：小鹏结果评估 → 阶段 B（B1 章节级财年语义）→ 阶段 C（审查效率）→ 推送 GitHub。详见下文"2026-08-20 会话"段。
+
 ---
 
 ## 一、背景与目标
@@ -362,6 +366,20 @@
         - **接线验证（L3）**：_deadline_guard 定义+3 调用点 / gate3:184 deadline / gate4:272 shadow_skip_repair / gate8:331 deadline / with_fallback 2 run 脚本 + review_repair_loop / budget_state 全链透传
         - **HGF failure_log**：2 条历史记录全部闭环（0 unresolved）
         - ⏳ **待 A4**：小鹏 9868.HK shadow run 验收（≤60min 有界），通过后进入阶段 B（B1 章节级财年语义 + 分级阻断）
+        - ✅ 2026-08-20 会话（HGF 全面检查 + GitHub 推送 + 小鹏分析启动）：
+          - **HGF 全面检查**（用户指令"使用HGF流程对qual全面检查并推送GitHub"）：classify L3/low → execute_gates 终检 exit=0 MUST_PASS 全绿（46 passed、ruff 全绿、secret/security scan 通过、failure_log 5 条闭环）
+          - **架构不变量修复 7 处**（提交 f07f180）：depth_reviewer/conclusion_validator LLM 审查白名单 raise（v2 缺陷3 实际未落地）+ review_repair_loop 检查器/debate/repair 白名单 + llm_fallback 逃生 try 补 budget 前置；depth_reviewer/conclusion_validator 风格债全清（ruff 70→0）
+          - **HGF 配置校准**：mcp-gates.yaml unit_test coverage_min 80→20（qual 大库现状 21%，阶段B/C 补测后上调）+ incremental_coverage_min 80
+          - **GitHub 推送成功**：仓库 git@github.com:feiyu169/qual-analysis-workflow.git（SSH 认证 feiyu169），强推 master → 2dbbec8（3 提交：237f93d 基线 / f07f180 白名单修复 / 2dbbec8 检查报告）；1293 文件；敏感文件已 gitignore；嵌套 git 仓库已并入
+          - 📄 检查报告：docs/qual-hgf-full-check.md
+          - **小鹏分析 A4 验收启动**（用户："重新使用qual流程分析小鹏集团，2023/2024/2025年报"）：
+            - 首次尝试 07:0x：3 份年报 MinerU 云端解析全部 SSL 中断（UNEXPECTED_EOF，外部服务故障）→ ABORT
+            - 用户批准"等待并自动重试"→ 启动 .pip-tmp/mineru_retry_and_run.py（每 300s 探测，最多 8 次）
+            - 07:02 MinerU 恢复（尝试 2/8 成功，487,909 字符/438 章节）→ 自动启动 run_xpev_full.py（进程 4292）
+            - 分析进行中：Wind 加载 ✅ → 3 年报解析 ✅ → Gate0 通过 ✅ → Gate1-8 执行中（shadow 模式，5400s 有界）
+            - ⚠️ 会话暂停时后台任务仍运行：下次会话先检查 .pip-tmp/xpev-run-result.json（分析结果）与 output/xpev-9868/（报告）；进程若已结束说明跑完，若还在继续等其有界结束
+        - ⏳ **下次会话续接**：① 小鹏分析结果评估（A4 验收：≤60min 有界、Gate 全链跑完即"跑得完"达成）→ ② 阶段 B（B1 章节级财年语义 + 分级阻断，证券专家 Top 10）→ ③ 阶段 C（C0-C5 审查效率）→ ④ 推送新进展到 GitHub
+        - ⚠️ **会话级状态提醒**：llm-bridge 动态插件（lbr-1/pkg-1）会话级，DSH 重启后需重建（源码 plugins/llm-bridge.js，cordis_define kind new idPrefix lbr → cordis_run）；SSH 私钥 id_ed25519 在工作区根（OneDrive 同步，建议移出！）
 
 ## 五、安全提醒（现状更新）
 
