@@ -10,10 +10,17 @@
 审查原则：不降低买方报告分析的专业性和质量
 """
 
-import re
 import logging
+import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Callable
+
+# v3.1 P0-A-3：确定性/终止性异常白名单（不降级，fail-closed 上抛）
+from ..llm_errors import (
+    DeterministicLLMFailure,
+    LLMCallBudgetExceeded,
+    WallClockDeadlineExceeded,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +39,10 @@ class ConclusionIssue:
 class ConclusionValidationResult:
     """结论合理性审查结果"""
     passed: bool
-    issues: List[ConclusionIssue] = field(default_factory=list)
+    issues: list[ConclusionIssue] = field(default_factory=list)
     score: float = 100.0
-    extracted_rating: Optional[str] = None
-    extracted_valuation: Optional[Dict] = None
+    extracted_rating: str | None = None
+    extracted_valuation: dict | None = None
 
 
 class ConclusionValidator:
@@ -85,9 +92,9 @@ class ConclusionValidator:
     
     def check(
         self,
-        chapters: Dict[int, str],
-        llm_caller: Optional[Callable[[str, str], str]] = None,
-        wind_data: Optional[Dict] = None,
+        chapters: dict[int, str],
+        llm_caller: Callable[[str, str], str] | None = None,
+        wind_data: dict | None = None,
     ) -> ConclusionValidationResult:
         """
         执行结论合理性审查
@@ -160,20 +167,20 @@ class ConclusionValidator:
             extracted_valuation=valuation_judgment,
         )
     
-    def _extract_rating(self, chapters: Dict[int, str]) -> Optional[str]:
+    def _extract_rating(self, chapters: dict[int, str]) -> str | None:
         """提取投资评级"""
-        for ch_num, content in chapters.items():
+        for ch_num, content in chapters.items():  # noqa: PERF102
             for pattern in self.rating_patterns:
                 match = re.search(pattern, content)
                 if match:
                     return match.group(1)
         return None
     
-    def _extract_valuation_judgment(self, chapters: Dict[int, str]) -> Optional[Dict]:
+    def _extract_valuation_judgment(self, chapters: dict[int, str]) -> dict | None:
         """提取估值判断"""
         judgment = {}
         
-        for ch_num, content in chapters.items():
+        for ch_num, content in chapters.items():  # noqa: PERF102
             for pattern in self.valuation_patterns:
                 match = re.search(pattern, content)
                 if match:
@@ -188,11 +195,11 @@ class ConclusionValidator:
         
         return judgment if judgment else None
     
-    def _extract_upside(self, chapters: Dict[int, str]) -> Optional[Dict]:
+    def _extract_upside(self, chapters: dict[int, str]) -> dict | None:
         """提取上行空间"""
         upside = {}
         
-        for ch_num, content in chapters.items():
+        for ch_num, content in chapters.items():  # noqa: PERF102
             for pattern in self.upside_patterns:
                 match = re.search(pattern, content)
                 if match:
@@ -207,9 +214,9 @@ class ConclusionValidator:
     def _check_rating_valuation_consistency(
         self,
         rating: str,
-        valuation_judgment: Dict,
-        chapters: Dict[int, str],
-    ) -> Optional[ConclusionIssue]:
+        valuation_judgment: dict,
+        chapters: dict[int, str],
+    ) -> ConclusionIssue | None:
         """检查评级与估值的一致性"""
         
         # 获取评级对应的合理估值判断
@@ -245,9 +252,9 @@ class ConclusionValidator:
     def _check_upside_consistency(
         self,
         rating: str,
-        upside: Dict,
-        chapters: Dict[int, str],
-    ) -> Optional[ConclusionIssue]:
+        upside: dict,
+        chapters: dict[int, str],
+    ) -> ConclusionIssue | None:
         """检查上行空间与评级的一致性"""
         
         upside_pct = upside.get("上行空间", 0)
@@ -281,7 +288,7 @@ class ConclusionValidator:
         
         return None
     
-    def _check_trigger_conditions(self, chapters: Dict[int, str]) -> List[ConclusionIssue]:
+    def _check_trigger_conditions(self, chapters: dict[int, str]) -> list[ConclusionIssue]:
         """检查触发条件的合理性"""
         issues = []
         
@@ -318,11 +325,11 @@ class ConclusionValidator:
         
         return issues
     
-    def _extract_triggers(self, chapters: Dict[int, str]) -> Dict[str, List[str]]:
+    def _extract_triggers(self, chapters: dict[int, str]) -> dict[str, list[str]]:
         """提取触发条件"""
         triggers = {"买入": [], "卖出": []}
         
-        for ch_num, content in chapters.items():
+        for ch_num, content in chapters.items():  # noqa: PERF102
             # 提取买入触发条件
             buy_pattern = r"触发.*?买入.*?[：:]\s*(.+?)(?:\n|触发|$)"
             matches = re.findall(buy_pattern, content, re.DOTALL)
@@ -337,11 +344,11 @@ class ConclusionValidator:
     
     def _check_by_llm(
         self,
-        chapters: Dict[int, str],
-        rating: Optional[str],
+        chapters: dict[int, str],
+        rating: str | None,
         llm_caller: Callable[[str, str], str],
-        wind_data: Optional[Dict] = None,
-    ) -> List[ConclusionIssue]:
+        wind_data: dict | None = None,
+    ) -> list[ConclusionIssue]:
         """使用LLM进行深度审查（审查改进：注入 Wind 锚点供评估对照）"""
         issues = []
         
@@ -363,7 +370,7 @@ class ConclusionValidator:
                             rows.append(f"| {k} | " + " | ".join(row.get(fy, "—") for fy in fys) + " |")
                         wind_anchor = "| 指标 | " + " | ".join(f"FY{fy}" for fy in fys) + " |\n|------|" + \
                             "--------|" * len(fys) + "\n" + "\n".join(rows)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.warning(f"结论审查锚点构建失败: {e}")
 
             # 构建审查prompt
@@ -401,12 +408,14 @@ class ConclusionValidator:
                     line=0,
                 ))
             
-        except Exception as e:
+        except (DeterministicLLMFailure, LLMCallBudgetExceeded, WallClockDeadlineExceeded):
+            raise  # v3.1 P0-A-3 白名单：预算/墙钟/确定性失败不降级（fail-closed）
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"LLM结论审查失败: {e}")
         
         return issues
     
-    def _get_content_summary(self, chapters: Dict[int, str]) -> str:
+    def _get_content_summary(self, chapters: dict[int, str]) -> str:
         """获取内容摘要"""
         summary = []
         for ch_num, content in chapters.items():
@@ -424,9 +433,9 @@ class ConclusionValidator:
 
 
 def check_conclusion(
-    chapters: Dict[int, str],
-    llm_caller: Optional[Callable[[str, str], str]] = None,
-    wind_data: Optional[Dict] = None,
+    chapters: dict[int, str],
+    llm_caller: Callable[[str, str], str] | None = None,
+    wind_data: dict | None = None,
 ) -> ConclusionValidationResult:
     """
     结论合理性审查（入口函数）

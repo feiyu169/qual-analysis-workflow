@@ -71,8 +71,8 @@ def with_fallback(
                     _deadline_guard_escape()
                     out = direct(chapter_name, prompt)
                     return out + (degrade_marker or "")
-            except WallClockDeadlineExceeded:
-                raise
+            except (LLMCallBudgetExceeded, WallClockDeadlineExceeded):
+                raise  # 白名单：逃生路径同样不吞终止性异常
             except Exception:  # noqa: BLE001, S110
                 pass
             raise
@@ -85,8 +85,8 @@ def with_fallback(
                     if direct is not None:
                         _deadline_guard_escape()
                         return direct(chapter_name, prompt)
-                except WallClockDeadlineExceeded:
-                    raise
+                except (LLMCallBudgetExceeded, WallClockDeadlineExceeded):
+                    raise  # 白名单：逃生路径同样不吞终止性异常
                 except Exception:  # noqa: BLE001, S110
                     pass
             raise

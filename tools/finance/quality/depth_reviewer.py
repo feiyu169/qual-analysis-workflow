@@ -10,10 +10,17 @@
 审查原则：不降低买方报告分析的专业性和质量
 """
 
-import re
 import logging
+import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Callable
+
+# v3.1 P0-A-3：确定性/终止性异常白名单（不降级，fail-closed 上抛）
+from ..llm_errors import (
+    DeterministicLLMFailure,
+    LLMCallBudgetExceeded,
+    WallClockDeadlineExceeded,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +39,9 @@ class DepthIssue:
 class DepthReviewResult:
     """分析深度审查结果"""
     passed: bool
-    issues: List[DepthIssue] = field(default_factory=list)
+    issues: list[DepthIssue] = field(default_factory=list)
     score: float = 100.0
-    chapter_scores: Dict[int, int] = field(default_factory=dict)
+    chapter_scores: dict[int, int] = field(default_factory=dict)
 
 
 class DepthReviewer:
@@ -93,9 +100,9 @@ class DepthReviewer:
     
     def check(
         self,
-        chapters: Dict[int, str],
-        llm_caller: Optional[Callable[[str, str], str]] = None,
-        wind_data: Optional[Dict] = None,
+        chapters: dict[int, str],
+        llm_caller: Callable[[str, str], str] | None = None,
+        wind_data: dict | None = None,
     ) -> DepthReviewResult:
         """
         执行分析深度审查
@@ -128,7 +135,7 @@ class DepthReviewer:
                         rows.append(f"| {k} | " + " | ".join(row.get(fy, "—") for fy in fys) + " |")
                     wind_anchor = "| 指标 | " + " | ".join(f"FY{fy}" for fy in fys) + " |\n|------|" + \
                         "--------|" * len(fys) + "\n" + "\n".join(rows)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"深度审查锚点构建失败: {e}")
 
         for ch_num, content in chapters.items():
@@ -196,7 +203,7 @@ class DepthReviewer:
         score = 0
         total_weight = 0
         
-        for dimension, config in self.depth_dimensions.items():
+        for dimension, config in self.depth_dimensions.items():  # noqa: PERF102
             keywords = config["keywords"]
             weight = config["weight"]
             
@@ -227,7 +234,7 @@ class DepthReviewer:
         ch_num: int,
         llm_caller: Callable[[str, str], str],
         wind_anchor: str = "",
-    ) -> tuple[Optional[int], List[DepthIssue]]:
+    ) -> tuple[int | None, list[DepthIssue]]:
         """使用LLM进行深度评估（审查改进：注入 Wind 锚点 + 自适应截断）
 
         P1-③：单章 ≤20000 字符全文送审；超限按小节分批（避免无谓截断）。
@@ -256,7 +263,9 @@ class DepthReviewer:
             # 多段取最低分（保守：任一局部深度不足即视为整体不足）
             return min(scores), issues
 
-        except Exception as e:
+        except (DeterministicLLMFailure, LLMCallBudgetExceeded, WallClockDeadlineExceeded):
+            raise  # v3.1 P0-A-3 白名单：预算/墙钟/确定性失败不降级（fail-closed）
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"LLM深度审查失败: {e}")
             return None, []
     
@@ -270,7 +279,7 @@ class DepthReviewer:
         
         # 尝试提取各个分数并计算平均
         scores = []
-        for dimension in self.depth_dimensions.keys():
+        for dimension in self.depth_dimensions.keys():  # noqa: SIM118
             pattern = f"{dimension}[：:]\\s*(\\d+)"
             match = re.search(pattern, response)
             if match:
@@ -282,7 +291,7 @@ class DepthReviewer:
         # 默认返回中等分数
         return 50
     
-    def _parse_llm_issues(self, response: str, ch_num: int) -> List[DepthIssue]:
+    def _parse_llm_issues(self, response: str, ch_num: int) -> list[DepthIssue]:
         """解析LLM返回的问题"""
         issues = []
         
@@ -314,9 +323,9 @@ class DepthReviewer:
 
 
 def check_depth(
-    chapters: Dict[int, str],
-    llm_caller: Optional[Callable[[str, str], str]] = None,
-    wind_data: Optional[Dict] = None,
+    chapters: dict[int, str],
+    llm_caller: Callable[[str, str], str] | None = None,
+    wind_data: dict | None = None,
 ) -> DepthReviewResult:
     """
     分析深度审查（入口函数）

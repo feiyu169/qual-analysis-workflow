@@ -154,12 +154,15 @@ def test_loop_budget_deadline(monkeypatch):
     """预算与墙钟在 loop 级生效（v3.1 P0-B-1/P0-B-7，对应 v3-code test_budget_deadline）
 
     (a) 预算：llm_call_budget=2 → 第 3 次包装调用抛 LLMCallBudgetExceeded →
-        result.budget_exceeded=True、passed=False（审查调用 S5 计入）；
+        fail-closed 上抛（v3.1 P0-A-3 白名单：预算/墙钟不降级），审查调用 S5 计入；
     (b) 墙钟：deadline=已过期 → 轮首检查终止 → wall_clock_exceeded=True、passed=False。
     """
     import time
 
+    import pytest
+
     import finance.quality.review_repair_loop as m
+    from finance.llm_errors import LLMCallBudgetExceeded
 
     # (a) 预算
     calls = []
@@ -182,18 +185,19 @@ def test_loop_budget_deadline(monkeypatch):
     monkeypatch.setattr(m, "_run_deep_review", fake_deep_review)
     monkeypatch.setattr(m, "_run_substantive_review", fake_substantive)
 
-    result = review_and_repair_loop(
-        chapters={1: "第1章内容", 5: "第5章内容"},
-        ctx=MagicMock(),
-        llm_caller=fake_caller,
-        max_rounds=4,
-        llm_call_budget=2,
-    )
-    assert result.budget_exceeded is True, "预算耗尽应标记 budget_exceeded"
-    assert result.passed is False, "预算耗尽不得通过"
-    assert result.llm_calls >= 3, f"预算计数应含审查调用（S5 计入），实为 {result.llm_calls}"
+    # v3.1 P0-A-3：预算耗尽 fail-closed 上抛（不被 except Exception 吞成"审查不完整"）
+    with pytest.raises(LLMCallBudgetExceeded):
+        review_and_repair_loop(
+            chapters={1: "第1章内容", 5: "第5章内容"},
+            ctx=MagicMock(),
+            llm_caller=fake_caller,
+            max_rounds=4,
+            llm_call_budget=2,
+        )
+    # S5 计入：审查调用均经 budgeted 包装计数；第 3 次调用在预算检查处被拦截（未达底层 caller）
+    assert len(calls) == 2, f"前 2 次应到达底层 caller，第 3 次被预算拦截，实为 {len(calls)}"
 
-    # (b) 墙钟：deadline 已过期 → 轮首终止
+    # (b) 墙钟：deadline 已过期 → 轮首终止（返回 result，非上抛——轮首检查早于任何 LLM 调用）
     calls2 = []
 
     def fake_caller2(name, prompt):

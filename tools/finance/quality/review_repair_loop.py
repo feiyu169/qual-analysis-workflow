@@ -16,7 +16,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..llm_errors import LLMCallBudgetExceeded, WallClockDeadlineExceeded
+from ..llm_errors import (
+    DeterministicLLMFailure,
+    LLMCallBudgetExceeded,
+    WallClockDeadlineExceeded,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +155,8 @@ def review_and_repair_loop(
                 llm_call_budget=llm_call_budget,
             )
             round_issues.extend(substantive_issues)
+        except (LLMCallBudgetExceeded, WallClockDeadlineExceeded, DeterministicLLMFailure):
+            raise  # v3.1 P0-A-3：预算/墙钟/确定性失败不降级（fail-closed）
         except Exception as e:  # noqa: BLE001
             review_incomplete = True
             logger.warning(f"实质审查异常（非阻断）: {e}")
@@ -435,6 +441,8 @@ def _run_substantive_review(
         result = check_depth(chapters, review_caller, wind_data)
         if not result.passed:
             issues.extend([f"[分析深度] {issue.description}" for issue in result.issues])
+    except (LLMCallBudgetExceeded, WallClockDeadlineExceeded, DeterministicLLMFailure):
+        raise  # v3.1 P0-A-3：预算/墙钟/确定性失败不降级（fail-closed）
     except Exception as e:  # noqa: BLE001
         logger.warning(f"分析深度审查失败: {e}")
     
@@ -444,6 +452,8 @@ def _run_substantive_review(
         result = check_conclusion(chapters, review_caller, wind_data)
         if not result.passed:
             issues.extend([f"[结论合理性] {issue.description}" for issue in result.issues])
+    except (LLMCallBudgetExceeded, WallClockDeadlineExceeded, DeterministicLLMFailure):
+        raise  # v3.1 P0-A-3：预算/墙钟/确定性失败不降级（fail-closed）
     except Exception as e:  # noqa: BLE001
         logger.warning(f"结论合理性审查失败: {e}")
     
@@ -480,6 +490,8 @@ def _run_substantive_review(
                     if debate_issues:
                         issues.extend(debate_issues)
                         logger.info(f"对抗辩论审查 第{ch_num}章: 发现 {len(debate_issues)} 个问题")
+                except (LLMCallBudgetExceeded, WallClockDeadlineExceeded, DeterministicLLMFailure):
+                    raise  # v3.1 P0-A-3：预算/墙钟/确定性失败不降级（fail-closed）
                 except Exception as e:  # noqa: BLE001
                     logger.warning(f"对抗辩论审查 第{ch_num}章失败（非阻断）: {e}")
         except Exception as e:  # noqa: BLE001
@@ -631,6 +643,8 @@ def _repair_chapters(
             else:
                 logger.warning(f"第{ch_num}章 无有效 patch（拒绝 {len(result.rejected)} 处）: {[r.get('reason','')[:50] for r in result.rejected[:3]]}")
 
+        except (LLMCallBudgetExceeded, WallClockDeadlineExceeded, DeterministicLLMFailure):
+            raise  # v3.1 P0-A-3：预算/墙钟/确定性失败不降级（fail-closed）
         except Exception as e:  # noqa: BLE001
             logger.warning(f"第{ch_num}章 patch 修复失败: {e}")
     
