@@ -16,6 +16,7 @@ TMP = os.path.join(ROOT, ".pip-tmp")
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 
 import logging
+
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
 
 
@@ -37,7 +38,7 @@ def load_r5_report():
     path = os.path.join(ROOT, "output", "yuewen-00772", "00772.HK_analysis.md")
     if not os.path.exists(path):
         return {}
-    text = open(path, encoding="utf-8").read()
+    text = open(path, encoding="utf-8").read()  # noqa: SIM115
     import re
     chapters = {}
     parts = re.split(r"(?m)^#\s*第(\d+)章\s*(.*?)$", text)

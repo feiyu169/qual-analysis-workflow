@@ -3,13 +3,14 @@ test_quality_enhancer.py — 质量增强模块端到端测试
 """
 
 import sys
+
 sys.path.insert(0, '.')
 
-from finance.data_repair import repair_report, validate_pe_against_wind, clean_ai_traces
 from finance.base_valuation import compute_base_valuation
-from finance.valuation_engine import compute_full_valuation
+from finance.data_repair import repair_report, validate_pe_against_wind
 from finance.depth_enhancer import run_depth_enhancement
 from finance.quality_enhancer import enhance_report_quality
+from finance.valuation_engine import compute_full_valuation
 
 
 def test_data_repair():
@@ -25,7 +26,7 @@ def test_data_repair():
         "cashflow": {"过去三年每年经营活动产生的现金流量净额": [267.16]},
     }
 
-    fixed, result = repair_report(chapters, wind_valuation, wind_financials, 2025)
+    fixed, result = repair_report(chapters, wind_valuation, wind_financials, 2025)  # noqa: RUF059
 
     # 验证AI痕迹被清除
     assert "好的，作为您的" not in fixed[5], "AI痕迹未清除"

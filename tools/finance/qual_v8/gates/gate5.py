@@ -2,12 +2,12 @@
 Gate 5: 质量增强 + 组件集成（确定性计算）
 """
 
-from typing import Dict, Any
+import logging
 from dataclasses import dataclass
 from datetime import datetime
-import logging
+from typing import Any
 
-from ..core.gate_engine import GateBase, GateSpec, GateResult
+from ..core.gate_engine import GateBase, GateResult, GateSpec
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ class Gate5QualityEnhancement(GateBase):
             "T14_ROICChecker",
         ]
     
-    def execute(self, context: Dict[str, Any]) -> GateResult:
+    def execute(self, context: dict[str, Any]) -> GateResult:
         """执行Gate 5（真实：enhance_report_quality，参数从 context 强传）"""
         errors = []
         warnings = []
@@ -101,10 +101,10 @@ class Gate5QualityEnhancement(GateBase):
             errors=errors,
             warnings=warnings,
             execution_time=0.0,
-            timestamp=datetime.now().isoformat(),
+            timestamp=datetime.now().isoformat(),  # noqa: DTZ005
         )
 
-    def check_criteria(self, context: Dict[str, Any]) -> bool:
+    def check_criteria(self, context: dict[str, Any]) -> bool:
         """检查通过标准"""
         # 检查DCF估值范围（使用 context 中的 dcf_params）
         dcf_params = context.get("dcf_params")
@@ -113,12 +113,12 @@ class Gate5QualityEnhancement(GateBase):
 
         # 检查组件集成
         gate5 = context.get("gate_5_result", {})
-        if not gate5.get("integration_passed", False):
+        if not gate5.get("integration_passed", False):  # noqa: SIM103
             return False
 
         return True
 
-    def _calculate_valuation(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _calculate_valuation(self, context: dict[str, Any]) -> dict[str, Any]:
         """计算估值（真实：base_valuation.compute_base_valuation，参数从 context 强传）"""
         errors = []
         valuation = None
@@ -153,7 +153,7 @@ class Gate5QualityEnhancement(GateBase):
             dcf_value = context.get("dcf_params")
             if current_price > 0 and dcf_value:
                 pass  # 范围检查交由 _cross_validate
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             errors.append(f"估值计算失败: {e}")
 
         return {
@@ -162,7 +162,7 @@ class Gate5QualityEnhancement(GateBase):
             "valuation": valuation,
         }
 
-    def _integrate_components(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _integrate_components(self, context: dict[str, Any]) -> dict[str, Any]:
         """组件集成（真实：enhance_report_quality，参数强传消除硬编码污染）"""
         errors = []
         integrated = []
@@ -212,7 +212,7 @@ class Gate5QualityEnhancement(GateBase):
                 "chapters_enhanced": getattr(quality_result, "chapters_enhanced", 0),
                 "warnings": list(getattr(quality_result, "warnings", []))[:5],
             }
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             errors.append(f"质量增强失败: {e}")
 
         return {
@@ -221,16 +221,15 @@ class Gate5QualityEnhancement(GateBase):
             "integrated_components": integrated,
         }
 
-    def _cross_validate(self, context: Dict[str, Any], valuation_result: Dict[str, Any]) -> Dict[str, Any]:
+    def _cross_validate(self, context: dict[str, Any], valuation_result: dict[str, Any]) -> dict[str, Any]:
         """交叉验证（真实：估值参数一致性；全文数字校验移交 Gate8 最终验证收口）"""
         errors = []
 
         # 1. 检查估值参数与 Gate 2 是否一致
         dcf_params = context.get("dcf_params")
         gate2 = context.get("gate_2_result", {}).get("dcf_params", {})
-        if dcf_params and gate2:
-            if abs(dcf_params.wacc - gate2.get("wacc", -1)) > 1e-6:
-                errors.append(f"估值 WACC 与 Gate2 不一致: {dcf_params.wacc} vs {gate2.get('wacc')}")
+        if dcf_params and gate2 and abs(dcf_params.wacc - gate2.get("wacc", -1)) > 1e-6:
+            errors.append(f"估值 WACC 与 Gate2 不一致: {dcf_params.wacc} vs {gate2.get('wacc')}")
 
         # 2. 全文数字校验（DataAnchor）已移交 Gate8 最终验证；
         #    这里把锚点挂到 context 供 Gate8 复用
@@ -241,7 +240,7 @@ class Gate5QualityEnhancement(GateBase):
                 anchor = DataAnchor()
                 anchor.init_from_wind_data(wind_data)
                 context["data_anchor"] = anchor
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Gate5 锚点准备失败（非阻断）: {e}")
 
         return {
