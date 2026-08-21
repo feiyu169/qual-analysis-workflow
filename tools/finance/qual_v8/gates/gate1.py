@@ -2,12 +2,12 @@
 Gate 1: 类型推断 + 数据提取
 """
 
-from typing import Dict, Any, List
+import logging
 from dataclasses import dataclass
 from datetime import datetime
-import logging
+from typing import Any
 
-from ..core.gate_engine import GateBase, GateSpec, GateResult
+from ..core.gate_engine import GateBase, GateResult, GateSpec
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +24,8 @@ _FACT_FIELD_MAP = {
 @dataclass
 class TypeInferenceConfig:
     """类型推断配置"""
-    allowed_markets: List[str]
-    required_fields: List[str]
+    allowed_markets: list[str]
+    required_fields: list[str]
     max_deviation: float
 
 
@@ -56,7 +56,7 @@ class Gate1TypeInference(GateBase):
             max_deviation=0.02,
         )
     
-    def execute(self, context: Dict[str, Any]) -> GateResult:
+    def execute(self, context: dict[str, Any]) -> GateResult:
         """执行Gate 1（真实：市场推断 + 事实提取 + Wind 交叉验证）"""
         errors = []
         warnings = []
@@ -123,10 +123,10 @@ class Gate1TypeInference(GateBase):
             errors=errors,
             warnings=warnings,
             execution_time=0.0,
-            timestamp=datetime.now().isoformat(),
+            timestamp=datetime.now().isoformat(),  # noqa: DTZ005
         )
 
-    def check_criteria(self, context: Dict[str, Any]) -> bool:
+    def check_criteria(self, context: dict[str, Any]) -> bool:
         """检查通过标准"""
         market_type = context.get("market_type")
 
@@ -152,15 +152,15 @@ class Gate1TypeInference(GateBase):
 
         return True
 
-    def _infer_market_type(self, context: Dict[str, Any]) -> str:
+    def _infer_market_type(self, context: dict[str, Any]) -> str:
         """推断市场类型（真实：finance.workflow.infer_market）"""
         ticker = context.get("ticker", "")
         try:
             from ...workflow import infer_market
             market = infer_market(ticker)
             return {"cn": "A股", "hk": "港股", "us": "美股"}.get(market, "未知")
-        except Exception:
-            if ticker.endswith(".SH") or ticker.endswith(".SZ"):
+        except Exception:  # noqa: BLE001
+            if ticker.endswith((".SH", ".SZ")):
                 return "A股"
             elif ticker.endswith(".HK"):
                 return "港股"
@@ -168,7 +168,7 @@ class Gate1TypeInference(GateBase):
                 return "美股"
             return "未知"
 
-    def _extract_facts(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _extract_facts(self, context: dict[str, Any]) -> dict[str, Any]:
         """提取结构化事实（真实：fact_extractor.extract_facts，P0-B1 财年锚定）
 
         返回**完整 ExtractedFacts 对象**（保留 fiscal_year/report_type，供 Gate3 仲裁与 format 使用）；
@@ -223,12 +223,39 @@ class Gate1TypeInference(GateBase):
                 wind_data=wind_data,
                 fiscal_year=fiscal_year,
             )
+
+            # B3-1：多财年提取——对 prior_years（旧年 sections）每份单独提取，程序化合并
+            prior_years = (filing_data.get("metadata") or {}).get("prior_years") or {}
+            if prior_years and result is not None:
+                by_year = {int(fiscal_year): result} if fiscal_year else {}
+                for fy, fy_sections in sorted(prior_years.items()):
+                    if not fy_sections:
+                        continue
+                    try:
+                        fy_result = real_extract(
+                            sections=fy_sections,
+                            company_name=company_name,
+                            ticker=ticker,
+                            market=market,
+                            llm_caller=llm_caller,
+                            wind_data=wind_data,
+                            fiscal_year=int(fy),
+                        )
+                        if fy_result is not None:
+                            by_year[int(fy)] = fy_result
+                            logger.info(f"Gate1 多财年提取: FY{fy} 完成")
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(f"Gate1 多财年提取 FY{fy} 失败: {e}")
+                if by_year:
+                    result.by_year = by_year
+                    logger.info(f"Gate1 多财年事实表: {sorted(by_year.keys())} 年（B3-1）")
+
             return result
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Gate1 事实提取失败: {e}")
             return {}
 
-    def _check_required_fields(self, facts: Dict[str, Any]) -> List[str]:
+    def _check_required_fields(self, facts: dict[str, Any]) -> list[str]:
         """检查必填字段（兼容 ExtractedFacts 对象或 dict）"""
         if hasattr(facts, "financial"):
             # ExtractedFacts 对象
@@ -244,7 +271,7 @@ class Gate1TypeInference(GateBase):
                 missing.append(field)
         return missing
 
-    def _check_value_deviation(self, facts: Dict[str, Any], wind_data: Dict[str, Any]) -> float:
+    def _check_value_deviation(self, facts: dict[str, Any], wind_data: dict[str, Any]) -> float:
         """检查数值偏差（真实：与 Wind canonical 最新值比对；兼容 ExtractedFacts 对象/dict）"""
         if not wind_data:
             return 0.0
@@ -275,7 +302,7 @@ class Gate1TypeInference(GateBase):
         return sum(deviations) / len(deviations) if deviations else 0.0
 
 
-def _facts_to_dict(facts) -> Dict[str, Any]:
+def _facts_to_dict(facts) -> dict[str, Any]:
     """ExtractedFacts → dict（键与 Gate1 required_fields 对齐：
     revenue / net_income / operating_cash_flow / total_assets / operating_income）"""
     out = {}

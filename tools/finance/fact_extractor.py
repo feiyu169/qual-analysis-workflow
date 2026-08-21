@@ -126,6 +126,9 @@ class ExtractedFacts:
     management: ManagementFacts = field(default_factory=ManagementFacts)
     business: BusinessFacts = field(default_factory=BusinessFacts)
     meta: ExtractionMeta = field(default_factory=ExtractionMeta)
+    # B3-1：多财年——每份年报独立提取的结果 {fiscal_year: ExtractedFacts}
+    # 主表（本对象）为最新财年；by_year 存全部年份供多财年对照/合并
+    by_year: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         """序列化为 dict (用于 JSON 持久化)"""
@@ -134,7 +137,7 @@ class ExtractedFacts:
     @classmethod
     def from_dict(cls, d: dict) -> 'ExtractedFacts':
         """从 dict 反序列化"""
-        return cls(
+        obj = cls(
             company_name=d.get('company_name', ''),
             ticker=d.get('ticker', ''),
             fiscal_year=d.get('fiscal_year', 0),
@@ -145,6 +148,11 @@ class ExtractedFacts:
             business=BusinessFacts(**d.get('business', {})),
             meta=ExtractionMeta(**d.get('meta', {})),
         )
+        # B3-1：多财年副表反序列化
+        by_year = d.get('by_year') or {}
+        if by_year:
+            obj.by_year = {int(fy): cls.from_dict(v) for fy, v in by_year.items()}
+        return obj
 
 
 # ====================================================================
@@ -482,9 +490,11 @@ EXTRACTION_PROMPT = """你是一个财务数据提取专家。请从以下财报
 2. 每个数据点必须标注来源章节
 3. 数值统一使用亿元为单位（人民币），保留2位小数
 4. 百分比保留1位小数
-5. 如果某项数据在本段中未出现，不要填充（用 null）
+5. 如果某项数据在本段中未出现，不要填充（用 null）——**宁可缺失不可杜撰**
 6. **不要提取财务数字（营收/净利润/毛利率/现金流/总资产等）**——财务数据 100% 以 Wind 为准（B2b-1），
    本表只提取运营指标（用户/时长/GMV/ARPU 等）与管理信息（高管/回购/分红）
+7. **禁止用本批次之外的数据补当前批次**（不得引用前一批/其他章节/自行回忆的数值）——
+   本批未出现即 null，由后续合并处理
 
 ## 单位规范（必须严格遵守，违反将导致数据错误）
 - DAU/MAU: 亿（如"日活跃用户4.1亿"→填4.1，不是410或4100）
@@ -821,16 +831,19 @@ def _merge_chunk_data(all_data: list[dict], company_name: str, ticker: str) -> E
     facts = ExtractedFacts(company_name=company_name, ticker=ticker)
 
     for chunk_data in all_data:
-        # 合并 operational
+        # 合并 operational —— B3-3：冲突保留首个 + warning（无静默覆盖）
         op = chunk_data.get('operational', {})
         for key, val in op.items():
             if val is not None and hasattr(facts.operational, key):
                 current = getattr(facts.operational, key)
                 if current is None:
                     setattr(facts.operational, key, val)
-                else:
-                    # 后批次覆盖
-                    setattr(facts.operational, key, val)
+                elif (isinstance(val, (int, float)) and isinstance(current, (int, float))
+                      and abs(current - val) > 1e-9) or (
+                          not isinstance(val, (int, float)) and current != val):
+                    # B3-3：跨批冲突——保留首个（先提取更可靠），记录冲突
+                    logger.warning(f"批次仲裁: {key} 冲突 {current} vs {val}，保留首个 {current}")
+                    facts.meta.warnings.append(f"批次仲裁: {key} 冲突 {current} vs {val}，保留首个")
 
         # 合并 financial —— B2b-1：财务 100% Wind，忽略 LLM 提取的财务字段（防污染）
         # （LLM 财务值不再合并；financial 由 extract_facts 从 Wind 处置表填充）
@@ -889,14 +902,14 @@ def format_facts_as_context(facts: ExtractedFacts) -> str:
     lines = [f"## 财报结构化事实表（{facts.company_name}，FY{fy} {facts.report_type}，来源：财报原文）"]
     lines.append("")
 
-    # 财务数据表
+    # 财务数据表（B2b-1：来源 Wind；B3-2：无 LLM 编造页码）
     lines.append(f"### 财务数据（单财年 FY{fy}）")
     lines.append(f"| 指标 | 口径 | FY{fy} | 单位 | 来源 |")
     lines.append("|------|------|------|------|------|")
     fin_fields = [
         ("营业收入", "IFRS", fin.revenue, "亿元"),
         ("净利润", "IFRS归母", fin.net_profit, "亿元"),
-        ("毛利率", "-", fin.gross_margin, "%"),
+        ("毛利率", "派生", fin.gross_margin, "%"),
         ("经营现金流", "IFRS", fin.operating_cashflow, "亿元"),
         ("总资产", "IFRS", fin.total_assets, "亿元"),
         ("现金及等价物", "IFRS", fin.cash_and_equivalents, "亿元"),
@@ -904,14 +917,16 @@ def format_facts_as_context(facts: ExtractedFacts) -> str:
     ]
     for name, basis, val, unit in fin_fields:
         if val is not None:
-            lines.append(f"| {name} | {basis} | {val} | {unit} | 财报原文 |")
+            lines.append(f"| {name} | {basis} | {val} | {unit} | Wind |")
+        else:
+            lines.append(f"| {name} | {basis} | 未披露 | {unit} | Wind |")
 
     lines.append("")
 
-    # 运营数据表
+    # 运营数据表（B3-2：页码列——MinerU 无 page 元数据 → 未提供/unverified，禁止 LLM 编造）
     lines.append(f"### 运营数据（FY{fy}）")
-    lines.append(f"| 指标 | FY{fy} | 单位 | 来源 |")
-    lines.append("|------|------|------|------|")
+    lines.append(f"| 指标 | FY{fy} | 单位 | 来源 | 页码 |")
+    lines.append("|------|------|------|------|------|")
     op_fields = [
         ("DAU", op.dau, "亿"), ("MAU", op.mau, "亿"),
         ("DAU/MAU", op.dau_mau_ratio, ""), ("日均使用时长", op.daily_usage_minutes, "分钟"),
@@ -924,7 +939,7 @@ def format_facts_as_context(facts: ExtractedFacts) -> str:
         if val is not None:
             source = op.sources.get(f"operational.{name.lower().replace('/', '_')}", "")
             source_str = f" [{source}]" if source else ""
-            lines.append(f"| {name} | {val} | {unit}{source_str} | |")
+            lines.append(f"| {name} | {val} | {unit}{source_str} | 未提供(unverified) |")
 
     lines.append("")
 
