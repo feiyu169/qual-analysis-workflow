@@ -82,7 +82,7 @@ def review_and_repair_loop(
     llm_caller: Callable[[str, str], str] | None = None,
     wind_data: dict | None = None,
     max_rounds: int = 3,
-    industry: str = "新能源汽车",
+    industry: str = "综合",  # B4-3：动态化默认（原硬编码"新能源汽车"，调用方应传 industry_for 结果）
     # v3.1 新增 keyword-only 参数（全部带默认值，兼容 legacy 调用）
     enable_debate: bool = False,
     skip_repair: bool = False,

@@ -2983,14 +2983,13 @@ def run_analysis(
                 "cashflow": ctx.wind.cashflow if hasattr(ctx.wind, 'cashflow') and isinstance(ctx.wind.cashflow, dict) else {},
             }
         
-        # 确定行业类型
-        industry = "新能源汽车"
-        if "小鹏" in company_name or "蔚来" in company_name or "理想" in company_name:
-            industry = "新能源汽车"
-        elif "腾讯" in company_name or "阿里" in company_name:
-            industry = "科技"
-        elif "美团" in company_name or "京东" in company_name:
-            industry = "消费"
+        # 确定行业类型（B4-3：动态映射——复用 v8 adapters.industry_for，替代硬编码"新能源汽车"默认）
+        try:
+            from .qual_v8.adapters import industry_for as _industry_for
+            industry = _industry_for(company_name)
+        except Exception:  # noqa: BLE001
+            industry = "综合"
+        logger.info(f"行业判定: {company_name} → {industry}（B4-3 动态）")
         
         # 执行审查修复循环
         review_result = review_and_repair_loop(

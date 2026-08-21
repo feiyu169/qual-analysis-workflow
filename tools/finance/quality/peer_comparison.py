@@ -10,7 +10,6 @@ quality/peer_comparison.py — 同行对比矩阵模块（T16修复）
 """
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +45,12 @@ class PeerComparisonResult:
     rankings: dict[str, dict] = field(default_factory=dict)  # {指标: {排名, 分位数}}
 
 
-def create_sf_express_peers() -> list[PeerCompany]:
-    """创建顺丰控股的同行对比数据"""
+def create_express_peers() -> list[PeerCompany]:
+    """创建快递行业同行对比数据（B4-6：泛化——原 create_sf_express_peers 公司名硬编码删除）
+
+    注：可比数据为**静态参考**（Wind 无可比公司 API 数据源）；接入报告时须标注"静态可比，
+    非实时"；验证不可用时降级"标注不可比"（由调用方决定是否展示）。
+    """
     return [
         PeerCompany(
             name="顺丰控股", ticker="002352.SZ", market="cn",
@@ -56,7 +59,8 @@ def create_sf_express_peers() -> list[PeerCompany]:
             market_share=15, express_volume=130, revenue_per_piece=16.0,
         ),
         PeerCompany(
-            name="中通快递", ticker="002024.SZ", market="cn",
+            # B4-6 修复：中通快递美股 ZTO.N（原 002024.SZ 为分众传媒——错误 ticker）
+            name="中通快递", ticker="ZTO.N", market="us",
             revenue=430, revenue_growth=12, net_income=85,
             net_margin=19.8, roe=25, pe=14.2, pb=2.5,
             market_share=22, express_volume=300, revenue_per_piece=1.4,

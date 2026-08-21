@@ -628,16 +628,16 @@ def _calculate_unit_economics(facts: 'ExtractedFacts') -> list[str]:
     assumptions = []
     op = facts.operational
     
-    # 毛利率：优先使用财报数据，否则使用行业默认值
+    # 毛利率：优先财报（Wind 派生）数据；**无源时不填充默认值**（B4-2：删 50% 启发式）
+    # LTV/回收期等派生指标在毛利率缺失时跳过，标注"数据不足"而非用假值
     if op.gross_margin is None:
         if facts.financial.gross_margin:
             op.gross_margin = facts.financial.gross_margin
         else:
-            op.gross_margin = 0.5  # 默认 50%
-            assumptions.append("毛利率未披露，使用默认值 50%")
+            assumptions.append("毛利率未披露（Wind 无源），单位经济指标跳过计算（宁缺毋滥）")
     
-    # LTV = 月ARPU x 毛利率 x 用户生命周期
-    if op.arpu and op.user_lifetime:
+    # LTV = 月ARPU x 毛利率 x 用户生命周期（毛利率缺失时跳过——B4-2 不用默认值）
+    if op.arpu and op.user_lifetime and op.gross_margin is not None:
         monthly_arpu = op.arpu / 12
         op.ltv = monthly_arpu * op.gross_margin * op.user_lifetime
         assumptions.append(
@@ -656,8 +656,8 @@ def _calculate_unit_economics(facts: 'ExtractedFacts') -> list[str]:
     if op.ltv and op.cac and op.cac > 0:
         op.ltv_cac_ratio = op.ltv / op.cac
     
-    # 回收期 = CAC / (月ARPU x 毛利率)
-    if op.cac and op.arpu:
+    # 回收期 = CAC / (月ARPU x 毛利率)（毛利率缺失时跳过）
+    if op.cac and op.arpu and op.gross_margin is not None:
         monthly_contribution = (op.arpu / 12) * op.gross_margin
         if monthly_contribution > 0:
             op.payback_period = op.cac / monthly_contribution
@@ -790,6 +790,12 @@ def extract_facts(
         wind_warnings = cross_validate_with_wind(facts.to_dict(), wind_data)
         facts.meta.warnings.extend(wind_warnings)
 
+    # 7. B4-1 运营数据验证链（结构性铁律阻断：MAU ≥ DAU ≥ 付费用户；派生钩稽 warning 级）
+    chain_violations = validate_operational_chain(facts)
+    facts.meta.warnings.extend(chain_violations)
+    if chain_violations:
+        facts.meta.warnings.append("⚠️ 运营数据存在结构性铁律冲突（B4-1），相关数字需人工复核")
+
     logger.info(
         f"事实提取完成: {llm_calls} 次调用, "
         f"FY{facts.fiscal_year} {facts.report_type}, "
@@ -798,6 +804,42 @@ def extract_facts(
         f"warnings={len(facts.meta.warnings)}"
     )
     return facts
+
+
+def validate_operational_chain(facts: 'ExtractedFacts') -> list[str]:
+    """B4-1 运营数据验证链（结构性铁律 + 派生钩稽）。
+
+    铁律（阻断级）：MAU ≥ DAU ≥ 付费用户（结构性不可能违反）
+    派生钩稽（warning 级）：DAU/MAU 比率范围、付费渗透率范围等
+    """
+    violations: list[str] = []
+    op = facts.operational
+
+    # 铁律 1：DAU ≤ MAU（日活不可能大于月活）
+    if op.dau is not None and op.mau is not None and op.dau > op.mau * 1.001:
+        violations.append(f"结构性铁律: DAU {op.dau} > MAU {op.mau}（不可能，B4-1）")
+
+    # 铁律 2：付费用户 ≤ DAU（付费渗透率 ≤ 100%）
+    if op.paying_users is not None and op.dau is not None and op.paying_users > op.dau * 1.001:
+        violations.append(
+            f"结构性铁律: 付费用户 {op.paying_users} > DAU {op.dau}（付费渗透率>100%，不可能，B4-1）"
+        )
+
+    # 派生钩稽（warning 级）：DAU/MAU 比率合理范围（10%-90%，极端值提示复核）
+    if op.dau is not None and op.mau and op.mau > 0:
+        ratio = op.dau / op.mau
+        if ratio > 0.9 or ratio < 0.1:
+            violations.append(f"派生钩稽: DAU/MAU={ratio:.0%} 超常见范围 10%-90%（提示复核，B4-1）")
+
+    # 派生钩稽：GMV 与 ARPU×付费用户 数量级对照（若均有值，偏差>50% 提示）
+    if op.gmv is not None and op.arpu is not None and op.paying_users is not None:
+        implied_gmv = op.arpu * op.paying_users * 1e4 / 1e8  # ARPU(元)×付费用户(亿)→亿元
+        if implied_gmv > 0 and abs(op.gmv - implied_gmv) / implied_gmv > 0.5:
+            violations.append(
+                f"派生钩稽: GMV {op.gmv}亿 vs ARPU×付费用户 ≈{implied_gmv:.0f}亿，偏差>50%（提示复核，B4-1）"
+            )
+
+    return violations
 
 
 def _inject_fiscal_year_instruction(chunk: str, fiscal_year: int | None,
