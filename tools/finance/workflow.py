@@ -1245,10 +1245,23 @@ def _generate_chapter(
                 except Exception as e:  # noqa: BLE001
                     logger.warning(f"前端闸门执行失败（非阻断）: {e}")
 
-                all_issues = list(check_result.issues) + gate_issues
+                # FiscalSemantics 第 3 层：生成时财年校验（历史引用未标注 → 重试补标注）
+                fiscal_issues = []
+                try:
+                    from .qual_v8.data_anchor import validate_fiscal_references
+                    fiscal_issues = validate_fiscal_references(
+                        chapter_num, content,
+                        _wind_to_dict(ctx.wind) if ctx.wind else {},
+                    )
+                    if fiscal_issues:
+                        logger.warning(f"{chapter_name} 历史财年引用未标注 {len(fiscal_issues)} 处（FiscalSemantics）")
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"财年校验失败（非阻断）: {e}")
+
+                all_issues = list(check_result.issues) + gate_issues + fiscal_issues
                 
-                if check_result.passed and not gate_issues:
-                    logger.info(f"{chapter_name} 生成完成: {len(content)} 字符, 格式+闸门验证通过")
+                if check_result.passed and not gate_issues and not fiscal_issues:
+                    logger.info(f"{chapter_name} 生成完成: {len(content)} 字符, 格式+闸门+财年验证通过")
                     return content
                 elif attempt < max_format_retries:
                     # 格式或闸门失败 → 重试

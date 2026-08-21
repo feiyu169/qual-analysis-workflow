@@ -336,10 +336,10 @@ def _run_deep_review(chapters: dict[int, str], wind_data: dict | None) -> list[s
     """执行深度审查"""
     issues = []
     
-    # 1. 跨章节一致性检查
+    # 1. 跨章节一致性检查（FiscalSemantics 归因——wind_data 传入定位未标注引用的财年）
     try:
         from .cross_chapter_consistency import check_cross_chapter_consistency
-        result = check_cross_chapter_consistency(chapters)
+        result = check_cross_chapter_consistency(chapters, wind_data=wind_data)
         if not result.passed:
             issues.extend([f"[跨章节一致性] {issue.description}" for issue in result.issues])
     except Exception as e:  # noqa: BLE001

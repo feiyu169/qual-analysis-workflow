@@ -154,8 +154,11 @@ level_gates:
 
   L1:
     must_pass: ["static_analysis", "unit_test", "secret_scan", "test_quality", "failure_log"]
-    should_pass: ["security_scan", "integration_probe"]
+    should_pass: ["security_scan", "integration_probe", "pin_check"]
     optional: []
+    # V3.4 ROI 提升②：pin_check 从 OPTIONAL 提升到 L1 SHOULD_PASS——
+    # 依赖未固定版本是常见缺陷（ROI 实验 unpinned-dep 实证逃逸），L1 即应拦截
+    #（pin-check 查 requirements.txt；无该文件时插件跳过，对无依赖项目无害）
 
   L2:
     must_pass: ["static_analysis", "unit_test", "secret_scan", "security_scan", "test_quality", "failure_log"]

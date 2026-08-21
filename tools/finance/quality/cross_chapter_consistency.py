@@ -11,10 +11,9 @@
 - I1: 总资产口径打架
 """
 
-import re
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -37,14 +36,25 @@ class ConsistencyIssue:
 class ConsistencyResult:
     """一致性检查结果"""
     passed: bool
-    issues: List[ConsistencyIssue] = field(default_factory=list)
+    issues: list[ConsistencyIssue] = field(default_factory=list)
     score: float = 100.0
 
 
 class CrossChapterConsistencyChecker:
     """跨章节一致性检查器"""
     
-    def __init__(self):
+    def __init__(self, wind_data: dict | None = None):
+        # 财年语义单源：DataAnchor 归因（FiscalSemantics——未标注数字引用按锚点值归因财年，
+        # 不再一律视为"最新财年"，架构级消除历史引用误报）
+        self._anchor = None
+        if wind_data:
+            try:
+                from ..qual_v8.data_anchor import get_data_anchor
+                self._anchor = get_data_anchor(wind_data)
+            except Exception:  # noqa: BLE001
+                self._anchor = None
+        # 未标注历史引用警告收集
+        self.unattributed_historical: list[str] = []
         # 关键财务指标正则模式
         self.financial_patterns = {
             "经营现金流": [
@@ -86,7 +96,7 @@ class CrossChapterConsistencyChecker:
             ],
         }
     
-    def check(self, chapters: Dict[int, str]) -> ConsistencyResult:
+    def check(self, chapters: dict[int, str]) -> ConsistencyResult:
         """
         检查跨章节一致性
         
@@ -132,7 +142,7 @@ class CrossChapterConsistencyChecker:
             score=score,
         )
     
-    def _extract_financial_data(self, content: str, ch_num: int) -> Dict[str, list]:
+    def _extract_financial_data(self, content: str, ch_num: int) -> dict[str, list]:
         """从章节内容中提取财务数据（多财年感知：按财年分组）
 
         三财年报告（FY2023/24/25）中，同一章节会合法引用多个财年的值
@@ -140,21 +150,38 @@ class CrossChapterConsistencyChecker:
         导致不同章节"第一个匹配"落在不同财年 → 假冲突（108 项假阳性）。
         现改为提取 {indicator: [(fy, value), ...]}，由调用方按财年对齐比较。
         """
-        data: Dict[str, list] = {}
+        data: dict[str, list] = {}
 
-        def _year_before(pos: int) -> Optional[int]:
+        def _year_before(pos: int) -> int | None:
             """数字所属财年：先看数字后紧跟的 '20XX年'（如 "841.63亿元（2023年）"），
-            再看数字前 150 字符内最近的 '20XX年'；都没有则 None（视为最新财年引用）。"""
+            再看数字前 150 字符内最近的 '20XX年'；都没有则用 DataAnchor 归因
+            （值命中历史财年锚点 → 该财年；未命中 → None 视为最新财年引用）。"""
             # 数字后紧跟年份（更具体，如 "总资产841.63亿元（2023年）"）
             after = content[pos:pos + 30]
             m2 = re.search(r"(?:亿元|亿|万元|万)?[（(]?\s*(20\d{2})\s*年", after)
             if m2:
                 return int(m2.group(1))
             ctx = content[max(0, pos - 150):pos]
-            years = re.findall(r"(20\d{2})\s*年", ctx)
+            years = re.findall(r"(?:FY\s*)?(20\d{2})(?:\s*年)?", ctx)
             if years:
                 return int(years[-1])  # 取最近的（最后一个）年份
             return None
+
+        # 归因：indicator 无年份标注的引用按锚点值定位财年（FiscalSemantics）
+        def _attributed_fy(indicator: str, value: float) -> int | None:
+            if self._anchor is None:
+                return None
+            try:
+                attr = self._anchor.attribute_text_value(indicator, value)
+                if attr["is_historical"]:
+                    # 历史引用未标注 → 记 warning（写作遵从度提示，供生成时校验升级）
+                    self.unattributed_historical.append(
+                        f"{indicator}={value} 命中 FY{attr['fiscal_year']} 锚点但未标注财年"
+                    )
+                    return attr["fiscal_year"]
+                return attr["fiscal_year"]
+            except Exception:  # noqa: BLE001
+                return None
 
         for indicator, patterns in self.financial_patterns.items():
             for pattern in patterns:
@@ -168,18 +195,20 @@ class CrossChapterConsistencyChecker:
                         except (ValueError, IndexError):
                             continue
                         fy = _year_before(m.start())
+                        if fy is None:
+                            fy = _attributed_fy(indicator, value)
                         if indicator not in data:
                             data[indicator] = []
                         data[indicator].append((fy, value))
-                except Exception:  # noqa: BLE001
+                except Exception:  # noqa: BLE001, S112 —— 单值解析失败跳过（正则边界）
                     continue
                 # 一个 indicator 取全量匹配后不再重复模式（同 indicator 多模式仅兜底）
-                if indicator in data and data[indicator]:
+                if data.get(indicator):
                     break
 
         return data
 
-    def _check_financial_consistency(self, chapters: Dict[int, str]) -> List[ConsistencyIssue]:
+    def _check_financial_consistency(self, chapters: dict[int, str]) -> list[ConsistencyIssue]:
         """检查财务数据一致性（多财年感知：仅比较同财年的跨章引用）"""
         issues = []
 
@@ -197,11 +226,15 @@ class CrossChapterConsistencyChecker:
 
         for indicator in all_indicators:
             # 按财年聚合：{fy: {ch: value}}
-            by_fy: Dict[Optional[int], Dict[int, float]] = {}
+            # FiscalSemantics：未归因（None=默认最新语境）与最新财年合并——未标注引用视为当期，
+            # 与命中最新锚点的引用同桶比较（否则 999(未命中) 与 1031.63(FY2025) 不碰，真实冲突漏报）
+            _latest = self._anchor.get_latest_fiscal_year() if self._anchor else None
+            by_fy: dict[int | None, dict[int, float]] = {}
             for ch_num, data in chapter_data.items():
                 points = data.get(indicator) or []
                 for fy, value in points:
-                    by_fy.setdefault(fy, {})[ch_num] = value
+                    bucket = fy if fy is not None else _latest
+                    by_fy.setdefault(bucket, {})[ch_num] = value
 
             for fy, values in by_fy.items():
                 if len(values) < 2:
@@ -248,7 +281,7 @@ class CrossChapterConsistencyChecker:
 
         return issues
     
-    def _check_conclusion_consistency(self, chapters: Dict[int, str]) -> List[ConsistencyIssue]:
+    def _check_conclusion_consistency(self, chapters: dict[int, str]) -> list[ConsistencyIssue]:
         """检查结论一致性（多财年感知：仅比较同财年的结论）
 
         修复：三财年报告中"2024年现金流为负、2025年现金流转正"是合法叙事，
@@ -269,7 +302,7 @@ class CrossChapterConsistencyChecker:
 
         for topic in all_topics:
             # 按财年聚合：{fy: {ch: conclusion}}
-            by_fy: Dict[Optional[int], Dict[int, str]] = {}
+            by_fy: dict[int | None, dict[int, str]] = {}
             for ch_num, data in chapter_conclusions.items():
                 points = data.get(topic) or []
                 for fy, conc in points:
@@ -301,7 +334,7 @@ class CrossChapterConsistencyChecker:
 
         return issues
     
-    def _check_time_consistency(self, chapters: Dict[int, str]) -> List[ConsistencyIssue]:
+    def _check_time_consistency(self, chapters: dict[int, str]) -> list[ConsistencyIssue]:
         """检查时间点一致性"""
         issues = []
         
@@ -360,11 +393,11 @@ class CrossChapterConsistencyChecker:
         
         return issues
     
-    def _extract_conclusions(self, content: str, ch_num: int) -> Dict[str, list]:
+    def _extract_conclusions(self, content: str, ch_num: int) -> dict[str, list]:
         """从章节内容中提取结论（按财年分组）{topic: [(fy, conclusion), ...]}"""
-        conclusions: Dict[str, list] = {}
+        conclusions: dict[str, list] = {}
 
-        def _year_before_conclusion(pos: int) -> Optional[int]:
+        def _year_before_conclusion(pos: int) -> int | None:
             """结论匹配位置前最近 '20XX年'（150 字符内），无则 None"""
             ctx = content[max(0, pos - 150):pos]
             years = re.findall(r"(20\d{2})\s*年", ctx)
@@ -379,7 +412,7 @@ class CrossChapterConsistencyChecker:
                     conclusions[topic].append((fy, m.group(0)))
         return conclusions
     
-    def _extract_time_points(self, content: str, ch_num: int) -> List[str]:
+    def _extract_time_points(self, content: str, ch_num: int) -> list[str]:
         """从章节内容中提取时间点"""
         time_points = []
         
@@ -395,7 +428,7 @@ class CrossChapterConsistencyChecker:
         
         return list(set(time_points))
     
-    def _extract_data_for_time(self, content: str, time_ref: str) -> Dict[str, float]:
+    def _extract_data_for_time(self, content: str, time_ref: str) -> dict[str, float]:
         """提取特定时间点附近各指标的数据 {indicator: value}
 
         修复：旧实现只取第一个匹配且一律存为"净利润"键 → 指标张冠李戴产生假冲突。
@@ -444,15 +477,17 @@ class CrossChapterConsistencyChecker:
         return (conc1_positive and conc2_negative) or (conc1_negative and conc2_positive)
 
 
-def check_cross_chapter_consistency(chapters: Dict[int, str]) -> ConsistencyResult:
+def check_cross_chapter_consistency(chapters: dict[int, str],
+                                    wind_data: dict | None = None) -> ConsistencyResult:
     """
     检查跨章节一致性（入口函数）
-    
+
     Args:
         chapters: 各章节内容 {chapter_num: content}
-    
+        wind_data: Wind 数据（FiscalSemantics 归因——未标注引用按锚点值定位财年；None 则旧行为）
+
     Returns:
         ConsistencyResult
     """
-    checker = CrossChapterConsistencyChecker()
+    checker = CrossChapterConsistencyChecker(wind_data=wind_data)
     return checker.check(chapters)

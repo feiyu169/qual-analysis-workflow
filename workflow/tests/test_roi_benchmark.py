@@ -34,7 +34,7 @@ def test_empty_tasks_early_return(tmp_path):
 def test_each_task_isolated_workdir(tmp_path, monkeypatch):
     """C1 修正：每任务独立目录（防对照污染）——不真实跑门禁，模拟执行"""
 
-    def fake_run_hgf(workdir, files):
+    def fake_run_hgf(workdir, files, level=None):
         return 0, "ok"
 
     monkeypatch.setattr(roi_benchmark, "run_hgf_gates", fake_run_hgf)
@@ -68,7 +68,7 @@ def test_escaped_defects_oracle(tmp_path):
 def test_compare_abba_structure(tmp_path, monkeypatch):
     """C4 修正：compare 返回 A/B 双组 + delta + verdict（模拟执行防慢）"""
 
-    def fake_run_hgf(workdir, files):
+    def fake_run_hgf(workdir, files, level=None):
         return 0, "ok"
 
     def fake_run_base(workdir, files):
@@ -87,7 +87,7 @@ def test_fix_loop_applies_fixes(tmp_path, monkeypatch):
     """ROI 修复循环：门禁先失败 → 修复 → 复跑通过（HGF 组）"""
     calls = {"n": 0}
 
-    def fake_run_hgf(workdir, files):
+    def fake_run_hgf(workdir, files, level=None):
         # 第一次失败，之后通过
         calls["n"] += 1
         if calls["n"] == 1:
@@ -139,3 +139,31 @@ def test_baseline_runs_without_hgf(tmp_path):
     # 文件无 import/语法问题，baseline 应能跑（rc 0 或 1 都允许，重点是执行）
     rc, _ = roi_benchmark.run_baseline_checks(wd, ["a.py"])
     assert rc in (0, 1)
+
+
+def test_apply_fixes_idempotent(tmp_path):
+    """V3.4 ROI 提升④：marker⊂replacement 时修复幂等（不无限膨胀）"""
+    wd = str(tmp_path)
+    os.makedirs(wd, exist_ok=True)
+    task = {
+        "id": "pin",
+        "files": ["requirements.txt"],
+        "files_content": {"requirements.txt": "flask\n"},
+        "injected_defects": [],
+        "fixes": [
+            {
+                "file": "requirements.txt",
+                "marker": "flask",
+                "replacement": "flask==3.0.3",
+            }
+        ],
+    }
+    # 写初始内容
+    with open(os.path.join(wd, "requirements.txt"), "w", encoding="utf-8") as f:
+        f.write("flask\n")
+    # 应用修复两次：第二次应跳过（replacement 已存在）
+    assert roi_benchmark._apply_fixes(wd, task) == 1
+    assert roi_benchmark._apply_fixes(wd, task) == 0
+    with open(os.path.join(wd, "requirements.txt"), encoding="utf-8") as f:
+        content = f.read()
+    assert content == "flask==3.0.3\n"  # 不膨胀

@@ -45,8 +45,14 @@ def _run(cmd: list[str], cwd: str, timeout: int = 300) -> tuple[int, str]:
         return -1, str(e)
 
 
-def run_hgf_gates(workdir: str, files: list[str]) -> tuple[int, str]:
-    """跑 HGF 门禁（禁用熔断：C6）"""
+def run_hgf_gates(
+    workdir: str, files: list[str], level: str | None = None
+) -> tuple[int, str]:
+    """跑 HGF 门禁（禁用熔断：C6）。
+
+    V3.4 ROI 提升①：level 参数允许指定门禁等级（如 L1_LITE/L2），
+    用于对比轻量分级 vs 全量门禁的耗时/拦截差异。
+    """
     # 清空熔断状态：实验内门禁失败必须如实反映
     gh = os.path.join(workdir, ".hgf", "gate_health.json")
     if os.path.exists(gh):
@@ -65,6 +71,8 @@ def run_hgf_gates(workdir: str, files: list[str]) -> tuple[int, str]:
         "--execute",
         "--json",
     ]
+    if level:
+        cmd += ["--level", level]
     return _run(cmd, workdir)
 
 
@@ -119,6 +127,10 @@ def _apply_fixes(task_wd: str, task: dict) -> int:
 
     任务可选定义 fixes: [{file, marker, replacement}]——把 marker 替换为
     replacement（缺陷修复）。返回修复的缺陷数。
+
+    V3.4 ROI 提升④（实验暴露的 bug）：每个 fix 每轮**最多应用一次**
+    （replace count=1）——此前 replace 全部出现会把 `flask` → `flask==3.0.3`
+    再 → `flask==3.0.3==3.0.3` 无限膨胀（marker 是 replacement 子串时）。
     """
     fixed = 0
     for fix in task.get("fixes", []):
@@ -128,20 +140,30 @@ def _apply_fixes(task_wd: str, task: dict) -> int:
         with open(path, encoding="utf-8") as f:
             content = f.read()
         if fix["marker"] in content:
-            content = content.replace(fix["marker"], fix["replacement"])
+            # 幂等保护：replacement 已存在（或 marker 是 replacement 子串且
+            # replacement 已应用）→ 跳过，防 `flask`→`flask==3.0.3`→
+            # `flask==3.0.3==3.0.3` 无限膨胀（V3.4 ROI 提升④）
+            if fix["replacement"] in content:
+                fixed += 0  # 已修复，跳过
+                continue
+            content = content.replace(fix["marker"], fix["replacement"], 1)
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
             fixed += 1
     return fixed
 
 
-def run_group(tasks: list[dict], *, use_hgf: bool, root_dir: str) -> dict:
+def run_group(
+    tasks: list[dict], *, use_hgf: bool, root_dir: str, level: str | None = None
+) -> dict:
     """C1/C2/C4 修正 + ROI 修复循环（2026-08-21 实验发现）。
 
     真实 ROI 方法：门禁的价值 = "拦截 → 按报告修复 → 复跑直到通过"。
     - HGF 组：门禁报告驱动修复（_apply_fixes），模拟真实开发循环
     - 基线组：不修复（对照：无门禁报告则缺陷常驻）
     缺陷逃逸 = 修复循环结束后仍在产物中的缺陷（oracle 判定）。
+
+    V3.4 ROI 提升①：level 指定 HGF 组门禁等级（L1_LITE/L2 对比）。
     """
     if not tasks:
         return {
@@ -158,7 +180,8 @@ def run_group(tasks: list[dict], *, use_hgf: bool, root_dir: str) -> dict:
     results = []
     for task in tasks:
         # C1：每任务独立 workdir（隔离状态/产物，防对照污染）
-        task_wd = os.path.join(root_dir, f"{'hgf' if use_hgf else 'base'}-{task['id']}")
+        suffix = f"{'hgf' if use_hgf else 'base'}{'-' + level if level else ''}"
+        task_wd = os.path.join(root_dir, f"{suffix}-{task['id']}")
         if os.path.exists(task_wd):
             shutil.rmtree(task_wd)
         os.makedirs(os.path.join(task_wd, ".hgf"), exist_ok=True)
@@ -171,7 +194,7 @@ def run_group(tasks: list[dict], *, use_hgf: bool, root_dir: str) -> dict:
         rounds = 0
         for round_i in range(1, max_rounds + 1):
             if use_hgf:
-                rc, output = run_hgf_gates(task_wd, task.get("files", []))
+                rc, output = run_hgf_gates(task_wd, task.get("files", []), level=level)
             else:
                 rc, output = run_baseline_checks(task_wd, task.get("files", []))
             rounds = round_i
@@ -207,8 +230,11 @@ def run_group(tasks: list[dict], *, use_hgf: bool, root_dir: str) -> dict:
     }
 
 
-def compare(tasks: list[dict], root_dir: str) -> dict:
-    """C4 修正：ABBA 交替（先 A 后 B 再 B 后 A）消除顺序效应"""
+def compare(tasks: list[dict], root_dir: str, level: str | None = None) -> dict:
+    """C4 修正：ABBA 交替（先 A 后 B 再 B 后 A）消除顺序效应。
+
+    V3.4 ROI 提升①：level 指定 HGF 组门禁等级（L1_LITE/L2 对比）。
+    """
     import random
 
     random.seed(42)  # 可复现
@@ -216,7 +242,7 @@ def compare(tasks: list[dict], root_dir: str) -> dict:
     a_first = tasks[:half]
     b_first = tasks[half:]
     # ABBA：hgf 组跑 a_first+b_first，基线组跑 b_first+a_first（顺序交错）
-    a = run_group(a_first + b_first, use_hgf=True, root_dir=root_dir)
+    a = run_group(a_first + b_first, use_hgf=True, root_dir=root_dir, level=level)
     b = run_group(b_first + a_first, use_hgf=False, root_dir=root_dir)
     if a.get("error") or b.get("error"):
         return {"error": "empty tasks", "hgf": a, "baseline": b}
@@ -238,13 +264,111 @@ def compare(tasks: list[dict], root_dir: str) -> dict:
             "defects_escaped": defect_delta,
         },
         "verdict": verdict,
+        "level": level,
     }
+
+
+def compare_runs(
+    tasks: list[dict],
+    root_dir: str,
+    level: str | None = None,
+    runs: int = 1,
+) -> dict:
+    """V3.4 ROI 提升①：多次运行取均值/方差（提高统计置信度）。
+
+    每次运行用独立子目录（root_dir/run-N），聚合 first_pass/escaped/time 的
+    均值与方差。runs=1 时退化为单次 compare。
+    """
+    if runs <= 1:
+        return compare(tasks, root_dir, level=level)
+    aggregated = {"hgf": {}, "baseline": {}, "runs": runs, "level": level}
+    per_run = []
+    for i in range(runs):
+        run_dir = os.path.join(root_dir, f"run-{i + 1}")
+        res = compare(tasks, run_dir, level=level)
+        if res.get("error"):
+            return {"error": res["error"], "runs": runs}
+        per_run.append(res)
+        # 合并 per_task 以保留明细
+        for group in ("hgf", "baseline"):
+            g = res[group]
+            agg = aggregated[group].setdefault("per_task", {})
+            for t in g.get("per_task", []):
+                agg.setdefault(t["task"], []).append(
+                    {
+                        "first_pass": t["first_pass"],
+                        "rounds": t["rounds"],
+                        "time_s": t["time_s"],
+                        "escaped": t["defects_escaped"],
+                    }
+                )
+    # 聚合统计
+    for group in ("hgf", "baseline"):
+        tasks_agg = {}
+        for tid, entries in aggregated[group]["per_task"].items():
+            tasks_agg[tid] = {
+                "first_pass_rate": sum(e["first_pass"] for e in entries) / runs,
+                "avg_rounds": round(sum(e["rounds"] for e in entries) / runs, 2),
+                "avg_time_s": round(sum(e["time_s"] for e in entries) / runs, 1),
+                "escaped_avg": round(sum(e["escaped"] for e in entries) / runs, 2),
+                "escaped_std": _std([e["escaped"] for e in entries]),
+            }
+        aggregated[group]["per_task"] = tasks_agg
+        aggregated[group]["first_pass_rate"] = round(
+            sum(t["first_pass_rate"] for t in tasks_agg.values()) / len(tasks_agg), 2
+        )
+        aggregated[group]["avg_rounds"] = round(
+            sum(t["avg_rounds"] for t in tasks_agg.values()) / len(tasks_agg), 2
+        )
+        aggregated[group]["total_time_s"] = round(
+            sum(t["avg_time_s"] for t in tasks_agg.values()), 1
+        )
+        aggregated[group]["defects_escaped_avg"] = round(
+            sum(t["escaped_avg"] for t in tasks_agg.values()), 2
+        )
+    # 汇总判定
+    ha = aggregated["hgf"]
+    ba = aggregated["baseline"]
+    delta_escaped = round(ha["defects_escaped_avg"] - ba["defects_escaped_avg"], 2)
+    delta_time = round(ha["total_time_s"] - ba["total_time_s"], 1)
+    aggregated["delta"] = {
+        "first_pass_rate": round(ha["first_pass_rate"] - ba["first_pass_rate"], 2),
+        "avg_rounds": round(ha["avg_rounds"] - ba["avg_rounds"], 2),
+        "time_s": delta_time,
+        "defects_escaped": delta_escaped,
+    }
+    aggregated["verdict"] = (
+        "HGF 净正收益（缺陷逃逸更少且时间代价可接受）"
+        if delta_escaped < 0 and delta_time < 300
+        else "HGF 净正收益不足（缺陷拦截优势 < 时间成本或无明显优势）"
+    )
+    return aggregated
+
+
+def _std(values: list[float]) -> float:
+    """样本标准差（单值返回 0）"""
+    if len(values) <= 1:
+        return 0.0
+    mean = sum(values) / len(values)
+    return round((sum((v - mean) ** 2 for v in values) / (len(values) - 1)) ** 0.5, 2)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="HGF ROI 对照实验（V3.4-C）")
     parser.add_argument("--tasks", default="", help="任务 JSON 文件路径")
     parser.add_argument("--workdir", default=DEFAULT_WORKDIR, help="实验根目录")
+    parser.add_argument(
+        "--level",
+        default=None,
+        choices=["L0", "L0_LITE", "L1", "L1_LITE", "L2", "L3"],
+        help="HGF 组门禁等级（V3.4 ROI 提升①：对比 L1_LITE vs L2 耗时/拦截）",
+    )
+    parser.add_argument(
+        "--runs",
+        type=int,
+        default=1,
+        help="多次运行取均值/方差（V3.4 ROI 提升①，提高统计置信度）",
+    )
     parser.add_argument("--json", action="store_true", help="JSON 输出")
     args = parser.parse_args()
 
@@ -287,29 +411,50 @@ def main() -> int:
             },
         ]
 
-    result = compare(tasks, args.workdir)
+    result = compare_runs(tasks, args.workdir, level=args.level, runs=args.runs)
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
         print("=" * 60)
-        print("HGF ROI 对照实验（V3.4-C，ABBA 交替）")
+        runs_note = f"，{args.runs} 次取均值" if args.runs > 1 else ""
+        level_note = f"，HGF 等级={args.level}" if args.level else ""
+        print(f"HGF ROI 对照实验（V3.4-C，ABBA 交替{runs_note}{level_note}）")
         print("=" * 60)
         if result.get("error"):
             print(f"❌ {result['error']}")
             return 1
         for group in ("hgf", "baseline"):
             g = result[group]
-            print(
-                f"\n[{group}] first_pass={g['first_pass_rate']:.0%} "
-                f"rounds={g['avg_rounds']} time={g['total_time_s']}s "
-                f"escaped={g['defects_escaped_total']}"
-            )
+            if args.runs > 1:
+                print(
+                    f"\n[{group}] first_pass={g['first_pass_rate']:.0%} "
+                    f"rounds={g['avg_rounds']} time={g['total_time_s']}s "
+                    f"escaped_avg={g['defects_escaped_avg']}"
+                )
+                for tid, t in g.get("per_task", {}).items():
+                    print(
+                        f"    {tid}: fp={t['first_pass_rate']:.0%} "
+                        f"rounds={t['avg_rounds']} time={t['avg_time_s']}s "
+                        f"escaped={t['escaped_avg']}±{t['escaped_std']}"
+                    )
+            else:
+                print(
+                    f"\n[{group}] first_pass={g['first_pass_rate']:.0%} "
+                    f"rounds={g['avg_rounds']} time={g['total_time_s']}s "
+                    f"escaped={g['defects_escaped_total']}"
+                )
+                for t in g.get("per_task", []):
+                    print(
+                        f"    {t['task']}: fp={t['first_pass']} "
+                        f"rounds={t['rounds']} time={t['time_s']}s "
+                        f"escaped={t['defects_escaped']}"
+                    )
         d = result["delta"]
         print(
             f"\nΔ first_pass={d['first_pass_rate']:+.0%} "
             f"Δ rounds={d['avg_rounds']:+.2f} "
             f"Δ time={d['time_s']:+.1f}s "
-            f"Δ escaped={d['defects_escaped']:+d}"
+            f"Δ escaped={d['defects_escaped']:+}"
         )
         print(f"\n判定: {result['verdict']}")
         print("=" * 60)

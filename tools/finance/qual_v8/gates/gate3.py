@@ -65,7 +65,7 @@ class Gate3ChapterWriting(GateBase):
         # 3. 交叉一致性验证（真实：quality.cross_chapter_consistency）
         #    一致性发现的问题记录为 warning 并写入 context，不阻断流程——
         #    阻断语义由 Gate4（审查修复）与 Gate8（最终 Critical 校验）承担
-        consistency_result = self._check_consistency(chapters)
+        consistency_result = self._check_consistency(chapters, wind_data=context.get("wind_data"))
         details["consistency"] = consistency_result
         # C1-3：跨章结果挂 context，Gate4 首轮复用（中间无修改，结果相同——避免重复跑）
         context["gate3_consistency_issues"] = consistency_result["errors"]
@@ -210,15 +210,16 @@ class Gate3ChapterWriting(GateBase):
             logger.error(f"Gate3 章节生成失败: {e}")
             return {}
 
-    def _check_consistency(self, chapters: dict[int, str]) -> dict[str, Any]:
-        """检查一致性（真实：quality.cross_chapter_consistency）"""
+    def _check_consistency(self, chapters: dict[int, str],
+                           wind_data: dict | None = None) -> dict[str, Any]:
+        """检查一致性（真实：quality.cross_chapter_consistency，FiscalSemantics 归因）"""
         errors = []
 
         try:
             from ...quality.cross_chapter_consistency import (
                 check_cross_chapter_consistency,
             )
-            result = check_cross_chapter_consistency(chapters)
+            result = check_cross_chapter_consistency(chapters, wind_data=wind_data)
             if not result.passed:
                 for issue in result.issues:
                     errors.append(f"第{issue.chapter1}章 vs 第{issue.chapter2}章: {issue.description}")

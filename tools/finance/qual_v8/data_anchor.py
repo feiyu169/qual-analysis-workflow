@@ -131,6 +131,48 @@ class DataAnchor:
         fys = [dp.fiscal_year for pts in self.anchors.values() for dp in pts if dp.fiscal_year]
         return max(fys) if fys else None
 
+    def get_metric_points(self, metric: str) -> list[DataPoint]:
+        """获取某指标的全部财年锚点（按财年升序）"""
+        k = canonical_key(metric)
+        pts = self.anchors.get(k, [])
+        return sorted(pts, key=lambda dp: dp.fiscal_year if dp.fiscal_year else 0)
+
+    def attribute_value(self, metric: str, value: float,
+                        tolerance: float = 0.01) -> tuple[int | None, float | None]:
+        """财年归因：数值 → 匹配的财年（架构级财年语义单源——FiscalSemantics 核心）
+
+        在锚点中按 1% 容差定位该值所属财年；无匹配 → (None, None)（未归因，调用方按最新财年处理）。
+
+        Returns:
+            (fiscal_year, matched_value) 或 (None, None)
+        """
+        best_fy: int | None = None
+        best_match: float | None = None
+        best_diff = tolerance
+        for dp in self.get_metric_points(metric):
+            if dp.fiscal_year is None or dp.value is None:
+                continue
+            diff = abs(value - dp.value) / max(abs(dp.value), 1e-9)
+            if diff <= best_diff:
+                best_diff = diff
+                best_fy = dp.fiscal_year
+                best_match = dp.value
+        return best_fy, best_match
+
+    def attribute_text_value(self, metric: str, value: float,
+                             tolerance: float = 0.01) -> dict:
+        """文本数值归因（供跨章检查器/生成时校验）：
+        {fiscal_year, matched_value, is_latest}——历史财年命中即非最新。
+        """
+        fy, matched = self.attribute_value(metric, value, tolerance)
+        latest = self.get_latest_fiscal_year()
+        return {
+            "fiscal_year": fy,
+            "matched_value": matched,
+            "is_latest": (fy is not None and fy == latest),
+            "is_historical": (fy is not None and fy != latest),
+        }
+
     def validate_chapter(self, chapter_num: int, chapter_content: str,
                          fiscal_year: int | None = None) -> list[str]:
         """验证章节数据是否与锚点一致（财年感知）"""
@@ -382,3 +424,33 @@ def get_data_anchor(wind_data: dict[str, Any]) -> "DataAnchor":
         cached.init_from_wind_data(wind_data)
         _anchor_cache[key] = cached
     return cached
+
+
+def validate_fiscal_references(chapter_num: int, content: str,
+                               wind_data: dict[str, Any]) -> list[str]:
+    """FiscalSemantics 第 3 层防线（生成时校验——问题前移，不依赖 LLM 自觉标注）。
+
+    扫描章节内容：命中**历史财年锚点**的数值引用，若未带 FY 标注/对比语境 → 记问题，
+    由 _generate_chapter 格式重试循环拦截（修复 prompt 补标注）。
+
+    Args:
+        chapter_num: 章节号
+        content: 章节内容
+        wind_data: Wind 数据（锚点源）
+
+    Returns:
+        财年标注问题列表（空 = 通过）
+    """
+    issues: list[str] = []
+    if not wind_data:
+        return issues
+    try:
+        from ..quality.cross_chapter_consistency import CrossChapterConsistencyChecker
+        checker = CrossChapterConsistencyChecker(wind_data=wind_data)
+        # 触发归因：未标注的历史财年引用被收集到 unattributed_historical
+        checker._extract_financial_data(content, chapter_num)
+        for w in checker.unattributed_historical:
+            issues.append(f"第{chapter_num}章 历史财年引用未标注（应带 FY 标注或对比语境）: {w}")
+    except Exception:  # noqa: BLE001, S110 —— 归因失败不阻断生成（非阻断防线）
+        pass
+    return issues
