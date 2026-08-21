@@ -84,7 +84,16 @@ def test_serve_returns_result(bridge):
     resp = read_response(1)
     assert resp["ok"] is True
     assert resp["id"] == 1
-    assert resp["result"]["level"] in ("L0", "L1", "L2", "L3", "L3_LITE")
+    # V3.4-B：新增轻量等级 L0_LITE/L1_LITE
+    assert resp["result"]["level"] in (
+        "L0",
+        "L0_LITE",
+        "L1",
+        "L1_LITE",
+        "L2",
+        "L3",
+        "L3_LITE",
+    )
     assert resp["result"]["type"] == "CODE"
 
 

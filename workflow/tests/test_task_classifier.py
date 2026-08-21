@@ -34,9 +34,10 @@ def test_hotfix_via_labels():
     assert result.level == "L0"
 
 
-def test_small_change_classified_as_l1():
+def test_small_change_classified_as_l1_lite():
+    """V3.4-B：单文件小改（<100 行 CODE）→ L1_LITE 轻量等级"""
     result = _classify("add helper function", ["utils.py"], 30)
-    assert result.level == "L1"
+    assert result.level == "L1_LITE"
 
 
 def test_medium_change_classified_as_l2():
@@ -81,6 +82,8 @@ def test_diff_stats_used_for_change_lines():
         diff_stats={"additions": 40, "deletions": 5},
     )
     assert result.change_lines == 45
+    # V3.4-B：45 行单文件小改 → L1_LITE（change_lines 来自 diff_stats）
+    assert result.level == "L1_LITE"
 
 
 def test_validation_rejects_empty_description():
@@ -91,6 +94,31 @@ def test_validation_rejects_empty_description():
 
 
 def test_validation_rejects_empty_files():
+    classifier = TaskClassifier()
+    task = Task(description="x", files=[], file_count=0, line_count=1)
+    with pytest.raises(TaskClassifierError):
+        classifier.classify_task(task)
+
+
+def test_select_level_empty_types_returns_none():
+    """B1 修正：types=[] 时 select_level 返回 None（all([])=True 陷阱）"""
+    classifier = TaskClassifier()
+    assert classifier.select_level([], 1, 10) is None
+
+
+def test_select_level_docs_small_l0_lite():
+    classifier = TaskClassifier()
+    assert classifier.select_level(["DOCS"], 1, 10) == "L0_LITE"
+    # 大文档改 → 不轻量
+    assert classifier.select_level(["DOCS"], 1, 100) is None
+
+
+def test_select_level_code_single_l1_lite():
+    classifier = TaskClassifier()
+    assert classifier.select_level(["CODE"], 1, 50) == "L1_LITE"
+    # 多文件/大改动 → 不轻量
+    assert classifier.select_level(["CODE"], 2, 50) is None
+    assert classifier.select_level(["CODE"], 1, 200) is None
     classifier = TaskClassifier()
     task = Task(description="x", files=[], file_count=0, line_count=1)
     with pytest.raises(TaskClassifierError):
