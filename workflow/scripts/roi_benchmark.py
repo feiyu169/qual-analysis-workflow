@@ -114,8 +114,35 @@ def count_rounds(output: str) -> int:
     return output.count("failed") + output.count("error")
 
 
+def _apply_fixes(task_wd: str, task: dict) -> int:
+    """按任务的修复规则移除注入缺陷（模拟"开发者按门禁报告修复"）。
+
+    任务可选定义 fixes: [{file, marker, replacement}]——把 marker 替换为
+    replacement（缺陷修复）。返回修复的缺陷数。
+    """
+    fixed = 0
+    for fix in task.get("fixes", []):
+        path = os.path.join(task_wd, fix["file"])
+        if not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+        if fix["marker"] in content:
+            content = content.replace(fix["marker"], fix["replacement"])
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+            fixed += 1
+    return fixed
+
+
 def run_group(tasks: list[dict], *, use_hgf: bool, root_dir: str) -> dict:
-    """C1/C2/C4 修正：每任务独立目录 + 空清单早退 + ABBA 交替由调用方控制"""
+    """C1/C2/C4 修正 + ROI 修复循环（2026-08-21 实验发现）。
+
+    真实 ROI 方法：门禁的价值 = "拦截 → 按报告修复 → 复跑直到通过"。
+    - HGF 组：门禁报告驱动修复（_apply_fixes），模拟真实开发循环
+    - 基线组：不修复（对照：无门禁报告则缺陷常驻）
+    缺陷逃逸 = 修复循环结束后仍在产物中的缺陷（oracle 判定）。
+    """
     if not tasks:
         return {
             "use_hgf": use_hgf,
@@ -127,8 +154,9 @@ def run_group(tasks: list[dict], *, use_hgf: bool, root_dir: str) -> dict:
             "defects_escaped_total": 0,
             "per_task": [],
         }
+    max_rounds = 3  # 修复循环上限（防死循环）
     results = []
-    for i, task in enumerate(tasks):
+    for task in tasks:
         # C1：每任务独立 workdir（隔离状态/产物，防对照污染）
         task_wd = os.path.join(root_dir, f"{'hgf' if use_hgf else 'base'}-{task['id']}")
         if os.path.exists(task_wd):
@@ -136,19 +164,33 @@ def run_group(tasks: list[dict], *, use_hgf: bool, root_dir: str) -> dict:
         os.makedirs(os.path.join(task_wd, ".hgf"), exist_ok=True)
         write_task_code(task_wd, task)
 
-        # C5：计时仅统计执行段（写代码前 t0 之后才开始计时）
+        # C5：计时仅统计执行段
         t0 = time.time()
-        if use_hgf:
-            rc, output = run_hgf_gates(task_wd, task.get("files", []))
-        else:
-            rc, output = run_baseline_checks(task_wd, task.get("files", []))
+        rc = -1
+        output = ""
+        rounds = 0
+        for round_i in range(1, max_rounds + 1):
+            if use_hgf:
+                rc, output = run_hgf_gates(task_wd, task.get("files", []))
+            else:
+                rc, output = run_baseline_checks(task_wd, task.get("files", []))
+            rounds = round_i
+            if rc == 0:
+                break
+            # 门禁失败 → 修复（仅 HGF 组有报告驱动修复；基线组不修复 = 对照组）
+            if use_hgf:
+                fixed = _apply_fixes(task_wd, task)
+                if fixed == 0:
+                    break  # 无可修复项（如语法错误需人工）→ 停止
+            else:
+                break  # 基线组不修复（对照真实差异）
         exec_time = round(time.time() - t0, 1)
 
         results.append(
             {
                 "task": task["id"],
                 "first_pass": rc == 0,
-                "rounds": count_rounds(output),
+                "rounds": rounds,
                 "time_s": exec_time,
                 "defects_escaped": count_escaped_defects(task_wd, task),
             }

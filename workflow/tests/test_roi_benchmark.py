@@ -83,6 +83,52 @@ def test_compare_abba_structure(tmp_path, monkeypatch):
     assert result["verdict"]
 
 
+def test_fix_loop_applies_fixes(tmp_path, monkeypatch):
+    """ROI 修复循环：门禁先失败 → 修复 → 复跑通过（HGF 组）"""
+    calls = {"n": 0}
+
+    def fake_run_hgf(workdir, files):
+        # 第一次失败，之后通过
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return 1, "failed"
+        return 0, "ok"
+
+    monkeypatch.setattr(roi_benchmark, "run_hgf_gates", fake_run_hgf)
+    task = {
+        "id": "fix-test",
+        "files": ["a.py"],
+        "files_content": {"a.py": "x = BUG_MARKER\n"},
+        "injected_defects": [{"file": "a.py", "marker": "BUG_MARKER"}],
+        "fixes": [{"file": "a.py", "marker": "BUG_MARKER", "replacement": "x = 1"}],
+    }
+    result = roi_benchmark.run_group([task], use_hgf=True, root_dir=str(tmp_path))
+    assert calls["n"] == 2  # 失败→修复→复跑
+    assert result["per_task"][0]["rounds"] == 2
+    assert result["per_task"][0]["first_pass"] is True
+    assert result["per_task"][0]["defects_escaped"] == 0  # 修复后逃逸 0
+
+
+def test_baseline_group_does_not_fix(tmp_path, monkeypatch):
+    """对照组：基线组不修复（缺陷常驻）"""
+
+    def fake_run_base(workdir, files):
+        return 1, "failed"
+
+    monkeypatch.setattr(roi_benchmark, "run_baseline_checks", fake_run_base)
+    task = {
+        "id": "no-fix",
+        "files": ["a.py"],
+        "files_content": {"a.py": "x = BUG_MARKER\n"},
+        "injected_defects": [{"file": "a.py", "marker": "BUG_MARKER"}],
+        "fixes": [{"file": "a.py", "marker": "BUG_MARKER", "replacement": "x = 1"}],
+    }
+    result = roi_benchmark.run_group([task], use_hgf=False, root_dir=str(tmp_path))
+    assert result["per_task"][0]["rounds"] == 1  # 只跑一次
+    assert result["per_task"][0]["first_pass"] is False
+    assert result["per_task"][0]["defects_escaped"] == 1  # 缺陷常驻
+
+
 @pytest.mark.integration
 def test_baseline_runs_without_hgf(tmp_path):
     """基线组不依赖 HGF（直接 ruff+pytest）——集成测试（较慢）"""
