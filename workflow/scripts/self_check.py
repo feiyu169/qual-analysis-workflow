@@ -90,24 +90,25 @@ def check(working_dir: str) -> dict:
     # Q3: 最近 workflow 提交是否含 docs/PROJECT_RECORD 变更？
     last_commit = _git(working_dir, "log", "-1", "--format=%h %s")
     changed = _git(working_dir, "log", "-1", "--name-only", "--format=")
-    has_docs = any(
-        "docs/" in c or "PROJECT_RECORD" in c or "pitfalls" in c or "CHANGELOG" in c
-        for c in changed.splitlines()
-    )
-    q3_ok = has_docs or not last_commit
-    checks.append(
-        {
-            "name": "Q3 记录同步",
-            "ok": q3_ok,
-            "detail": (
-                f"最近提交 {last_commit} 含 docs/记录变更"
-                if has_docs
-                else f"最近提交 {last_commit} 无 docs/记录变更（可能未沉淀）"
-                if last_commit
-                else "无提交记录"
-            ),
-        }
-    )
+    # V3.3.3 修复：empty commit 无文件变更（--name-only 为空）→ 跳过判定
+    #（empty commit 常是标记性提交，不触发记录同步要求）
+    if not changed.strip():
+        q3_ok = True
+        q3_detail = f"最近提交 {last_commit or '(无)'} 为无文件变更提交，跳过记录同步检查"
+    else:
+        has_docs = any(
+            "docs/" in c or "PROJECT_RECORD" in c or "pitfalls" in c or "CHANGELOG" in c
+            for c in changed.splitlines()
+        )
+        q3_ok = has_docs or not last_commit
+        q3_detail = (
+            f"最近提交 {last_commit} 含 docs/记录变更"
+            if has_docs
+            else f"最近提交 {last_commit} 无 docs/记录变更（可能未沉淀）"
+            if last_commit
+            else "无提交记录"
+        )
+    checks.append({"name": "Q3 记录同步", "ok": q3_ok, "detail": q3_detail})
 
     return {
         "passed": all(c["ok"] for c in checks),
