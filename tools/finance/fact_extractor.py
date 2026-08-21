@@ -13,11 +13,11 @@ HeavySkill v2.0 修正:
 """
 
 import json
+import logging
 import re
 import time
-import logging
-from dataclasses import dataclass, field, asdict
-from typing import Optional, Callable, Any
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
 
 logger = logging.getLogger(__name__)
 
@@ -29,37 +29,37 @@ logger = logging.getLogger(__name__)
 @dataclass
 class OperationalFacts:
     """运营数据"""
-    dau: Optional[float] = None
-    mau: Optional[float] = None
-    dau_mau_ratio: Optional[float] = None
-    daily_usage_minutes: Optional[float] = None
-    gmv: Optional[float] = None
-    gmv_yoy: Optional[float] = None
-    monetization_rate: Optional[float] = None
-    live_stream_revenue: Optional[float] = None
-    ad_revenue: Optional[float] = None
-    ecommerce_revenue: Optional[float] = None
-    paying_users: Optional[float] = None
-    arpu: Optional[float] = None
-    arppu: Optional[float] = None
-    creators: Optional[float] = None
+    dau: float | None = None
+    mau: float | None = None
+    dau_mau_ratio: float | None = None
+    daily_usage_minutes: float | None = None
+    gmv: float | None = None
+    gmv_yoy: float | None = None
+    monetization_rate: float | None = None
+    live_stream_revenue: float | None = None
+    ad_revenue: float | None = None
+    ecommerce_revenue: float | None = None
+    paying_users: float | None = None
+    arpu: float | None = None
+    arppu: float | None = None
+    creators: float | None = None
     
     # 新增：留存指标
-    retention_rate_d1: Optional[float] = None   # 次日留存率
-    retention_rate_d7: Optional[float] = None   # 7日留存率
-    retention_rate_d30: Optional[float] = None  # 30日留存率
+    retention_rate_d1: float | None = None   # 次日留存率
+    retention_rate_d7: float | None = None   # 7日留存率
+    retention_rate_d30: float | None = None  # 30日留存率
     
     # 新增：单位经济
-    ltv: Optional[float] = None                 # 用户生命周期价值
-    cac: Optional[float] = None                 # 获客成本
-    ltv_cac_ratio: Optional[float] = None       # LTV/CAC
-    payback_period: Optional[float] = None      # 回收期（月）
-    user_lifetime: Optional[float] = None       # 用户生命周期（月）
+    ltv: float | None = None                 # 用户生命周期价值
+    cac: float | None = None                 # 获客成本
+    ltv_cac_ratio: float | None = None       # LTV/CAC
+    payback_period: float | None = None      # 回收期（月）
+    user_lifetime: float | None = None       # 用户生命周期（月）
     
     # 新增：费用数据
-    marketing_expense: Optional[float] = None   # 营销费用（亿人民币）
-    new_users: Optional[float] = None           # 新增用户（亿）
-    gross_margin: Optional[float] = None        # 毛利率
+    marketing_expense: float | None = None   # 营销费用（亿人民币）
+    new_users: float | None = None           # 新增用户（亿）
+    gross_margin: float | None = None        # 毛利率
     
     sources: dict = field(default_factory=dict)
 
@@ -67,30 +67,30 @@ class OperationalFacts:
 @dataclass
 class FinancialFacts:
     """财务数据"""
-    revenue: Optional[float] = None
-    net_profit: Optional[float] = None
-    gross_margin: Optional[float] = None
-    operating_margin: Optional[float] = None
-    net_margin: Optional[float] = None
-    operating_cashflow: Optional[float] = None
-    capex: Optional[float] = None
-    total_assets: Optional[float] = None
-    total_liabilities: Optional[float] = None
-    equity: Optional[float] = None
-    cash_and_equivalents: Optional[float] = None
-    interest_bearing_debt: Optional[float] = None
+    revenue: float | None = None
+    net_profit: float | None = None
+    gross_margin: float | None = None
+    operating_margin: float | None = None
+    net_margin: float | None = None
+    operating_cashflow: float | None = None
+    capex: float | None = None
+    total_assets: float | None = None
+    total_liabilities: float | None = None
+    equity: float | None = None
+    cash_and_equivalents: float | None = None
+    interest_bearing_debt: float | None = None
 
 
 @dataclass
 class ManagementFacts:
     """管理层信息"""
-    ceo: Optional[str] = None
-    chairman: Optional[str] = None
-    cfo: Optional[str] = None
+    ceo: str | None = None
+    chairman: str | None = None
+    cfo: str | None = None
     board_changes: list = field(default_factory=list)
     shareholding: dict = field(default_factory=dict)
-    buyback_amount: Optional[float] = None
-    dividend_per_share: Optional[float] = None
+    buyback_amount: float | None = None
+    dividend_per_share: float | None = None
 
 
 @dataclass
@@ -268,7 +268,7 @@ def chunk_sections(
 # G4: JSON 鲁棒性 (三层防护)
 # ====================================================================
 
-def robust_json_parse(llm_output: str) -> tuple[Optional[dict], list[str]]:
+def robust_json_parse(llm_output: str) -> tuple[dict | None, list[str]]:
     """
     三层 JSON 解析防护。
 
@@ -349,7 +349,7 @@ def validate_numerical_ranges(data: dict) -> list[str]:
     return warnings
 
 
-def normalize_units(data: dict, warnings: list[str] = None) -> dict:
+def normalize_units(data: dict, warnings: list | None = None) -> dict:
     """
     Layer 2: 自动检测和修复单位错误。
 
@@ -395,24 +395,21 @@ def normalize_units(data: dict, warnings: list[str] = None) -> dict:
 
     # 毛利率 合理范围: 0-100%
     gm = fin.get('gross_margin')
-    if isinstance(gm, (int, float)):
-        if 0 < gm < 1:
-            fin['gross_margin'] = round(gm * 100, 1)
-            warnings.append(f"毛利率单位修正: {gm}→{fin['gross_margin']}% (×100)")
+    if isinstance(gm, (int, float)) and 0 < gm < 1:
+        fin['gross_margin'] = round(gm * 100, 1)
+        warnings.append(f"毛利率单位修正: {gm}→{fin['gross_margin']}% (×100)")
 
     # 净利率 合理范围: -50~50%
     nm = fin.get('net_margin')
-    if isinstance(nm, (int, float)):
-        if 0 < abs(nm) < 1:
-            fin['net_margin'] = round(nm * 100, 1)
-            warnings.append(f"净利率单位修正: {nm}→{fin['net_margin']}% (×100)")
+    if isinstance(nm, (int, float)) and 0 < abs(nm) < 1:
+        fin['net_margin'] = round(nm * 100, 1)
+        warnings.append(f"净利率单位修正: {nm}→{fin['net_margin']}% (×100)")
 
     # ARPU 合理范围: 1-10000元
     arpu = op.get('arpu')
-    if isinstance(arpu, (int, float)) and arpu > 0:
-        if arpu > 10000:
-            op['arpu'] = round(arpu / 100, 2)
-            warnings.append(f"ARPU单位修正: {arpu}→{op['arpu']} (÷100)")
+    if isinstance(arpu, (int, float)) and arpu > 10000:
+        op['arpu'] = round(arpu / 100, 2)
+        warnings.append(f"ARPU单位修正: {arpu}→{op['arpu']} (÷100)")
 
     return data
 
@@ -429,7 +426,7 @@ def _is_facts_empty(facts: 'ExtractedFacts') -> bool:
     return non_null < 2  # 少于2个有效字段视为空
 
 
-def cross_validate_with_wind(data: dict, wind_data: Optional[dict]) -> list[str]:
+def cross_validate_with_wind(data: dict, wind_data: dict | None) -> list[str]:
     """与 Wind 数据交叉验证（canonical 别名兜底，修复键契约断裂）"""
     warnings = []
     if not wind_data:
@@ -486,6 +483,8 @@ EXTRACTION_PROMPT = """你是一个财务数据提取专家。请从以下财报
 3. 数值统一使用亿元为单位（人民币），保留2位小数
 4. 百分比保留1位小数
 5. 如果某项数据在本段中未出现，不要填充（用 null）
+6. **不要提取财务数字（营收/净利润/毛利率/现金流/总资产等）**——财务数据 100% 以 Wind 为准（B2b-1），
+   本表只提取运营指标（用户/时长/GMV/ARPU 等）与管理信息（高管/回购/分红）
 
 ## 单位规范（必须严格遵守，违反将导致数据错误）
 - DAU/MAU: 亿（如"日活跃用户4.1亿"→填4.1，不是410或4100）
@@ -513,14 +512,6 @@ EXTRACTION_PROMPT = """你是一个财务数据提取专家。请从以下财报
     "paying_users": {{"value": 1.2, "source": "业务概览"}},
     "arpu": {{"value": 198.6, "source": "业务概览"}}
   }},
-  "financial": {{
-    "revenue": {{"value": 1427.76, "source": "利润表"}},
-    "net_profit": {{"value": 186.17, "source": "利润表"}},
-    "gross_margin": {{"value": 54.9, "source": "利润表"}},
-    "operating_cashflow": {{"value": 267.16, "source": "现金流量表"}},
-    "total_assets": {{"value": 1645.04, "source": "资产负债表"}},
-    "cash_and_equivalents": {{"value": 111.80, "source": "资产负债表"}}
-  }},
   "management": {{
     "ceo": {{"value": "程一笑", "source": "董事会报告"}},
     "chairman": {{"value": "程一笑", "source": "董事会报告"}},
@@ -538,7 +529,7 @@ EXTRACTION_PROMPT = """你是一个财务数据提取专家。请从以下财报
 }}"""
 
 
-def _parse_chunk_response(llm_output: str, chunk_idx: int) -> tuple[Optional[dict], list[str]]:
+def _parse_chunk_response(llm_output: str, chunk_idx: int) -> tuple[dict | None, list[str]]:
     """解析单批次的 LLM 输出"""
     data, warnings = robust_json_parse(llm_output)
 
@@ -599,7 +590,6 @@ def _verify_company_identity(sections: dict[str, str], company_name: str, ticker
     name_variants = [company_name]
     _tc_map = {
         "阅": "閱", "文": "文", "集": "集", "团": "團",
-        "集": "集團", "團": "團",
     }
     if "阅文集团" in company_name:
         name_variants += ["閱文集團", "阅文集團", "閱文集团", "China Literature"]
@@ -672,8 +662,8 @@ def extract_facts(
     llm_caller: Callable[[str, str], str],
     max_chars: int = 300000,
     chunk_size: int = 30000,
-    wind_data: Optional[dict] = None,
-    fiscal_year: Optional[int] = None,
+    wind_data: dict | None = None,
+    fiscal_year: int | None = None,
     report_type: str = "年报",
 ) -> ExtractedFacts:
     """
@@ -753,7 +743,7 @@ def extract_facts(
                         logger.warning(f"批次 {i+1}/{len(chunks)} 提取为空，重试 {attempt+1}/{max_retries}")
                     else:
                         logger.warning(f"批次 {i+1}/{len(chunks)} 提取失败 (已重试{max_retries}次): {warnings}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 all_warnings.append(f"批次 {i+1} LLM 调用异常 (attempt {attempt+1}): {e}")
                 logger.error(f"批次 {i+1} LLM 调用异常: {e}")
                 if attempt >= max_retries:
@@ -775,7 +765,17 @@ def extract_facts(
         warnings=all_warnings,
     )
 
-    # 5. Wind 交叉验证
+    # 5. B2b-1：财务 100% Wind——从 Wind 处置表填充 financial（有源/派生/未披露）
+    if wind_data:
+        from .wind_field_disposition import resolve_financial_from_wind
+        fin_values, fin_annotations = resolve_financial_from_wind(wind_data)
+        for field, val in fin_values.items():
+            if hasattr(facts.financial, field):
+                setattr(facts.financial, field, val)
+        facts.meta.warnings.extend(fin_annotations)
+        logger.info(f"财务字段 Wind 填充: {len(fin_values)} 个（含派生/未披露标注 {len(fin_annotations)} 条）")
+
+    # 6. Wind 交叉验证（financial 已 100% Wind，此处主要验证运营/派生字段偏差）
     if wind_data:
         wind_warnings = cross_validate_with_wind(facts.to_dict(), wind_data)
         facts.meta.warnings.extend(wind_warnings)
@@ -790,7 +790,7 @@ def extract_facts(
     return facts
 
 
-def _inject_fiscal_year_instruction(chunk: str, fiscal_year: Optional[int],
+def _inject_fiscal_year_instruction(chunk: str, fiscal_year: int | None,
                                     report_type: str = "年报") -> str:
     """P0-B1: 向批次文本注入财年指令（区分当期/对比期）"""
     if fiscal_year is None:
@@ -832,15 +832,11 @@ def _merge_chunk_data(all_data: list[dict], company_name: str, ticker: str) -> E
                     # 后批次覆盖
                     setattr(facts.operational, key, val)
 
-        # 合并 financial
+        # 合并 financial —— B2b-1：财务 100% Wind，忽略 LLM 提取的财务字段（防污染）
+        # （LLM 财务值不再合并；financial 由 extract_facts 从 Wind 处置表填充）
         fin = chunk_data.get('financial', {})
-        for key, val in fin.items():
-            if val is not None and hasattr(facts.financial, key):
-                current = getattr(facts.financial, key)
-                if current is None:
-                    setattr(facts.financial, key, val)
-                else:
-                    setattr(facts.financial, key, val)
+        if fin:
+            logger.info(f"忽略 LLM 财务字段 {len(fin)} 个（B2b-1：财务以 Wind 为准）")
 
         # 合并 management
         mgmt = chunk_data.get('management', {})
@@ -854,17 +850,17 @@ def _merge_chunk_data(all_data: list[dict], company_name: str, ticker: str) -> E
 
         # 合并 business (列表字段: 合并去重)
         biz = chunk_data.get('business', {})
-        if 'segments' in biz and biz['segments']:
+        if biz.get('segments'):
             existing_names = {s.get('name') for s in facts.business.segments}
             for seg in biz['segments']:
                 if isinstance(seg, dict) and seg.get('name') not in existing_names:
                     facts.business.segments.append(seg)
                     existing_names.add(seg.get('name'))
-        if 'strategic_priorities' in biz and biz['strategic_priorities']:
+        if biz.get('strategic_priorities'):
             for p in biz['strategic_priorities']:
                 if p not in facts.business.strategic_priorities:
                     facts.business.strategic_priorities.append(p)
-        if 'risks' in biz and biz['risks']:
+        if biz.get('risks'):
             for r in biz['risks']:
                 if r not in facts.business.risks:
                     facts.business.risks.append(r)
@@ -894,8 +890,8 @@ def format_facts_as_context(facts: ExtractedFacts) -> str:
     lines.append("")
 
     # 财务数据表
-    lines.append("### 财务数据（单财年 FY{}）".format(fy))
-    lines.append("| 指标 | 口径 | FY{} | 单位 | 来源 |".format(fy))
+    lines.append(f"### 财务数据（单财年 FY{fy}）")
+    lines.append(f"| 指标 | 口径 | FY{fy} | 单位 | 来源 |")
     lines.append("|------|------|------|------|------|")
     fin_fields = [
         ("营业收入", "IFRS", fin.revenue, "亿元"),
@@ -913,8 +909,8 @@ def format_facts_as_context(facts: ExtractedFacts) -> str:
     lines.append("")
 
     # 运营数据表
-    lines.append("### 运营数据（FY{}）".format(fy))
-    lines.append("| 指标 | FY{} | 单位 | 来源 |".format(fy))
+    lines.append(f"### 运营数据（FY{fy}）")
+    lines.append(f"| 指标 | FY{fy} | 单位 | 来源 |")
     lines.append("|------|------|------|------|")
     op_fields = [
         ("DAU", op.dau, "亿"), ("MAU", op.mau, "亿"),
@@ -934,7 +930,7 @@ def format_facts_as_context(facts: ExtractedFacts) -> str:
 
     # 业务分部表
     if biz.segments:
-        lines.append("### 业务分部（FY{}）".format(fy))
+        lines.append(f"### 业务分部（FY{fy}）")
         lines.append("| 分部 | 收入(亿元) | YoY(%) |")
         lines.append("|------|-----------|--------|")
         for seg in biz.segments:

@@ -8,10 +8,9 @@ data_repair.py — Layer 1: 数据修复模块
 4. AI痕迹清洗：正则+Prompt约束
 """
 
-import re
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +22,11 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PEReport:
     """PE校验报告"""
-    report_pe: Optional[float]          # 报告中的PE值
-    wind_pe: Optional[float]            # Wind实时PE
-    deviation: Optional[float]          # 偏差百分比
+    report_pe: float | None          # 报告中的PE值
+    wind_pe: float | None            # Wind实时PE
+    deviation: float | None          # 偏差百分比
     is_valid: bool                      # 是否通过校验
-    warning: Optional[str] = None       # 警告信息
+    warning: str | None = None       # 警告信息
 
 
 @dataclass
@@ -44,7 +43,7 @@ class ConsistencyIssue:
 @dataclass
 class RepairResult:
     """修复结果"""
-    pe_report: Optional[PEReport] = None
+    pe_report: PEReport | None = None
     consistency_issues: list[ConsistencyIssue] = field(default_factory=list)
     source_fixes: int = 0               # 来源标注修复数量
     ai_trace_fixes: int = 0             # AI痕迹修复数量
@@ -126,7 +125,7 @@ def validate_pe_against_wind(
     )
 
 
-def _extract_pe_from_report(content: str) -> Optional[float]:
+def _extract_pe_from_report(content: str) -> float | None:
     """从报告中提取PE值"""
     # 匹配模式：PE 12-15倍、PE约为21x、市盈率12-15倍、PE(TTM) 21x
     patterns = [
@@ -215,7 +214,7 @@ def fix_source_annotations(
     fiscal_year: int = 2025,
 ) -> tuple[str, int]:
     """
-    修复数据来源标注，确保年份正确。
+    修复数据来源标注，确保年份正确（B2b-3：canonicalize——动态识别非目标财年，任意公司名通用）。
 
     Args:
         report_content: 报告原文
@@ -224,10 +223,9 @@ def fix_source_annotations(
     Returns:
         (修复后的报告内容, 修复数量)
     """
-    # 匹配错误的年份标注
-    # 例如："来源：快手2023年年报" → "来源：快手2025年年报"
-    # 例如："快手2023年年报" → "快手2025年年报"
-    wrong_years = [2023, 2024, 2026]  # 非目标年份
+    # B2b-3：wrong_years 动态化（canonicalize——非目标财年的附近 20XX 年份，删硬编码 [2023,2024,2026]）
+    # 范围 ±5 年（覆盖历史年报引用与手误未来年份），排除目标财年
+    wrong_years = [y for y in range(fiscal_year - 5, fiscal_year + 6) if y != fiscal_year]
     fixes = 0
 
     fixed_content = report_content
@@ -235,7 +233,7 @@ def fix_source_annotations(
         if wrong_year == fiscal_year:
             continue
 
-        # 替换 "来源：快手XXXX年年报" 中的年份
+        # 替换 "来源：XXXX年年报" 中的年份（通用：任何 20XX 非目标财年）
         pattern = f'(来源[：:][^\\n]{{0,20}}){wrong_year}(年)'
         replacement = f'\\g<1>{fiscal_year}\\g<2>'
         new_content = re.sub(pattern, replacement, fixed_content)
@@ -244,8 +242,8 @@ def fix_source_annotations(
             fixes += count
             fixed_content = new_content
 
-        # 替换不带"来源："前缀的 "快手XXXX年年报"
-        pattern2 = f'(快手){wrong_year}(年年报)'
+        # 替换不带"来源："前缀的 "公司名XXXX年年报"（B2b-3：删公司名硬编码，通用匹配）
+        pattern2 = f'([^0-9\\n]{{1,15}}){wrong_year}(年年报)'
         replacement2 = f'\\g<1>{fiscal_year}\\g<2>'
         new_content2 = re.sub(pattern2, replacement2, fixed_content)
         if new_content2 != fixed_content:
@@ -392,7 +390,7 @@ def fix_consistency_issues(
 
             if wrong_val != correct_val:
                 # 精确替换数值
-                pattern = re.escape(str(wrong_val))
+                pattern = re.escape(str(wrong_val))  # noqa: F841
                 new_content = content.replace(str(wrong_val), str(correct_val), 1)
                 if new_content != content:
                     fixed_chapters[ch_num] = new_content
@@ -464,8 +462,8 @@ def clean_ai_traces(content: str) -> tuple[str, int]:
 
 def repair_report(
     chapters: dict[int, str],
-    wind_valuation: Optional[dict] = None,
-    wind_financials: Optional[dict] = None,
+    wind_valuation: dict | None = None,
+    wind_financials: dict | None = None,
     fiscal_year: int = 2025,
 ) -> tuple[dict[int, str], RepairResult]:
     """
@@ -481,7 +479,7 @@ def repair_report(
         (修复后的章节, 修复结果报告)
     """
     result = RepairResult()
-    original_chapters = dict(chapters)  # 备份用于回滚
+    original_chapters = dict(chapters)  # 备份用于回滚  # noqa: F841
 
     try:
         # === Step 1: PE实时校验 ===
@@ -498,10 +496,10 @@ def repair_report(
                         fixed_chapters[ch_num] = fixed_content
                     chapters = fixed_chapters
                     logger.info(f"PE自动修复完成：→约{pe_report.wind_pe:.1f}倍")
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.warning(f"PE修复失败，保留原始值: {e}")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error(f"PE校验异常: {e}")
         result.warnings.append(f"PE校验异常: {e}")
 
@@ -514,12 +512,12 @@ def repair_report(
                 fixed_content, fixes = fix_source_annotations(content, fiscal_year)
                 total_source_fixes += fixes
                 fixed_chapters[ch_num] = fixed_content
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"第{ch_num}章来源标注修复失败: {e}")
                 fixed_chapters[ch_num] = content
         chapters = fixed_chapters
         result.source_fixes = total_source_fixes
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error(f"来源标注修复异常: {e}")
         result.warnings.append(f"来源标注修复异常: {e}")
 
@@ -532,7 +530,7 @@ def repair_report(
             correct_values = _build_correct_values(wind_financials)
             if correct_values:
                 chapters = fix_consistency_issues(chapters, consistency_issues, correct_values)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error(f"一致性审计异常: {e}")
         result.warnings.append(f"一致性审计异常: {e}")
 
@@ -545,12 +543,12 @@ def repair_report(
                 cleaned, fixes = clean_ai_traces(content)
                 total_ai_fixes += fixes
                 fixed_chapters[ch_num] = cleaned
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"第{ch_num}章AI痕迹清洗失败: {e}")
                 fixed_chapters[ch_num] = content
         chapters = fixed_chapters
         result.ai_trace_fixes = total_ai_fixes
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error(f"AI痕迹清洗异常: {e}")
         result.warnings.append(f"AI痕迹清洗异常: {e}")
 
