@@ -91,10 +91,12 @@ def check(working_dir: str) -> dict:
     last_commit = _git(working_dir, "log", "-1", "--format=%h %s")
     changed = _git(working_dir, "log", "-1", "--name-only", "--format=")
     # V3.3.3 修复：empty commit 无文件变更（--name-only 为空）→ 跳过判定
-    #（empty commit 常是标记性提交，不触发记录同步要求）
+    # （empty commit 常是标记性提交，不触发记录同步要求）
     if not changed.strip():
         q3_ok = True
-        q3_detail = f"最近提交 {last_commit or '(无)'} 为无文件变更提交，跳过记录同步检查"
+        q3_detail = (
+            f"最近提交 {last_commit or '(无)'} 为无文件变更提交，跳过记录同步检查"
+        )
     else:
         has_docs = any(
             "docs/" in c or "PROJECT_RECORD" in c or "pitfalls" in c or "CHANGELOG" in c

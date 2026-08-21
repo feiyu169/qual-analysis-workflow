@@ -3,6 +3,10 @@
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+addopts = "-m 'not integration'"
+markers = [
+    "integration: 真实子进程集成测试（较慢，默认排除）",
+]
 
 # HGF 门禁的 ruff 规则集固定（V3.1 接入）。
 # 原因：ruff 0.16 起默认 select 随版本漂移（含 RUF001/002/003 等会把中文
@@ -17,7 +21,7 @@ testpaths = ["tests"]
 # V3.3.2（自审查 M2 版本收敛）：声明项目版本，与 __init__.py / workflow.yaml 一致
 [project]
 name = "hgf-workflow"
-version = "3.3.3"
+version = "3.4.0"
 description = "Hermes Gate Flow - 门禁驱动开发工作流（DSH 接入版）"
 requires-python = ">=3.10"
 

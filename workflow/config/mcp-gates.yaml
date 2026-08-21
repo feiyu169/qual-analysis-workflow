@@ -1,4 +1,4 @@
-# 门禁配置文件 - V3.3.3（版本号与 workflow/__init__.py 一致；V3.3.3 记忆长效机制 P53）
+# 门禁配置文件 - V3.4.0（版本号与 workflow/__init__.py 一致）
 # .mcp-gates.yaml
 #
 # V3.1 变更：
@@ -138,6 +138,19 @@ level_gates:
     must_pass: ["secret_scan"]
     should_pass: []
     optional: []
+
+  # V3.4-B 轻量等级（heavyskill 审查修正）：成本与变更匹配
+  L0_LITE:
+    must_pass: ["secret_scan"]
+    should_pass: []
+    optional: []
+    # 纯文档/配置小改（<50 行）——仅密钥扫描，<10s
+
+  L1_LITE:
+    must_pass: ["static_analysis", "secret_scan"]
+    should_pass: []
+    optional: []
+    # 单文件小改（<100 行）——静态+密钥，<60s（无全量 pytest）
 
   L1:
     must_pass: ["static_analysis", "unit_test", "secret_scan", "test_quality", "failure_log"]

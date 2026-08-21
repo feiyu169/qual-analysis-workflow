@@ -165,8 +165,32 @@ class TaskClassifier:
                 logger.info("task_classified", level="IAC", type="IAC")
                 return ClassificationResult(level="IAC", type="IAC")
 
-            # 3. 规模分级（仅统计代码文件）
+            # 2.5 V3.4-B 轻量分级（heavyskill 审查修正）：小变更用轻量门禁集
+            # 成本与变更匹配——文档改 <10s、单文件小改 <60s，避免 L2 全量 5-10min
+            # 约束：关键模块/中高风险变更**不轻量**（不得绕过安全升级）
             change_lines = self.get_change_lines(task, change_types)
+            risk = self._assess_risk_level(task)
+            is_critical = self.is_critical_module(task.affected_areas or [])
+            lightweight = (
+                None
+                if (is_critical or risk in ("high", "medium"))
+                else self.select_level(change_types, task.file_count, change_lines)
+            )
+            if lightweight:
+                logger.info(
+                    "lightweight_classified",
+                    level=lightweight,
+                    file_count=task.file_count,
+                    change_lines=change_lines,
+                    risk=risk,
+                )
+                return ClassificationResult(
+                    level=lightweight,
+                    type=change_types[0] if change_types else "CODE",
+                    change_lines=change_lines,
+                )
+
+            # 3. 规模分级（仅统计代码文件）
             level = "L1"
 
             if task.file_count > 10 or change_lines > 500:
@@ -182,12 +206,11 @@ class TaskClassifier:
             )
 
             # 4. 关键模块检查
-            if self.is_critical_module(task.affected_areas or []):
+            if is_critical:
                 level = self.max_level(level, "L2")
                 logger.info("critical_module_upgrade", level=level)
 
             # 5. 风险评估
-            risk = self._assess_risk_level(task)
             logger.info("risk_assessed", risk=risk)
 
             # 6. 风险升级
@@ -264,6 +287,34 @@ class TaskClassifier:
 
         # 检查 PR 标题格式（如 sev0, sev1）
         return bool(re.search(r"^sev[0-1]", description_lower))
+
+    def select_level(
+        self, change_types: list[str], file_count: int, change_lines: int
+    ) -> str | None:
+        """V3.4-B 轻量分级（heavyskill 审查修正 B1：空 types 显式判空）。
+
+        小变更用轻量门禁集（L0_LITE/L1_LITE），成本与变更匹配：
+          - 纯文档/配置小改（<50 行）→ L0_LITE（secret_scan，<10s）
+          - 单文件小改（<100 行）→ L1_LITE（ruff+secret_scan，<60s）
+        返回 None = 走常规分级（L1/L2/L3）。
+        """
+        # B1 修正：types 为空时不得用 all()（all([])=True 会误判 L0_LITE）
+        if not change_types:
+            return None
+        if (
+            all(t in ("DOCS", "CONFIG", "IAC") for t in change_types)
+            and change_lines < 50
+            and file_count <= 1
+        ):
+            return "L0_LITE"
+        if (
+            len(change_types) == 1
+            and change_types[0] == "CODE"
+            and file_count == 1
+            and change_lines < 100
+        ):
+            return "L1_LITE"
+        return None
 
     def detect_change_types(self, task: Task) -> list[str]:
         """检测变更类型（支持多类型）"""

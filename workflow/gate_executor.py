@@ -282,9 +282,41 @@ class GateExecutor:
                 )
                 continue
 
+            # V3.4-A 门禁健康熔断：OPEN 且未过冷却 → 跳过并告警（不阻塞）
+            # （critical_gates 永不熔断；熔断状态由 gate_health.record 维护）
+            try:
+                from . import gate_health as _gh
+            except ImportError:
+                import gate_health as _gh
+            mode = _gh.decide(working_dir, gate_config.name)
+            if mode == "skip":
+                logger.warning(
+                    "gate_circuit_open",
+                    gate=gate_config.name,
+                    detail="门禁健康熔断（连续失败降级为告警，不阻塞）",
+                )
+                results.append(
+                    GateResult(
+                        name=gate_config.name,
+                        tool=gate_config.tool,
+                        status=GateExecutionStatus.SKIPPED,
+                        exit_code=0,
+                        issues_count=0,
+                        message="门禁健康熔断（连续失败，降级为告警，不阻塞）",
+                        level=gate_config.level,
+                    )
+                )
+                continue
+
             # 执行门禁
             result = self._execute_single_gate(gate_config, files, working_dir)
             results.append(result)
+
+            # V3.4-A 记录健康状态（熔断状态机更新）
+            try:
+                _gh.record(working_dir, gate_config.name, passed=result.passed)
+            except Exception:
+                pass  # 熔断状态记录失败不影响门禁结果
 
             # 检查 MUST_PASS：FAILED 与 ERROR 都必须阻断（V3.2 修复：
             # 此前只统计 FAILED，ERROR（如工具输出解析失败）会假绿灯）

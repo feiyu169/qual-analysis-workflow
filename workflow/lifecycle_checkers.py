@@ -688,6 +688,15 @@ def _check_self_audit(gate: dict, working_dir: str, file_hint: str | None) -> tu
                         f"docs/lessons/{fname} 无 README.md 索引条目（死文档）"
                     )
 
+    # ── 检查 5（V3.4-E）：声明式规则注册表自动执行（新经验 JSON 规则）──────
+    try:
+        from . import declarative_checker
+    except ImportError:
+        import declarative_checker
+    decl_ok, decl_issues = declarative_checker.run_declarative(working_dir)
+    if not decl_ok:
+        issues.extend(decl_issues)
+
     return (len(issues) == 0), issues
 
 

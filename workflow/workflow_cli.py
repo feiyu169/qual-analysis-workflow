@@ -40,8 +40,24 @@ def main():
     parser.add_argument("--lines", type=int, default=0, help="变更行数")
     parser.add_argument(
         "--level",
-        choices=["L0", "L1", "L2", "L3", "L3_LITE", "IAC", "CONFIG", "DOCS"],
-        help="人工覆盖分级（机器建议、人确认；覆盖原因记录在输出中）",
+        choices=[
+            "L0",
+            "L0_LITE",
+            "L1",
+            "L1_LITE",
+            "L2",
+            "L3",
+            "L3_LITE",
+            "IAC",
+            "CONFIG",
+            "DOCS",
+        ],
+        help="人工覆盖分级（机器建议、人确认；覆盖原因记录在输出中；L0_LITE/L1_LITE 为 V3.4 轻量等级）",
+    )
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="V3.4-B 快速模式：仅跑变更文件相关测试（配合 L0_LITE/L1_LITE）",
     )
     parser.add_argument("--areas", default="", help="影响区域，逗号分隔")
     parser.add_argument("--labels", default="", help="标签，逗号分隔")

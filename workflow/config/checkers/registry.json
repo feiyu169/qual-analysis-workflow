@@ -1,0 +1,31 @@
+{
+  "schema_version": "hgf.v1",
+  "kind": "declarative-checkers",
+  "description": "V3.4-E 声明式检查器规则注册表：新经验沉淀 = 在此加一条 JSON 规则（无需手写 Python 检查器）。self_audit 检查器（gate_5_3 检查项 5）自动执行全部规则。",
+  "rules": [
+    {
+      "id": "no-hardcoded-secret",
+      "type": "file_content",
+      "pattern": "(api[_-]?key|password|secret|token)\\s*=\\s*['\"][A-Za-z0-9]{16,}",
+      "glob": "**/*.py",
+      "exclude_glob": ["tests/**", "docs/**"],
+      "severity": "P0",
+      "message": "检测到疑似硬编码密钥（应走凭据服务/环境变量）"
+    },
+    {
+      "id": "readme-has-install",
+      "type": "doc_section",
+      "section": "安装",
+      "glob": "README.md",
+      "severity": "P1",
+      "message": "README 缺少「安装」章节"
+    },
+    {
+      "id": "registry-json-valid",
+      "type": "json_valid",
+      "glob": "config/checkers/registry.json",
+      "severity": "P1",
+      "message": "声明式规则注册表 JSON 无效"
+    }
+  ]
+}

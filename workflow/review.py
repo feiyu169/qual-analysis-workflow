@@ -117,3 +117,82 @@ def record_review(
         import state_io as _io
     _io.atomic_append_jsonl(p, rec)
     return rec
+
+
+# ── V3.4-D 外部独立校准（heavyskill 审查修正）──────────────────────────────
+# 修正项：
+#   D1 移除伪签名（signed: True 无真实机制）→ 真实标记 external=true +
+#      verifier_evidence（外部证据哈希/标识），不承诺不存在的签名
+#   D2 verifier 不再硬编码 heavyskill——外部验证必须传外部 verifier 名
+#   D3 加 nonce + task_binding + expires_at（防重放/防串用），payload 提示脱敏
+
+
+def export_external_pack(
+    gate: str,
+    pack_md: str,
+    verifier: str = "human",
+    task_binding: str = "",
+) -> dict:
+    """导出外部验证包（人类专家/异构工具可读格式，V3.4-D 修正）。
+
+    不做伪签名：external=true + verifier_evidence 如实标注"待外部验证"，
+    绝不声称"已签名"（D1）。
+    """
+    import hashlib
+    import uuid
+
+    nonce = uuid.uuid4().hex[:16]
+    return {
+        "schema": "hgf.external-review.v1",
+        "gate": gate,
+        "verifier": verifier,
+        "nonce": nonce,
+        "task_binding": task_binding or gate,
+        "expires_at": (datetime.now().timestamp() + 86400 * 7),  # 7 天有效
+        "request": (
+            f"这是 HGF 的 {gate} 评审包（nonce={nonce}）。请作为独立验证方"
+            "（非 HGF 生态）审查以下代码/文档，输出：P0/P1/P2 问题 + 行级引用 "
+            "+ PASS/FAIL 结论。返回时请回显 nonce 以绑定本请求。"
+        ),
+        "payload": pack_md,
+        "external": True,  # D1：真标记，非伪签名
+        "verifier_evidence": "pending",  # 待外部验证填充
+        "payload_hash": hashlib.sha256(pack_md.encode("utf-8")).hexdigest()[:16],
+    }
+
+
+def record_external_verdict(
+    working_dir: str,
+    gate: str,
+    verdict: str,
+    evidence: str,
+    verifier: str,
+    nonce: str = "",
+    payload_hash: str = "",
+) -> dict:
+    """记录外部验证结论（D2/D3 修正）。
+
+    独立性保障：
+    - reviewer 前缀 external:（可审计区分内部/外部）
+    - verifier 传外部方名称（不硬编码 heavyskill）
+    - nonce + payload_hash 绑定：防"外部结论被内部代码冒名"
+    - 无伪签名：evidence 为外部方提供的实际验证证据（文本/报告摘要）
+    """
+    if not verifier or verifier == "heavyskill":
+        raise ValueError(
+            "外部验证必须指定 verifier（heavyskill 是同生态评审，不满足独立校准——V3.4-D）"
+        )
+    notes = (
+        f"外部独立验证: {evidence}"
+        + (f" [nonce={nonce}]" if nonce else "")
+        + (f" [payload_hash={payload_hash}]" if payload_hash else "")
+    )
+    return record_review(
+        working_dir,
+        gate=gate,
+        verdict=verdict,
+        reviewer=f"external:{verifier}",
+        verifier=verifier,
+        notes=notes,
+        kind="independent",
+    )
