@@ -1,7 +1,7 @@
 # HGF 项目记录（会话持久化存档）
 
 > 本文件是 HGF（Hermes Gate Flow）在 DSH 中全部工作的持久化记录，供下次会话恢复上下文。
-> 最后更新：2026-08-21（HGF V3.3.2 已推送至 GitHub feiyu169/hermes-gate-flow + 自审查收敛修复完成）
+> 最后更新：2026-08-21（HGF V3.3.3 记忆长效机制落地——P53 元门禁自律 + 四层记忆架构，已推送 hermes-gate-flow）
 
 ---
 
@@ -38,6 +38,7 @@ HGF 是门禁驱动开发工作流，部署于 DSH（Cordis 插件宿主）。�
 | **V3.3.1** | **架构复审修复（复审共识 7.6/10 的建议 1-4）**：_run_command 委托 tool_runner + mcp_server.check_security 改走 tool_runner + 删 gate_results 死表 + atomic_append_jsonl 诚实化(fsync) + re-export 收敛(__all__) + reopen 异常改 warning | `00faa14` |
 | **V3.3.1 狗粮化** | **3 项待办完成 + 16/16 gate 全流程端到端跑通**：heavyskill 模式2 恢复（.env 已有 key + K=1 冒烟通过）+ .github 已同步 + checkov 无 IaC 直通增强 | `99a2445`（hermes-gate-flow master） |
 | **V3.3.2** | **HGF 自审查收敛修复**（报告 output/hgf-self-audit-report.md）：S1 failure_log 失败雪崩自锁（自身失败不入日志 + `--failures --archive` 归档 201 条历史脏数据）+ S2 baseline.json 损坏容错（load 返回 None + canary 自动重建）+ S3 requirements-hgf.txt 改真 pip 文件 + M1 README 补语义条目 + M2 版本收敛 3.3.2 + M4 dependency_scan 注释诚实化 + L1/L2/L3 状态补全（STATE.md/lifecycle.json/reviews.jsonl） | `a89ae74`（hermes-gate-flow master，2026-08-21 推送） |
+| **V3.3.3** | **记忆长效机制（V2 方案，P53 元门禁自律）**：heavyskill K=8 审议后实施——L0 `_check_self_audit` 检查器 4 项验证 + gate_5_3 独立门禁 + 8 防回归测试 + pre-push/CI self-audit job；L1 AGENTS.md 记忆继承协议（dsh-agent-instructions 自动加载）；L2 docs/lessons/ 档案库 + 索引校验 + pitfalls-summary.json；L3 scripts/self_check.py 三问自检。**203 测试全绿 + L2 门禁 success=True** | `d62b875`（hermes-gate-flow master，2026-08-21 推送） |
 
 ### V3.3.0 架构重构明细（2026-08-18，架构专家 8 轨迹评审后实施）
 
