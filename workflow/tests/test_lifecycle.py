@@ -322,6 +322,31 @@ def test_dependency_passes_zero_deps(tmp_path):
     assert ok is True
 
 
+def test_checkov_passes_no_iac(tmp_path):
+    """V3.3.1 狗粮化发现：无 IaC 资产 → 直通（无审计目标）"""
+    ok, issues = lifecycle._check_checkov({"id": "gate_4_1"}, str(tmp_path), None)
+    assert ok is True
+    assert any("无 IaC" in i for i in issues)
+
+
+def test_checkov_scans_when_iac_exists(tmp_path, monkeypatch):
+    """有 IaC 文件 → 跑 checkov"""
+    wd = str(tmp_path)
+    with open(os.path.join(wd, "main.tf"), "w", encoding="utf-8") as f:
+        f.write('resource "aws_s3_bucket" "b" {\n}\n')
+    import tool_runner
+
+    class FakeRun:
+        returncode = 0
+        stdout = "{}"
+        stderr = ""
+
+    monkeypatch.setattr(tool_runner, "check_tool_available", lambda tool: "checkov")
+    monkeypatch.setattr(tool_runner, "safe_run", lambda *a, **k: FakeRun())
+    ok, issues = lifecycle._check_checkov({"id": "gate_4_1"}, wd, None)
+    assert ok is True, issues
+
+
 def test_dependency_scans_when_deps_exist(tmp_path, monkeypatch):
     """有真实依赖 → 跑 safety（环境可用时）"""
     wd = str(tmp_path)

@@ -494,7 +494,23 @@ def _check_dependency(gate, working_dir, file_hint) -> tuple:
 
 
 def _check_checkov(gate, working_dir, file_hint) -> tuple:
-    """IaC 安全审计准出真检查器：checkov 真跑（此前为 ruff 兜底）"""
+    """IaC 安全审计准出真检查器：checkov 真跑（此前为 ruff 兜底）。
+
+    V3.3.1（狗粮化发现）：无 IaC 资产（无 .tf/.tfvars/cloudformation/k8s 文件）
+    → 直通（无审计目标，客观事实非静默降级）；有资产才跑 checkov。
+    """
+    import glob as _glob
+
+    ia_c_patterns = (
+        "*.tf", "*.tfvars", "*.template",
+        "cloudformation/**", "k8s/**", "terraform/**",
+    )
+    has_iac = any(
+        _glob.glob(os.path.join(working_dir, p))
+        for p in ia_c_patterns
+    )
+    if not has_iac:
+        return True, ["无 IaC 资产（Terraform/CloudFormation/K8s），IaC 审计通过"]
     return _check_tool_scan(
         gate,
         working_dir,
