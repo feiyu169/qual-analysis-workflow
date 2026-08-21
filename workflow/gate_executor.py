@@ -299,12 +299,23 @@ class GateExecutor:
         # 失败自动记录（V3.1/V3.2：把"失败要记录"变成系统行为）。
         # 仅 MUST_PASS 阻断性失败进入纪律日志（failure_log 门禁要求根因）；
         # SHOULD_PASS/OPTIONAL 失败记入 runs.jsonl 历史与 failure_handler 计数。
+        # V3.3.2（自审查 S1 修复）：failure_log 门禁自身的失败**不写入**
+        # failures.jsonl——否则"记录不完整"失败被记录成新记录（且必然缺
+        # root_cause/fix）→ 下次检查到更多不完整 → 自指循环指数爆炸
+        # （实测 232 条/196 未解决的历史雪崩）。failure_log 是元门禁，
+        # 它失败的原因（其他门禁的未闭环记录）已在检查结果中体现。
         try:
             from . import failure_log
         except ImportError:
             import failure_log
         for result in results:
             if result.failed and result.level == GateLevel.MUST_PASS:
+                if result.name == "failure_log":
+                    logger.warning(
+                        "failure_log_self_failure_skipped",
+                        detail="failure_log 门禁自身失败不入纪律日志（防自锁雪崩）",
+                    )
+                    continue
                 failure_log.record_failure(
                     working_dir=working_dir,
                     gate=result.name,
@@ -377,9 +388,7 @@ class GateExecutor:
         # 运行时双向耦合（执行器依赖生命周期 + 生命周期推进依赖执行器输出）。
         if self.matrix_evidence_callback is not None:
             try:
-                evidence = self.matrix_evidence_callback(
-                    working_dir, report.to_dict()
-                )
+                evidence = self.matrix_evidence_callback(working_dir, report.to_dict())
                 if evidence and evidence.get("advanced"):
                     logger.info(
                         "lifecycle_auto_advanced",

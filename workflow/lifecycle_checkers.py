@@ -248,8 +248,11 @@ def _check_unit_tests(gate: dict, working_dir: str, file_hint: str | None) -> tu
     try:
         r = subprocess.run(
             [
-                "pytest", "tests/", "-q",
-                "-m", "not integration and not e2e",
+                "pytest",
+                "tests/",
+                "-q",
+                "-m",
+                "not integration and not e2e",
             ],
             capture_output=True,
             text=True,
@@ -502,13 +505,14 @@ def _check_checkov(gate, working_dir, file_hint) -> tuple:
     import glob as _glob
 
     ia_c_patterns = (
-        "*.tf", "*.tfvars", "*.template",
-        "cloudformation/**", "k8s/**", "terraform/**",
+        "*.tf",
+        "*.tfvars",
+        "*.template",
+        "cloudformation/**",
+        "k8s/**",
+        "terraform/**",
     )
-    has_iac = any(
-        _glob.glob(os.path.join(working_dir, p))
-        for p in ia_c_patterns
-    )
+    has_iac = any(_glob.glob(os.path.join(working_dir, p)) for p in ia_c_patterns)
     if not has_iac:
         return True, ["无 IaC 资产（Terraform/CloudFormation/K8s），IaC 审计通过"]
     return _check_tool_scan(
@@ -641,4 +645,3 @@ def check_exit_criteria(
         if not ok:
             issues.extend(errs)
     return (len(issues) == 0), issues
-

@@ -53,8 +53,23 @@ def load(working_dir: str) -> dict | None:
     p = path(working_dir)
     if not os.path.exists(p):
         return None
-    with open(p, encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as e:
+        # V3.3.2（自审查 S2 修复）：状态文件损坏时不得崩溃（实测旧版本遗留的
+        # baseline.json 末尾多一个 }，导致 --canary 抛未捕获 JSONDecodeError）。
+        # 返回 None + 告警 → 调用方按"无基线"处理（首次执行/重建基线），
+        # 而非让工具链崩溃。
+        import logging
+
+        logging.getLogger("baseline").warning(
+            "baseline_load_failed_using_default: %s (%s: %s); 将按无基线处理并重建",
+            p,
+            type(e).__name__,
+            e,
+        )
+        return None
 
 
 def drift(previous: dict | None, current: dict) -> list[str]:

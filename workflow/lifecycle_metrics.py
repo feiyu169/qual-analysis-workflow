@@ -97,7 +97,6 @@ def auto_advance(working_dir: str, satisfied: dict) -> list[str]:
     return advanced
 
 
-
 # ── V3.2.11 Phase 2：流程度量（修评审共识 F）────────────────────────────────
 
 # 门禁名 → 生命周期准出类型（用于缺陷逃逸归因：Phase 3+ 发现的、本应
@@ -185,4 +184,3 @@ def metrics(working_dir: str) -> dict:
         "total_failures": total_failures,
         "late_failures": late_failures,
     }
-

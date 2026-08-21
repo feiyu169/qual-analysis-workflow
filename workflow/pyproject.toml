@@ -13,6 +13,14 @@ testpaths = ["tests"]
 # - DTZ005：本库 SQLite 场景刻意使用 naive datetime（P17 教训：aware/naive 比较崩溃）
 # - RUF012/RUF013：遗留配置表/隐式 Optional，属现代化风格；新代码已用 frozenset/显式 None
 # - BLE001/S110：遗留防御式解析（JSON 容错、工具探测），保留原语义
+
+# V3.3.2（自审查 M2 版本收敛）：声明项目版本，与 __init__.py / workflow.yaml 一致
+[project]
+name = "hgf-workflow"
+version = "3.3.2"
+description = "Hermes Gate Flow - 门禁驱动开发工作流（DSH 接入版）"
+requires-python = ">=3.10"
+
 [tool.ruff]
 # 归档目录与运行产物不参与静态检查（_legacy 是历史代码，见 _legacy/README.md）
 # mcp_server.py 是 hermes 兼容遗留入口（WSL 时代代码，保留原样），不纳入门禁标准

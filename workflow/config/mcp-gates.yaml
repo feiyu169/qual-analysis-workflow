@@ -1,4 +1,4 @@
-# 门禁配置文件 - V3.2.0（版本号见 workflow/__init__.py）
+# 门禁配置文件 - V3.3.2（版本号与 workflow/__init__.py 一致；V3.3.2 自审查 M2 收敛）
 # .mcp-gates.yaml
 #
 # V3.1 变更：
@@ -9,6 +9,11 @@
 #
 # V3.2.0 变更：
 # - 离线提速：safety/semgrep 首次运行需下载数据，可加 --offline 用缓存。
+#
+# V3.3.2 变更：
+# - 自审查 S1：failure_log 门禁自身失败不再写入 failures.jsonl（防自锁雪崩）；
+#   `--failures --archive` 归档不完整历史记录。
+# - 自审查 S2：baseline.json 损坏时容错降级（canary 自动重建基线）。
 
 gates:
   # MUST_PASS: 失败即阻断
@@ -23,7 +28,10 @@ gates:
       tool: "pytest"
       command: "pytest tests/ -v --cov=. --cov-report=term-missing --cov-fail-under={coverage_min}"
       verification: "L1"
-      timeout: 300
+      # V3.3.2（自审查验收发现）：HGF 对自身跑全量 195 测试 + 覆盖率统计
+      # 实测 ~270s，含 -v 详细输出与 cov 计算可能超 300s → 提升到 600s。
+      #（历史上门禁只跑小 demo 项目测试集，300s 足够；自身全量需更大余量）
+      timeout: 600
       # qual 大代码库总覆盖率现状 ~21%（大量 legacy 模块未测，阶段 B/C 逐步补测后上调）。
       # 20% 是"测试集真实运行"下限（防空转/缩水）；变更文件由增量门槛兜底（见下）。
       coverage_min: 20
@@ -60,12 +68,17 @@ gates:
 
     - name: "dependency_scan"
       tool: "safety"
-      # 已配置 SAFETY_API_KEY（在线漏洞库可用）。注意：
+      # V3.3.2（自审查 M4 校准）：本机实测 **SAFETY_API_KEY 未设置**（config/.env
+      # 无此键）+ safety 在线扫描网络受限（12s 无响应）→ 保持 SHOULD_PASS 是
+      # 正确降级，非放松标准。注意：
       # ① 在线扫描在部分网络下极慢/可能被限流（>5min），建议作为低频深度检查
       #    手动触发（safety check --json），不放进每次常规门禁；
       # ② 有缓存库后可改 `safety check --json --offline` 提速；
       # ③ 系统 Python 实测存在大量已知漏洞（flask/flask-cors/ecdsa/cryptography/
-      #    pillow/werkzeug/urllib3 等）——升级或豁免需单独决策。
+      #    pillow/werkzeug/urllib3 等）——清单见 output/security-remediation.md
+      #    （用户决策：暂不修补 51 个系统级漏洞）。
+      # 恢复 must_pass 的条件：设置 SAFETY_API_KEY（config/.env）且 safety 能
+      # 在时限内产出 JSON。
       command: "safety check --json"
       verification: "L1"
       # SHOULD_PASS：慢/受限环境下超时只记录不重试；时限 300s

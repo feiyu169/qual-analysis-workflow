@@ -142,9 +142,7 @@ def cmd_lifecycle(args: dict) -> dict:
         rec = lifecycle.reopen(wd, gates, gate, reason=args.get("notes", ""))
         return {"reopened": gate, "record": rec}
 
-    _fail(
-        f"lifecycle action 未知: {args.get('action')}（支持 status/advance/reopen）"
-    )
+    _fail(f"lifecycle action 未知: {args.get('action')}（支持 status/advance/reopen）")
 
 
 def cmd_history(args: dict) -> dict:

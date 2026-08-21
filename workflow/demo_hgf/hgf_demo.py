@@ -29,7 +29,9 @@ def main() -> None:
     print("Phase 1: classify_task")
     print("=" * 60)
     classification = classifier.classify_task(task)
-    print(f"level={classification.level}  type={classification.type}  risk={classification.risk}")
+    print(
+        f"level={classification.level}  type={classification.type}  risk={classification.risk}"
+    )
 
     print()
     print("=" * 60)
@@ -40,7 +42,9 @@ def main() -> None:
         affected_areas=task.affected_areas, description=task.description
     )
     print(f"risk={risk.risk}  score={risk.score}")
-    print(f"matched_factors={risk.matched_factors}  bonus={risk.combination_bonus}  reduction={risk.reduction_applied}")
+    print(
+        f"matched_factors={risk.matched_factors}  bonus={risk.combination_bonus}  reduction={risk.reduction_applied}"
+    )
 
     print()
     print("=" * 60)

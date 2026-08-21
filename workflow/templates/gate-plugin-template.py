@@ -38,9 +38,7 @@ class ExamplePlugin(GatePlugin):
             duration = time.time() - start_time
 
             # 3. 解析输出（fail-loud：解析失败 → ERROR，绝不静默 PASS）
-            issues, parse_error = self._safe_parse(
-                self._parse_output, result.stdout
-            )
+            issues, parse_error = self._safe_parse(self._parse_output, result.stdout)
             if parse_error is not None:
                 return self._create_error_result(
                     message=f"输出解析失败，拒绝判定: {parse_error}",

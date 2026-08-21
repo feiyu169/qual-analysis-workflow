@@ -89,7 +89,6 @@ def status(gates: list[dict], deps: dict, state: dict) -> dict[str, str]:
     return result
 
 
-
 def advance(
     working_dir: str,
     gates: list[dict],
@@ -121,7 +120,6 @@ def advance(
     }
     save_state(working_dir, state)
     return state[gate_id]
-
 
 
 def reopen(working_dir: str, gates: list[dict], gate_id: str, reason: str = "") -> dict:
@@ -180,4 +178,3 @@ def reopen(working_dir: str, gates: list[dict], gate_id: str, reason: str = "") 
         "rework_count": rec["rework_count"],
         "affected_blocked": affected[1:],
     }
-

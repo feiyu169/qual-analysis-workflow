@@ -2,6 +2,7 @@
 
 用法: python scripts/security_remediation_report.py <safety-json> <输出.md>
 """
+
 import json
 import sys
 from collections import defaultdict
@@ -13,7 +14,7 @@ def extract_json(text: str) -> dict:
     end = text.rfind("}")
     if start < 0 or end < 0:
         raise ValueError("未找到 JSON")
-    return json.loads(text[start:end + 1])
+    return json.loads(text[start : end + 1])
 
 
 def severity_level(vuln: dict) -> str:
@@ -52,7 +53,9 @@ def main() -> None:
     lines.append("# Python 3.14 依赖安全修复清单")
     lines.append("")
     lines.append("> 来源：`safety check --json`（SAFETY_API_KEY 在线扫描）")
-    lines.append(f"> 扫描时间：{data.get('metadata', {}).get('scan_timestamp', 'N/A') if isinstance(data.get('metadata'), dict) else 'N/A'}")
+    lines.append(
+        f"> 扫描时间：{data.get('metadata', {}).get('scan_timestamp', 'N/A') if isinstance(data.get('metadata'), dict) else 'N/A'}"
+    )
     lines.append(f"> 漏洞总数：**{len(vulns)}**，受影响包：**{len(by_pkg)}**")
     lines.append("")
     lines.append("## 逐包修复建议")
@@ -62,7 +65,9 @@ def main() -> None:
 
     for pkg in sorted(by_pkg, key=lambda p: -len(by_pkg[p])):
         pvulns = by_pkg[pkg]
-        versions = sorted({v.get("analyzed_version") for v in pvulns if v.get("analyzed_version")})
+        versions = sorted(
+            {v.get("analyzed_version") for v in pvulns if v.get("analyzed_version")}
+        )
         high = sum(1 for v in pvulns if severity_level(v) == "HIGH")
         medium = sum(1 for v in pvulns if severity_level(v) == "MEDIUM")
         recs = sorted(pkg_recommend.get(pkg, set()))

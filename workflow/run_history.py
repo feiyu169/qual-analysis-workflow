@@ -63,9 +63,7 @@ def gate_health(entries: list[dict]) -> dict:
             name = r.get("name")
             if not name:
                 continue
-            s = stats.setdefault(
-                name, {"runs": 0, "failed": 0, "statuses": []}
-            )
+            s = stats.setdefault(name, {"runs": 0, "failed": 0, "statuses": []})
             s["runs"] += 1
             status = r.get("status")
             s["statuses"].append(status)

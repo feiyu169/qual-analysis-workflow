@@ -3,13 +3,14 @@
 变异测试杀死率检查脚本
 从 mutmut results 和 mutmut run 输出计算杀死率
 """
+
 import os
 import subprocess
 import sys
 
 
 def main():
-    mutants_dir = os.path.join(os.path.dirname(__file__), '..', 'mutants')
+    mutants_dir = os.path.join(os.path.dirname(__file__), "..", "mutants")
 
     if not os.path.isdir(mutants_dir):
         print("⚠️ 未找到变异测试结果，请先运行 mutmut run")
@@ -17,13 +18,15 @@ def main():
 
     # 获取 survived 数量（mutmut results 只显示 survived）
     result = subprocess.run(
-        [sys.executable, '-m', 'mutmut', 'results'],
-        capture_output=True, text=True, timeout=30,
-        cwd=os.path.join(os.path.dirname(__file__), '..'),
+        [sys.executable, "-m", "mutmut", "results"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        cwd=os.path.join(os.path.dirname(__file__), ".."),
         check=False,
     )
 
-    survived = len([ln for ln in result.stdout.split('\n') if 'survived' in ln])
+    survived = len([ln for ln in result.stdout.split("\n") if "survived" in ln])
 
     # 从上次运行的输出中获取总数
     # 上次运行结果：187 总变异体，130 杀死，57 存活
@@ -50,5 +53,5 @@ def main():
     print(f"✅ 杀死率 {score}% 达到阈值 {threshold}%")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

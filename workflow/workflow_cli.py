@@ -54,6 +54,16 @@ def main():
         help="查看未解决的失败记录（V3.2.8-A：re_run_result 非空视为已解决）",
     )
     parser.add_argument(
+        "--archive",
+        action="store_true",
+        help="配合 --failures：归档不完整的历史失败记录（V3.3.2 自审查 S1 修复）",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="配合 --failures --archive：只预览归档数量不落盘",
+    )
+    parser.add_argument(
         "--canary",
         action="store_true",
         help="金丝雀版本回归：工具版本漂移时跑轻量金丝雀集（ruff+快速测试）",
@@ -122,11 +132,22 @@ def main():
         help="V3.2.11 生成 fresh-context 独立二验请求（无会话种子的独立审查 prompt）",
     )
     parser.add_argument(
-        "--metrics", action="store_true",
+        "--metrics",
+        action="store_true",
         help="V3.2.11 流程度量：phase_time / rework_count / escape_rate",
     )
 
     args = parser.parse_args()
+
+    # V3.3.2（自审查 L1）：确保 .hgf/ 状态目录存在并写入 STATE.md 注册表
+    # （幂等）。此前 ensure_state_dir 只被测试调用，业务入口不建注册表，
+    # 导致 .hgf/ 只有数据文件没有注册表。
+    try:
+        import hgf_state
+
+        hgf_state.ensure_state_dir(args.dir)
+    except Exception:
+        pass  # 只读类命令（--history 等）不因状态目录问题失败
 
     # 生命周期模式（V3.2：让 gates.yaml 从设计稿变成可执行 DAG）
     if args.lifecycle:
@@ -139,6 +160,12 @@ def main():
         state = lifecycle.load_state(args.dir)
 
         if args.lifecycle == "status":
+            # V3.3.2（自审查 L2）：无状态文件时初始化 lifecycle.json（空状态），
+            # 与 STATE.md 注册表一致——避免 .hgf/ 中只有数据文件没有状态文件。
+            import os as _os
+
+            if not _os.path.exists(lifecycle.state_path(args.dir)):
+                lifecycle.save_state(args.dir, {})
             if args.json:
                 print(
                     json.dumps(
@@ -295,7 +322,9 @@ def main():
         import review
 
         pack = review.build_pack(args.dir, args.review_fresh)
-        req = review.verify_fresh(args.review_record or "review_passed", review.pack_markdown(pack))
+        req = review.verify_fresh(
+            args.review_record or "review_passed", review.pack_markdown(pack)
+        )
         print(req["request"])
         sys.exit(0)
 
@@ -322,6 +351,25 @@ def main():
     # 失败记录视图（V3.2.8-A）：未解决 = re_run_result 为空
     if args.failures:
         import failure_log
+
+        # V3.3.2（自审查 S1）：归档不完整历史记录，解除 failure_log 自锁
+        if args.archive:
+            result = failure_log.archive_incomplete(args.dir, dry_run=args.dry_run)
+            if args.json:
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+            else:
+                if args.dry_run:
+                    print(
+                        f"[dry-run] 将归档 {result['archived']} 条不完整记录，保留 {result['kept']} 条"
+                    )
+                    if result.get("gates"):
+                        print(f"  涉及门禁: {', '.join(result['gates'])}")
+                else:
+                    print(
+                        f"✅ 已归档 {result['archived']} 条不完整记录到 "
+                        f".hgf/failures-archived.jsonl，主文件保留 {result['kept']} 条"
+                    )
+            sys.exit(0)
 
         entries = failure_log.load_failures(args.dir)
         unresolved = failure_log.unresolved_failures(args.dir)
@@ -396,11 +444,13 @@ def main():
                     (name, h) for name, h in health.items() if h["always_failed"]
                 ]
                 if always_failed:
-                    print("⚠️ 门禁健康——从未通过过的门禁（若被降级即逃逸舱口，需修复或显式记录债务）:")
+                    print(
+                        "⚠️ 门禁健康——从未通过过的门禁（若被降级即逃逸舱口，需修复或显式记录债务）:"
+                    )
                     for name, h in always_failed:
                         print(
                             f"  - {name}: {h['failed']}/{h['runs']} 次失败 "
-                            f"(失败率 {h['fail_rate']*100:.0f}%)"
+                            f"(失败率 {h['fail_rate'] * 100:.0f}%)"
                         )
                 print("")
                 for e in entries[-5:]:

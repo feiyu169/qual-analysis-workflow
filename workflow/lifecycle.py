@@ -47,7 +47,7 @@ reopen = _dag.reopen
 
 # ── 准出检查器（re-export）───────────────────────────────────────────────
 # V3.3.1（复审共识 A：收敛内部暴露）：不再 re-export 内部注册表/常量
-#（_CHECKERS / _DOC_SEMANTIC_REQUIREMENTS / _read_text——这些是 checkers
+# （_CHECKERS / _DOC_SEMANTIC_REQUIREMENTS / _read_text——这些是 checkers
 #  的实现细节，调用方应直连 lifecycle_checkers）；_check_* 函数是准出
 # 检查器的稳定入口，保留 re-export 供测试/外部调用。
 check_exit_criteria = _checkers.check_exit_criteria

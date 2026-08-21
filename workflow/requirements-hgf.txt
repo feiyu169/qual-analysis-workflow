@@ -1,26 +1,20 @@
-# HGF 门禁工具链依赖（V3.2.5 固定版本）
+# HGF 门禁工具链依赖锁定（V3.3.2 修复：真 requirements 文件）
+#
+# V3.3.2（自审查 S3 修复）：此前本文件是 Markdown 文档（含说明/表格），
+# `pip install -r requirements-hgf.txt` 直接报 Invalid requirement——违反
+# HGF 自己的"文件存在 ≠ 它工作"纪律。现改为纯 pip 可解析格式：
+#   每行一个包 + 固定版本（==），与 gate_plugins 的 min/max_version 契约对应。
+# 说明文档已移至 README.md「工具链依赖」章节。
+#
+# 安装：python -m pip install -r requirements-hgf.txt
+# 扫描：safety check -r requirements-hgf.txt --json
 
-用途：HGF 门禁工具自身的依赖锁定（#8 工具链自身安全——门禁检查依赖安全，
-HGF 工具链也必须可复现、可扫描）。
-
-```powershell
-# 安装（对齐 workflow 门禁所需版本）
-python -m pip install -r requirements-hgf.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-
-# 用 dependency_scan 门禁扫描本文件自身：
-#   safety check -r requirements-hgf.txt --json
-```
-
-## 版本区间契约（与 gate_plugins 的 min/max_version 对应）
-
-| 包 | 固定版本 | 解析契约版本区间 | 说明 |
-|----|----------|------------------|------|
-| ruff | ==0.16.3 | >=0.16 | 规则集按 0.16 固定（pyproject.toml [tool.ruff.lint]） |
-| pytest | ==9.1.1 | >=7.0 | pythonpath 配置项需 >=7 |
-| pytest-cov | ==7.1.0 | — | 覆盖率统计 |
-| detect-secrets | ==1.5.0 | >=1.0 | JSON 解析契约 1.x |
-| safety | ==3.8.1 | >=2.0,<4.0 | 3.x 顶层为字典（解析器已适配）；需 SAFETY_API_KEY |
-| semgrep | ==1.173.0 | >=1.0 | JSON 解析契约 1.x |
-| checkov | ==3.3.11 | >=1.0,<4.0 | 3.x 顶层为数组（解析器已适配） |
-| PyYAML | ==6.0.3 | — | 配置加载 |
-| structlog | ==26.1.0 | — | 结构化日志 |
+ruff==0.16.3
+pytest==9.1.1
+pytest-cov==7.1.0
+detect-secrets==1.5.0
+safety==3.8.1
+semgrep==1.173.0
+checkov==3.3.11
+PyYAML==6.0.3
+structlog==26.1.0

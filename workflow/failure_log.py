@@ -129,3 +129,89 @@ def check_failure_log(working_dir: str) -> tuple:
                 f"门禁 [{entry.get('gate', '?')}] 的失败记录缺少 fix（修复说明）"
             )
     return (len(issues) == 0), issues
+
+
+def archive_incomplete(working_dir: str, dry_run: bool = False) -> dict:
+    """归档不完整的历史失败记录（V3.3.2 自审查 S1 修复）。
+
+    背景：早期版本允许 failure_log 门禁自身的失败也写入 failures.jsonl，
+    造成"记录不完整 → 失败 → 再记录"的自指循环，产生大量缺 root_cause/fix
+    的历史记录（实测 232 条/196 未解决），导致 failure_log 门禁永远 FAIL。
+
+    归档策略（保留可审计性，不直接删除）：
+    - 把缺 root_cause 或 fix 的**历史**记录移入 `.hgf/failures-archived.jsonl`；
+    - 主文件只保留完整记录与已解决记录（re_run_result 非空）；
+    - 归档记录打标记 `archived: "v3.3.2-incomplete"` 说明归档原因；
+    - 后续门禁只检查主文件，不再被历史脏数据锁死。
+
+    Args:
+        working_dir: 项目目录。
+        dry_run: True 时只统计不落盘（供 --failures --archive --dry-run 预览）。
+
+    Returns:
+        {"archived": n, "kept": m, "dry_run": bool}
+    """
+    entries = load_failures(working_dir)
+    if not entries:
+        return {"archived": 0, "kept": 0, "dry_run": dry_run}
+
+    incomplete = [e for e in entries if not e.get("root_cause") or not e.get("fix")]
+    if not incomplete:
+        return {"archived": 0, "kept": len(entries), "dry_run": dry_run}
+
+    if dry_run:
+        return {
+            "archived": len(incomplete),
+            "kept": len(entries) - len(incomplete),
+            "dry_run": True,
+            "gates": sorted({e.get("gate", "?") for e in incomplete}),
+        }
+
+    # 归档不完整记录
+    incomplete_ids = {id(e) for e in incomplete}
+    kept = [e for e in entries if id(e) not in incomplete_ids]
+    for e in incomplete:
+        e["archived"] = "v3.3.2-incomplete"
+        e["archived_at"] = datetime.now().isoformat(timespec="seconds")
+
+    # 写归档文件（追加，保留历史归档）
+    archive_path = os.path.join(working_dir, ".hgf", "failures-archived.jsonl")
+    import json as _json
+
+    with open(archive_path, "a", encoding="utf-8") as f:
+        for e in incomplete:
+            envelope = {
+                "schema": hgf_state.SCHEMA_VERSION,
+                "kind": "failures",
+                "writer": "failure_log.archive",
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+                "payload": e,
+            }
+            f.write(_json.dumps(envelope, ensure_ascii=False) + "\n")
+
+    # 原子重写主文件（只保留完整/已解决记录）
+    if kept:
+        lines = []
+        for entry in kept:
+            envelope = {
+                "schema": hgf_state.SCHEMA_VERSION,
+                "kind": "failures",
+                "writer": "failure_log",
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+                "payload": entry,
+            }
+            lines.append(_json.dumps(envelope, ensure_ascii=False))
+        try:
+            from . import state_io as _io
+        except ImportError:
+            import state_io as _io
+        _io.atomic_write_text(log_path(working_dir), "\n".join(lines) + "\n")
+    else:
+        # 全部归档：清空主文件（写空文件而非删除，保持文件存在）
+        try:
+            from . import state_io as _io
+        except ImportError:
+            import state_io as _io
+        _io.atomic_write_text(log_path(working_dir), "")
+
+    return {"archived": len(incomplete), "kept": len(kept), "dry_run": False}

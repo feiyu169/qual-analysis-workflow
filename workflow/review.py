@@ -51,11 +51,8 @@ def build_pack(working_dir: str, file_path: str, max_chars: int = 20000) -> dict
 
 def pack_markdown(pack: dict) -> str:
     """审查包渲染为 markdown（可直接内联进 heavyskill query）"""
-    return (
-        f"# {pack['title']}\n\n"
-        f"{pack['request']}\n\n"
-        f"```\n{pack['code']}\n```\n"
-        + ("\n> 注：内容已截断（完整 {full_chars} 字符）。\n" if pack["truncated"] else "")
+    return f"# {pack['title']}\n\n{pack['request']}\n\n```\n{pack['code']}\n```\n" + (
+        "\n> 注：内容已截断（完整 {full_chars} 字符）。\n" if pack["truncated"] else ""
     )
 
 

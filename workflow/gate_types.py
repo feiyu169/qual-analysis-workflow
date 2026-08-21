@@ -148,7 +148,9 @@ class GateExecutionReport:
     must_pass_failed: list[str]  # MUST_PASS 失败列表
     results: list[GateResult]  # 门禁结果列表
     duration: float  # 总耗时
-    tool_health: list[dict] = field(default_factory=list)  # V3.2.5 环境维度（SKIPPED/ERROR）
+    tool_health: list[dict] = field(
+        default_factory=list
+    )  # V3.2.5 环境维度（SKIPPED/ERROR）
 
     def to_dict(self) -> dict:
         """转换为字典"""
@@ -211,7 +213,9 @@ class GateExecutionReport:
         if self.tool_health:
             lines.append("工具健康度（SKIPPED/ERROR：环境维度，非代码质量）")
             for h in self.tool_health:
-                lines.append(f"  - {h['gate']} ({h['tool']}): {h['status']} — {h['message']}")
+                lines.append(
+                    f"  - {h['gate']} ({h['tool']}): {h['status']} — {h['message']}"
+                )
             lines.append("")
 
         lines.append("=" * 60)
