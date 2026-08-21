@@ -164,12 +164,9 @@ class Gate8FinalValidation(GateBase):
         # 1. 数字校验器：报告内财务数字 vs Wind 锚点
         if chapters and wind_data:
             try:
-                from ..data_anchor import CrossChapterValidator, DataAnchor
-                # 复用 Gate5 已准备的锚点，否则重建
-                anchor = context.get("data_anchor")
-                if anchor is None:
-                    anchor = DataAnchor()
-                    anchor.init_from_wind_data(wind_data)
+                from ..data_anchor import CrossChapterValidator, get_data_anchor
+                # C5-3：锚点单例（缓存共享，避免每 Gate 重建）
+                anchor = context.get("data_anchor") or get_data_anchor(wind_data)
                 validation = CrossChapterValidator(anchor).validate_all_chapters(chapters)
                 if not validation["passed"]:
                     for e in validation["errors"][:10]:

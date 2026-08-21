@@ -13,4 +13,4 @@ Hermes Gate Flow (HGF) - 门禁驱动开发工作流（DSH 接入版，V3.3.2）
 - _legacy/：已归档的未接线模块（见 _legacy/README.md）
 """
 
-__version__ = "3.3.2"
+__version__ = "3.3.3"

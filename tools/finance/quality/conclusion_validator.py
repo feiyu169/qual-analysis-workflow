@@ -357,9 +357,8 @@ class ConclusionValidator:
             wind_anchor = ""
             if wind_data:
                 try:
-                    from ..qual_v8.data_anchor import DataAnchor
-                    anchor = DataAnchor()
-                    anchor.init_from_wind_data(wind_data)
+                    from ..qual_v8.data_anchor import get_data_anchor
+                    anchor = get_data_anchor(wind_data)
                     all_a = anchor.get_all_anchors()
                     if all_a:
                         fys = sorted({dp.fiscal_year for pts in all_a.values()

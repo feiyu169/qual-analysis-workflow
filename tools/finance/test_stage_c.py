@@ -249,5 +249,34 @@ def test_review_budget_capped_at_35():
             f"审查子预算应为 35，实为 {kwargs.get('llm_call_budget')}"
 
 
+# ===== C5-3：锚点单例 =====
+
+def test_data_anchor_singleton():
+    """C5-3：get_data_anchor 同 wind_data 返回缓存实例（只构建一次）"""
+    from finance.qual_v8.data_anchor import _anchor_cache, get_data_anchor
+
+    wind = {"income": {"营业收入": [100.0, 120.0, 150.0]}, "_year_labels": {"财年": [2023, 2024, 2025]}}
+    before = len(_anchor_cache)
+    a1 = get_data_anchor(wind)
+    a2 = get_data_anchor(wind)
+    assert a1 is a2, "同 wind_data 应返回同一实例"
+    assert len(_anchor_cache) == before + 1, "缓存应只新增 1 条"
+    # 不同 wind_data → 不同实例
+    a3 = get_data_anchor({"income": {}})
+    assert a3 is not a1
+    # 清理缓存（防污染其他测试）
+    _anchor_cache.clear()
+
+
+def test_data_anchor_singleton_content():
+    """C5-3：单例锚点内容正确（营收最新财年值）"""
+    from finance.qual_v8.data_anchor import _anchor_cache, get_data_anchor
+
+    wind = {"income": {"营业收入": [100.0, 120.0, 150.0]}, "_year_labels": {"财年": [2023, 2024, 2025]}}
+    a = get_data_anchor(wind)
+    assert a.get_anchor("营业收入", fiscal_year=2025) == 150.0
+    _anchor_cache.clear()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

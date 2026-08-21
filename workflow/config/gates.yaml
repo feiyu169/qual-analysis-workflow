@@ -255,3 +255,18 @@ gates:
     name: 反馈收集
     phase: 5
     timeout: 86400
+  # V3.3.3（V2 记忆长效机制，P53 元门禁自律）：
+  # 独立门禁——depends_on 为空，不依赖 gate_5_2（heavyskill 审议：若依赖
+  # 被查对象，则被查对象失败（S2/S3 场景）时自律门禁会被跳过，形同虚设）。
+  # 始终 runnable，可随时独立推进检查 HGF 自身状态健康。
+  gate_5_3:
+    depends_on: []
+    entry_criteria: []
+    exit_criteria:
+    - description: 元门禁自律检查通过（failures 无自锁/baseline 可解析/requirements 可解析/lessons 有索引）
+      type: self_audit
+      verification: L1
+    max_retries: 3
+    name: 元门禁自律（P53）
+    phase: 5
+    timeout: 600

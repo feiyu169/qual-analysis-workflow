@@ -19,7 +19,8 @@ debate_service.py — 辩论服务（统一入口）
 
 import logging
 import re
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -35,10 +36,10 @@ class DebateService:
     def __init__(
         self,
         llm_caller: Callable[[str, str], str],
-        wind_data: Optional[Dict] = None,
+        wind_data: dict | None = None,
         timeout: int = 240,               # 角色超时（原 60 → 240，见 redesign 文档）
         retries: int = 1,                 # 每角色失败重试（受 timeout 约束）
-        chapters: Optional[List[int]] = None,  # 章节白名单（None=调用方指定）
+        chapters: list[int] | None = None,  # 章节白名单（None=调用方指定）
     ):
         self.llm_caller = llm_caller
         self.wind_data = wind_data
@@ -51,14 +52,13 @@ class DebateService:
     # 锚点构建（唯一化：此处实现，全链路共用）
     # ------------------------------------------------------------
     @staticmethod
-    def _build_wind_anchor_table(wind_data: Optional[Dict]) -> str:
+    def _build_wind_anchor_table(wind_data: dict | None) -> str:
         """从 wind_data 构建 canonical 锚点表（与 review_integrator 同逻辑，收敛于此）"""
         if not wind_data:
             return ""
         try:
-            from ..qual_v8.data_anchor import DataAnchor
-            anchor = DataAnchor()
-            anchor.init_from_wind_data(wind_data)
+            from ..qual_v8.data_anchor import get_data_anchor
+            anchor = get_data_anchor(wind_data)
             all_a = anchor.get_all_anchors()
             if not all_a:
                 return ""
@@ -72,7 +72,7 @@ class DebateService:
                 rows.append(f"| {k} | " + " | ".join(row.get(fy, "—") for fy in fys) + " |")
             return ("| 指标 | " + " | ".join(f"FY{fy}" for fy in fys) + " |\n|------|"
                     + "--------|" * len(fys) + "\n" + "\n".join(rows))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"辩论锚点构建失败: {e}")
             return ""
 
@@ -84,7 +84,7 @@ class DebateService:
         chapter_num: int,
         chapter_title: str,
         chapter_content: str,
-        contract: Optional[dict] = None,
+        contract: dict | None = None,
         mode: str = "enhance",   # "enhance" | "review" | "raw"
     ) -> Any:
         """跑一次辩论（注入锚点 + 超时），按模式消费
@@ -119,7 +119,7 @@ class DebateService:
                 if debate.stages.get("bull") == "ok":
                     break
                 logger.warning(f"辩论第{chapter_num}章第{attempt+1}次尝试 Bull 缺失，重试")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"辩论第{chapter_num}章第{attempt+1}次尝试失败: {e}")
                 debate = None
         if debate is None:
@@ -156,9 +156,9 @@ class DebateService:
     # ------------------------------------------------------------
     # 消费者 B：审查（提取 Bear 反驳为审查 issues）
     # ------------------------------------------------------------
-    def _consume_review(self, debate: Any) -> List[str]:
+    def _consume_review(self, debate: Any) -> list[str]:
         """审查模式：从 Bear 反驳/PM 裁决提取审查问题"""
-        issues: List[str] = []
+        issues: list[str] = []
 
         if debate.stages.get("bear") != "ok":
             # Bear 缺失：明确"该章无对抗审查"而非报错
@@ -180,9 +180,9 @@ class DebateService:
                 if text:
                     issues.append(f"[辩论-Bear] {marker}: {text[:100]}")
         # PM 裁决倾向看空 → 审查问题（首尾矛盾信号）
-        if debate.pm_synthesis and ("看空" in debate.pm_synthesis or "中性" in debate.pm_synthesis):
-            if "自动裁决" not in debate.pm_synthesis:
-                issues.append(f"[辩论-PM] 裁决含看空/中性信号（与章节可能矛盾）: {debate.pm_synthesis[:100]}")
+        if debate.pm_synthesis and ("看空" in debate.pm_synthesis or "中性" in debate.pm_synthesis) \
+                and "自动裁决" not in debate.pm_synthesis:
+            issues.append(f"[辩论-PM] 裁决含看空/中性信号（与章节可能矛盾）: {debate.pm_synthesis[:100]}")
 
         return issues[:10]  # 每章最多 10 条
 
@@ -196,8 +196,8 @@ def run_chapter_debate(
     chapter_num: int,
     chapter_title: str,
     chapter_content: str,
-    wind_data: Optional[Dict] = None,
-    contract: Optional[dict] = None,
+    wind_data: dict | None = None,
+    contract: dict | None = None,
     mode: str = "review",
     timeout: int = 240,
 ) -> Any:

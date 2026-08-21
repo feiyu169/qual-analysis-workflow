@@ -590,9 +590,8 @@ def _repair_chapters(
         wind_anchor = ""
         if wind_data:
             try:
-                from ..qual_v8.data_anchor import DataAnchor
-                anchor = DataAnchor()
-                anchor.init_from_wind_data(wind_data)
+                from ..qual_v8.data_anchor import get_data_anchor
+                anchor = get_data_anchor(wind_data)
                 all_a = anchor.get_all_anchors()
                 if all_a:
                     fys = sorted({dp.fiscal_year for pts in all_a.values()
@@ -674,9 +673,8 @@ def _repair_chapters(
                 if not wind_data:
                     return []
                 try:
-                    from ..qual_v8.data_anchor import DataAnchor
-                    anchor = DataAnchor()
-                    anchor.init_from_wind_data(wind_data)
+                    from ..qual_v8.data_anchor import get_data_anchor
+                    anchor = get_data_anchor(wind_data)  # C5-3 单例
                     errs = anchor.validate_chapter_any_fy(ch_num, content)  # noqa: B023
                     return [f"数字锚点: {e}" for e in errs]
                 except Exception:  # noqa: BLE001

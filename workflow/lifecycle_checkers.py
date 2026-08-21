@@ -623,8 +623,8 @@ def _check_self_audit(gate: dict, working_dir: str, file_hint: str | None) -> tu
                         continue  # 自身记录隔离
                     if not payload.get("root_cause") or not payload.get("fix"):
                         self_lock_issues.append(
-                            f"failures.jsonl 存在 failure_log 自身不完整记录"
-                            f"（缺 root_cause/fix，S1 自锁回归）"
+                            "failures.jsonl 存在 failure_log 自身不完整记录"
+                            "（缺 root_cause/fix，S1 自锁回归）"
                         )
                         break
         except OSError as e:
@@ -647,7 +647,9 @@ def _check_self_audit(gate: dict, working_dir: str, file_hint: str | None) -> tu
         try:
             from packaging.requirements import Requirement
         except ImportError:
-            issues.append("缺少 packaging 库（pip 自带依赖），无法校验 requirements-hgf.txt")
+            issues.append(
+                "缺少 packaging 库（pip 自带依赖），无法校验 requirements-hgf.txt"
+            )
             return (len(issues) == 0), issues
         with open(req_path, encoding="utf-8") as f:
             for lineno, line in enumerate(f, start=1):
@@ -682,7 +684,9 @@ def _check_self_audit(gate: dict, working_dir: str, file_hint: str | None) -> tu
                 if not fname.endswith(".md") or fname == "README.md":
                     continue
                 if fname not in index_content:
-                    issues.append(f"docs/lessons/{fname} 无 README.md 索引条目（死文档）")
+                    issues.append(
+                        f"docs/lessons/{fname} 无 README.md 索引条目（死文档）"
+                    )
 
     return (len(issues) == 0), issues
 

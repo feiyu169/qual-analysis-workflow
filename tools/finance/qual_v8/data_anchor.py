@@ -10,18 +10,18 @@
 - B4: validate/fix 财年感知：仅校验报告中出现且锚点有同财年的数字
 """
 
-import re
 import logging
-from typing import Dict, Any, Optional, List, Tuple
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 # canonical 键别名表（Wind 原始键 / 旧检查器期望键 → canonical 键）
 # 与 tools/finance/assemble_wind_data.py 的 FIELD_MAP 输出对齐
-CANONICAL_ALIASES: Dict[str, str] = {
+CANONICAL_ALIASES: dict[str, str] = {
     "年营业收入": "营业收入",
     "营业收入": "营业收入",
     "营业总收入": "营业收入",
@@ -55,7 +55,7 @@ def canonical_key(key: str) -> str:
 
 
 # 财务指标 → 单位
-_METRIC_UNITS: Dict[str, str] = {
+_METRIC_UNITS: dict[str, str] = {
     "营业收入": "亿元", "净利润": "亿元", "归母净利润": "亿元", "营业利润": "亿元",
     "总资产": "亿元", "年负债合计": "亿元", "年所有者权益合计": "亿元", "归母净资产": "亿元",
     "经营活动现金流量净额": "亿元", "购建固定资产、无形资产和其他长期资产支付的现金": "亿元",
@@ -70,7 +70,7 @@ class DataPoint:
     unit: str
     source: str
     timestamp: str
-    fiscal_year: Optional[int] = None  # B3: 财年维度
+    fiscal_year: int | None = None  # B3: 财年维度
 
 
 class DataAnchor:
@@ -83,15 +83,14 @@ class DataAnchor:
     """
 
     def __init__(self):
-        self.anchors: Dict[str, List[DataPoint]] = {}  # key -> 按财年排列的锚点列表
+        self.anchors: dict[str, list[DataPoint]] = {}  # key -> 按财年排列的锚点列表
         self._init_default_anchors()
 
     def _init_default_anchors(self):
         """初始化默认锚点（空；由 init_from_wind_data 填充）"""
-        pass
 
     def set_anchor(self, key: str, value: float, unit: str = "亿元",
-                   source: str = "Wind", fiscal_year: Optional[int] = None):
+                   source: str = "Wind", fiscal_year: int | None = None):
         """设置数据锚点（同 key 多财年追加）"""
         k = canonical_key(key)
         self.anchors.setdefault(k, [])
@@ -100,17 +99,17 @@ class DataAnchor:
             if dp.fiscal_year == fiscal_year:
                 self.anchors[k][i] = DataPoint(
                     key=k, value=value, unit=unit, source=source,
-                    timestamp=datetime.now().isoformat(), fiscal_year=fiscal_year,
+                    timestamp=datetime.now().isoformat(), fiscal_year=fiscal_year,  # noqa: DTZ005
                 )
                 logger.info(f"[DataAnchor] 覆盖锚点: {k} FY{fiscal_year}={value}{unit} ({source})")
                 return
         self.anchors[k].append(DataPoint(
             key=k, value=value, unit=unit, source=source,
-            timestamp=datetime.now().isoformat(), fiscal_year=fiscal_year,
+            timestamp=datetime.now().isoformat(), fiscal_year=fiscal_year,  # noqa: DTZ005
         ))
         logger.info(f"[DataAnchor] 设置锚点: {k} FY{fiscal_year}={value}{unit} ({source})")
 
-    def get_anchor(self, key: str, fiscal_year: Optional[int] = None) -> Optional[float]:
+    def get_anchor(self, key: str, fiscal_year: int | None = None) -> float | None:
         """获取数据锚点（指定财年；未指定取最新）"""
         k = canonical_key(key)
         if k not in self.anchors:
@@ -123,17 +122,17 @@ class DataAnchor:
             return None
         return points[-1].value if points else None
 
-    def get_all_anchors(self) -> Dict[str, List[DataPoint]]:
+    def get_all_anchors(self) -> dict[str, list[DataPoint]]:
         """获取所有锚点"""
         return {k: list(v) for k, v in self.anchors.items()}
 
-    def get_latest_fiscal_year(self) -> Optional[int]:
+    def get_latest_fiscal_year(self) -> int | None:
         """获取最新财年（所有锚点中最大的 fiscal_year）"""
         fys = [dp.fiscal_year for pts in self.anchors.values() for dp in pts if dp.fiscal_year]
         return max(fys) if fys else None
 
     def validate_chapter(self, chapter_num: int, chapter_content: str,
-                         fiscal_year: Optional[int] = None) -> List[str]:
+                         fiscal_year: int | None = None) -> list[str]:
         """验证章节数据是否与锚点一致（财年感知）"""
         errors = []
         chapter_data = self._extract_data(chapter_content)
@@ -149,7 +148,7 @@ class DataAnchor:
                 errors.append(f"第{chapter_num}章{metric}={value}，锚点={anchor_value}（FY{fiscal_year}）")
         return errors
 
-    def validate_chapter_any_fy(self, chapter_num: int, chapter_content: str) -> List[str]:
+    def validate_chapter_any_fy(self, chapter_num: int, chapter_content: str) -> list[str]:
         """验证章节数据：数值命中**任一财年**锚点即通过（多财年章节兼容）。
 
         修复场景：ch6/ch7 等章节合法引用 FY2024 历史值（如总资产 827.06 亿），
@@ -181,7 +180,7 @@ class DataAnchor:
         return errors
 
     def fix_chapter(self, chapter_num: int, chapter_content: str,
-                    fiscal_year: Optional[int] = None) -> Tuple[str, List[str]]:
+                    fiscal_year: int | None = None) -> tuple[str, list[str]]:
         """修复章节数据（替换为锚点数据）"""
         fixes = []
         chapter_data = self._extract_data(chapter_content)
@@ -195,19 +194,17 @@ class DataAnchor:
                     fixes.append(f"{metric}: {value} -> {anchor_value}")
         return chapter_content, fixes
 
-    def _extract_data(self, content: str) -> Dict[str, float]:
+    def _extract_data(self, content: str) -> dict[str, float]:
         """从内容中提取数据（修复死代码：真实写入字典）
 
         识别模式："营业收入80.0亿元" / "归母净利润 -7.76 亿元" / "净利润为11.4亿元" 等。
         """
-        data: Dict[str, float] = {}
+        data: dict[str, float] = {}
         if not content:
             return data
 
         # 指标关键词 → canonical 键（按长度降序，避免"净利润"先匹配"归母净利润"的子串）
-        metric_patterns = []
-        for key in sorted(_METRIC_UNITS.keys(), key=len, reverse=True):
-            metric_patterns.append(key)
+        metric_patterns = sorted(_METRIC_UNITS.keys(), key=len, reverse=True)
 
         # 通用模式：<指标词>非数字{0,15}<可选负号><数字><可选空格><单位>
         # 0,15 容纳"累计减少/较上年同期增长"等变化语境（R7-① 排除变化量需看到这些词）
@@ -258,7 +255,7 @@ class DataAnchor:
 
         return data
 
-    def init_from_wind_data(self, wind_data: Dict[str, Any]):
+    def init_from_wind_data(self, wind_data: dict[str, Any]):
         """从Wind数据初始化锚点（修复键契约：canonical 键 + 3年列表 + 财年标签）"""
         if not wind_data:
             return
@@ -287,8 +284,8 @@ class DataAnchor:
         logger.info(f"[DataAnchor] 从Wind数据初始化了{len(self.anchors)}组锚点")
 
 
-def _init_series(anchor: DataAnchor, table: Dict[str, Any], year_labels: List[Any],
-                 specs: List[Tuple[str, str]]):
+def _init_series(anchor: DataAnchor, table: dict[str, Any], year_labels: list[Any],
+                 specs: list[tuple[str, str]]):
     """从某张表按 canonical 键初始化多财年锚点"""
     for canonical, unit in specs:
         # 优先 canonical 键；否则在别名表中找
@@ -311,7 +308,7 @@ def _init_series(anchor: DataAnchor, table: Dict[str, Any], year_labels: List[An
                     continue
 
 
-def _find_number_context(content: str, metric: str, value: float) -> Optional[str]:
+def _find_number_context(content: str, metric: str, value: float) -> str | None:
     """在内容中找到包含 指标+数值 的最小片段，用于精确替换"""
     # 找指标第一次出现的位置，取其后 30 字符
     idx = content.find(metric)
@@ -328,7 +325,7 @@ class CrossChapterValidator:
     def __init__(self, data_anchor: DataAnchor):
         self.data_anchor = data_anchor
 
-    def validate_all_chapters(self, chapters: Dict[int, str]) -> Dict[str, Any]:
+    def validate_all_chapters(self, chapters: dict[int, str]) -> dict[str, Any]:
         """验证所有章节的数据一致性（多财年兼容）
 
         用 validate_chapter_any_fy：数值命中任一财年锚点即通过，
@@ -347,7 +344,7 @@ class CrossChapterValidator:
             "error_count": len(all_errors),
         }
 
-    def fix_all_chapters(self, chapters: Dict[int, str]) -> Tuple[Dict[int, str], List[str]]:
+    def fix_all_chapters(self, chapters: dict[int, str]) -> tuple[dict[int, str], list[str]]:
         """修复所有章节的数据"""
         all_fixes = []
         fixed_chapters = {}
@@ -360,3 +357,28 @@ class CrossChapterValidator:
                 all_fixes.extend([f"第{chapter_num}章: {fix}" for fix in fixes])
 
         return fixed_chapters, all_fixes
+
+
+# ====================================================================
+# C5-3：锚点单例工厂（DataAnchor 只读约束——10+ 调用点共享一次构建）
+# ====================================================================
+
+_anchor_cache: dict[str, "DataAnchor"] = {}
+
+
+def get_data_anchor(wind_data: dict[str, Any]) -> "DataAnchor":
+    """C5-3：按 wind_data 内容缓存 DataAnchor（init 后只读，10+ 审查环节共享一次构建）。
+
+    用法（替代重复的 `DataAnchor() + init_from_wind_data`）：
+        from ..data_anchor import get_data_anchor
+        anchor = get_data_anchor(wind_data)
+    """
+    import json as _json
+
+    key = _json.dumps(wind_data, sort_keys=True, ensure_ascii=False, default=str)
+    cached = _anchor_cache.get(key)
+    if cached is None:
+        cached = DataAnchor()
+        cached.init_from_wind_data(wind_data)
+        _anchor_cache[key] = cached
+    return cached

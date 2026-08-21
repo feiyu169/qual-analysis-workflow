@@ -1,0 +1,18 @@
+{
+  "schema_version": "hgf.v1",
+  "kind": "pitfalls-summary",
+  "updated": "2026-08-21",
+  "purpose": "L1 启动协议的轻量经验索引（agent 会话启动时读此文件，不读 registry 全文以省 token）。与 docs/pitfalls-registry.md 同步维护。",
+  "gated": [
+    {"p": "P0", "topic": "文件存在≠能用", "mechanism": "fail-loud 解析器 + lifecycle 准出检查器"},
+    {"p": "P4", "topic": "失败要记录/禁止静默调参", "mechanism": "failure-log 门禁（root_cause/fix 必填）"},
+    {"p": "P20", "topic": "空测试桩", "mechanism": "test-quality 门禁（AST）"},
+    {"p": "P33", "topic": "增量覆盖率", "mechanism": "unit_test incremental_coverage_min"},
+    {"p": "P36", "topic": "字段存在≠功能完成", "mechanism": "integration-probe 门禁"},
+    {"p": "P50", "topic": "配置字段定义未使用", "mechanism": "L2-L5 证据机制"},
+    {"p": "P53", "topic": "元门禁自律（自审查沉淀）", "mechanism": "self_audit 检查器 + gate_5_3 + 7 测试 + pre-push/CI"}
+  ],
+  "lessons": [
+    {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-self-audit.md", "topic": "failure_log 自锁/baseline 损坏/requirements 伪文件", "p": "P53"}
+  ]
+}

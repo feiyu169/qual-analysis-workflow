@@ -36,4 +36,18 @@ if [ -f .hgf/lifecycle.json ]; then
   echo "[HGF pre-push] 生命周期已接电（.hgf/lifecycle.json 存在）"
 fi
 
+# P53 元门禁自律（V3.3.3 V2 记忆长效机制）：HGF 自身变更必须过 gate_5_3。
+# 独立门禁（depends_on 空）——不依赖其他 gate，S2/S3 场景下仍可运行。
+# 失败 = HGF 自身状态不健康（自锁/损坏/伪文件/无索引），拒绝 push。
+echo "[HGF pre-push] P53 元门禁自律检查（gate_5_3）..."
+"$PY" workflow_cli.py --lifecycle advance gate_5_3 --dir . >/dev/null 2>&1
+P53_RC=$?
+if [ "$P53_RC" -ne 0 ]; then
+  echo "[HGF pre-push] P53 元门禁自律未通过（exit $P53_RC）。"
+  echo "  检查项：failures 无自锁记录 / baseline 可解析 / requirements 可解析 / lessons 有索引"
+  echo "  修复 HGF 自身状态后重新 push。"
+  exit 1
+fi
+echo "[HGF pre-push] P53 元门禁自律通过"
+
 echo "[HGF pre-push] 门禁通过"

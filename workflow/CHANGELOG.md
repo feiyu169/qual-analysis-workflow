@@ -1,5 +1,36 @@
 # Changelog
 
+## 3.3.3 (2026-08-21) — 记忆长效机制（V2 方案，P53 元门禁自律）
+
+### 背景
+HGF 自审查发现 3 个 P0（failure_log 自锁 / baseline 损坏 / requirements 伪文件），
+修复后经 heavyskill K=8 深度审议（151.95s，8/8 轨迹），按共识实施 V2 记忆长效机制。
+
+### 新增（L0 代码门禁）
+- `_check_self_audit` 检查器（lifecycle_checkers.py）：4 项机械验证——
+  failures.jsonl 无 failure_log 自锁记录（S1 防回归，source 隔离自身记录）、
+  baseline.json 可解析（S2）、requirements 用 packaging.Requirement 解析（S3，
+  允许 -r/注释/环境标记）、lessons 索引完整性（L2 配套）
+- `gate_5_3`「元门禁自律（P53）」：**独立门禁**（depends_on: []，不依赖被查对象）
+- `tests/test_self_audit.py`：8 个防回归测试（含 self_audit 失败不写日志、索引校验）
+- pre-push hook 追加 gate_5_3 检查 + `.github/workflows/hgf-gates.yml` 新增 self-audit job
+
+### 新增（L1 自动加载）
+- `AGENTS.md`（工作区根）：HGF 记忆继承协议，dsh-agent-instructions 自动注入每会话
+- `docs/pitfalls-summary.json`：机器可读经验索引（省 token）
+
+### 新增（L2 档案库）
+- `docs/lessons/`：经验档案库 + README 索引（self_audit 第 4 项强制索引完整性）
+- `docs/lessons/2026-08-21-self-audit.md`：本次 3 个 P0 根因完整记录
+
+### 新增（L3 自检）
+- `scripts/self_check.py`：三问自检（Q1 未提交改动 / Q2 gate_5_3 done / Q3 记录同步，
+  git 内容对比防 touch 伪造），四触发点（pre-push/CI/会话收尾/schedule 可选）
+
+### 文档
+- P 库注册 P53「元门禁自律」
+- README P 库对照表 + 工具链依赖说明更新
+
 ## 3.2.0 (2026-08-17) — HGF 演进路线图全量实施
 
 ### 阶段 0：止血与可复现

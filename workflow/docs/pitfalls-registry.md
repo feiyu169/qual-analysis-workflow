@@ -23,6 +23,7 @@ P 库（P0-P52）是 hermes 踩坑纪律库，原始清单在
 | P33 | 增量覆盖率 | unit_test 的 `incremental_coverage_min` |
 | P36 | 字段存在 ≠ 功能完成 | integration-probe 门禁（调用点探针） |
 | P50 | 配置字段定义未使用 | L2-L5 证据机制（`evidence` 必填校验） |
+| P53 | 元门禁自律（V3.3.3 自审查沉淀） | self_audit 检查器（gate_5_3，4 项机械验证）+ 7 防回归测试 + pre-push/CI |
 
 ## 文档纪律（无自动门禁，需 agent 遵守）
 

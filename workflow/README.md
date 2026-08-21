@@ -118,6 +118,7 @@
 | P31 映射语言不一致 | risk_assessor 中文映射已接线 + 测试 |
 | P32 高风险降级护栏 | risk_assessor 护栏 + 测试 |
 | P33 增量覆盖率 | unit_test 的 incremental_coverage_min |
+| P53 元门禁自律（V3.3.3） | self_audit 检查器 + gate_5_3（4 项机械验证）+ 7 测试 + pre-push/CI |
 
 ## 开发命令
 

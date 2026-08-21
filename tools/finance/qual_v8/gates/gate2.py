@@ -2,12 +2,12 @@
 Gate 2: 数据收集 + 参数提取（确定性计算）
 """
 
-from typing import Dict, Any
+import logging
 from dataclasses import dataclass
 from datetime import datetime
-import logging
+from typing import Any
 
-from ..core.gate_engine import GateBase, GateSpec, GateResult
+from ..core.gate_engine import GateBase, GateResult, GateSpec
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class Gate2DataCollection(GateBase):
             "tax_rate": {"min": 0.10, "max": 0.35},
         }
     
-    def execute(self, context: Dict[str, Any]) -> GateResult:
+    def execute(self, context: dict[str, Any]) -> GateResult:
         """执行Gate 2（真实：Wind→canonical DCF 参数 + 初始化数据锚点）"""
         errors = []
         warnings = []
@@ -101,10 +101,10 @@ class Gate2DataCollection(GateBase):
             errors=errors,
             warnings=warnings,
             execution_time=0.0,
-            timestamp=datetime.now().isoformat(),
+            timestamp=datetime.now().isoformat(),  # noqa: DTZ005
         )
 
-    def check_criteria(self, context: Dict[str, Any]) -> bool:
+    def check_criteria(self, context: dict[str, Any]) -> bool:
         """检查通过标准"""
         dcf_params = context.get("dcf_params")
         if not dcf_params:
@@ -121,7 +121,7 @@ class Gate2DataCollection(GateBase):
 
         return all(checks)
 
-    def _extract_dcf_params(self, context: Dict[str, Any]) -> DCFParams:
+    def _extract_dcf_params(self, context: dict[str, Any]) -> DCFParams:
         """提取DCF参数（真实：finance.workflow.extract_dcf_params，canonical 键）"""
         wind_data = context.get("wind_data", {})
         shares = context.get("shares")
@@ -138,7 +138,7 @@ class Gate2DataCollection(GateBase):
                 calculation_formula="FCF = OCF - Capex; WACC = CAPM (finance.workflow.extract_dcf_params)",
                 data_source="Wind canonical",
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Gate2 真实 DCF 提取失败: {e}，回退确定性计算")
             # 回退：确定性计算（canonical 键）
             income = wind_data.get("income", {})
@@ -186,22 +186,21 @@ class Gate2DataCollection(GateBase):
                 data_source="Wind canonical (fallback)",
             )
 
-    def _init_data_anchor(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _init_data_anchor(self, context: dict[str, Any]) -> dict[str, Any]:
         """初始化 DataAnchor（真实：Wind canonical 多财年锚点）"""
         wind_data = context.get("wind_data")
         if not wind_data:
             return {"count": 0, "anchor": None}
         try:
-            from ..data_anchor import DataAnchor
-            anchor = DataAnchor()
-            anchor.init_from_wind_data(wind_data)
+            from ..data_anchor import get_data_anchor
+            anchor = get_data_anchor(wind_data)
             context["data_anchor"] = anchor
             return {
                 "count": len(anchor.get_all_anchors()),
                 "latest_fy": anchor.get_latest_fiscal_year(),
                 "anchor": anchor,
             }
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Gate2 DataAnchor 初始化失败: {e}")
             return {"count": 0, "anchor": None}
 
@@ -231,6 +230,6 @@ class Gate2DataCollection(GateBase):
 
         return errors
 
-    def _check_range(self, value: float, range_config: Dict) -> bool:
+    def _check_range(self, value: float, range_config: dict) -> bool:
         """检查值是否在范围内"""
         return range_config["min"] <= value <= range_config["max"]

@@ -59,3 +59,31 @@ jobs:
         run: |
           echo "HGF 门禁未通过（退出码非 0）。修复后重新推送，或按失败记录补充 root_cause。"
           exit 1
+
+  # V3.3.3（V2 记忆长效机制 L0）：P53 元门禁自律 CI job。
+  # 防本地 --no-verify 绕过 pre-push；对 workflow/ 自身变更跑 gate_5_3。
+  # gate_5_3 独立门禁（不依赖其他 gate），检查 4 项：
+  #   failures 无自锁 / baseline 可解析 / requirements 可解析 / lessons 有索引
+  self-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install packaging
+        run: python -m pip install --quiet packaging
+
+      - name: Run P53 self-audit gate (gate_5_3)
+        run: |
+          python workflow/workflow_cli.py --lifecycle advance gate_5_3 --dir workflow/
+
+      - name: Run session-end self check (L3)
+        run: |
+          python workflow/scripts/self_check.py --dir workflow/ --json || true
+          echo "（self_check 为提示性检查，不阻断；gate_5_3 结果为准）"

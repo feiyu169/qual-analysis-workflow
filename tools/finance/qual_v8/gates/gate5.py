@@ -236,9 +236,8 @@ class Gate5QualityEnhancement(GateBase):
         wind_data = context.get("wind_data", {})
         if wind_data:
             try:
-                from ..data_anchor import DataAnchor
-                anchor = DataAnchor()
-                anchor.init_from_wind_data(wind_data)
+                from ..data_anchor import get_data_anchor
+                anchor = get_data_anchor(wind_data)
                 context["data_anchor"] = anchor
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Gate5 锚点准备失败（非阻断）: {e}")

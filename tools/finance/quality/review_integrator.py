@@ -10,11 +10,10 @@ Qual工作流审查集成模块 (v2 - 修复自纠闭环)
 from __future__ import annotations
 
 import logging
-import os
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -54,22 +53,22 @@ class ReviewIssue:
 class ReviewResult:
     """审查结果"""
     review_path: str
-    fatal_issues: List[ReviewIssue] = field(default_factory=list)
-    important_issues: List[ReviewIssue] = field(default_factory=list)
-    suggestion_issues: List[ReviewIssue] = field(default_factory=list)
-    p0_fixes: List[str] = field(default_factory=list)
-    p1_fixes: List[str] = field(default_factory=list)
-    p2_fixes: List[str] = field(default_factory=list)
+    fatal_issues: list[ReviewIssue] = field(default_factory=list)
+    important_issues: list[ReviewIssue] = field(default_factory=list)
+    suggestion_issues: list[ReviewIssue] = field(default_factory=list)
+    p0_fixes: list[str] = field(default_factory=list)
+    p1_fixes: list[str] = field(default_factory=list)
+    p2_fixes: list[str] = field(default_factory=list)
     raw_content: str = ""
-    self_check_issues: List[ReviewIssue] = field(default_factory=list)  # 自纠闭环问题
+    self_check_issues: list[ReviewIssue] = field(default_factory=list)  # 自纠闭环问题
 
 
 @dataclass
 class FixResult:
     """修正结果"""
     fixed_path: str
-    fixes_applied: List[str] = field(default_factory=list)
-    fixes_skipped: List[str] = field(default_factory=list)
+    fixes_applied: list[str] = field(default_factory=list)
+    fixes_skipped: list[str] = field(default_factory=list)
     round_number: int = 0
     integrity_check_passed: bool = False
 
@@ -81,18 +80,18 @@ class AnalysisWithReviewResult:
     report_path: str
     review_path: str
     review_rounds: int
-    final_issues: Dict[str, int]
+    final_issues: dict[str, int]
     quality_score: float
-    fix_log: List[Dict] = field(default_factory=list)
-    error: Optional[str] = None
+    fix_log: list[dict] = field(default_factory=list)
+    error: str | None = None
 
 
 class ReviewIntegrator:
     """审查集成器 (v2 - 修复自纠闭环)"""
     
-    def __init__(self, config: Optional[ReviewConfig] = None):
+    def __init__(self, config: ReviewConfig | None = None):
         self.config = config or ReviewConfig()
-        self._llm_caller: Optional[Callable] = None
+        self._llm_caller: Callable | None = None
     
     def set_llm_caller(self, llm_caller: Callable):
         """设置LLM调用器"""
@@ -102,7 +101,7 @@ class ReviewIntegrator:
         self,
         report_path: str,
         output_dir: str,
-        wind_data: Optional[Dict] = None,
+        wind_data: dict | None = None,
     ) -> ReviewResult:
         """
         调用buy_side_report_review skill审查报告
@@ -139,8 +138,8 @@ class ReviewIntegrator:
     def review_report_text(
         self,
         report_text: str,
-        wind_data: Optional[Dict] = None,
-        output_dir: Optional[str] = None,
+        wind_data: dict | None = None,
+        output_dir: str | None = None,
         report_name: str = "report",
     ) -> ReviewResult:
         """审查报告文本（v8 接入版：不依赖文件路径，直接审文本）
@@ -172,7 +171,7 @@ class ReviewIntegrator:
                     f.write(review_content)
                 review_result.review_path = str(review_path)
                 logger.info(f"审查报告已保存: {review_path}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"审查报告保存失败: {e}")
 
         logger.info(
@@ -258,7 +257,7 @@ class ReviewIntegrator:
         review_result: ReviewResult,
         output_dir: str,
         round_number: int,
-        wind_data: Optional[Dict] = None,
+        wind_data: dict | None = None,
     ) -> FixResult:
         """
         根据审查结果修正报告（关键修复：修正必须落地到正文）
@@ -292,7 +291,7 @@ class ReviewIntegrator:
         llm_out = self._llm_caller("fix_report", prompt)
 
         # Patch 模式应用（最小侵入：唯一匹配 + 预算 + 校验闭环 + 失败回滚）
-        from .patch_applier import parse_patch_json, apply_patches, MAX_PATCHES
+        from .patch_applier import MAX_PATCHES, apply_patches, parse_patch_json
 
         patches = parse_patch_json(llm_out)
         if not patches:
@@ -306,16 +305,15 @@ class ReviewIntegrator:
                     from .structural_check import structural_check
                     r = structural_check("report", content)
                     return r.issues if not r.passed else []
-                except Exception:
+                except Exception:  # noqa: BLE001
                     return []
 
             def _numeric(content: str) -> list:
                 if not wind_data:
                     return []
                 try:
-                    from ..qual_v8.data_anchor import DataAnchor
-                    anchor = DataAnchor()
-                    anchor.init_from_wind_data(wind_data)
+                    from ..qual_v8.data_anchor import get_data_anchor
+                    anchor = get_data_anchor(wind_data)
                     latest_fy = anchor.get_latest_fiscal_year()
                     # 报告整体校验：按章节拆分（模拟 ch 前缀）
                     errs = []
@@ -324,7 +322,7 @@ class ReviewIntegrator:
                         ch_num = int(m.group(1))
                         errs.extend(anchor.validate_chapter(ch_num, content, fiscal_year=latest_fy))
                     return [f"数字锚点: {e}" for e in errs[:5]]
-                except Exception:
+                except Exception:  # noqa: BLE001
                     return []
 
             result = apply_patches(
@@ -373,7 +371,7 @@ class ReviewIntegrator:
         ticker: str,
         company_name: str,
         market: str,
-        wind_data: Dict,
+        wind_data: dict,
         llm_caller: Callable,
         shares: float,
         output_dir: str,
@@ -492,7 +490,7 @@ class ReviewIntegrator:
             fix_log=fix_log,
         )
     
-    def _build_wind_anchor_table(self, wind_data: Optional[Dict]) -> str:
+    def _build_wind_anchor_table(self, wind_data: dict | None) -> str:
         """从 wind_data 动态生成 Wind 验证数据表（修复：原硬编码美团数据，审查锚点失真）
 
         输出 canonical 键 × 财年的 Markdown 表格，供审查/修正 prompt 使用。
@@ -502,11 +500,9 @@ class ReviewIntegrator:
             return "（未提供 Wind 验证数据）"
 
         try:
-            from ..qual_v8.adapters import canonical_aliases
-            from ..qual_v8.data_anchor import DataAnchor
+            from ..qual_v8.data_anchor import get_data_anchor
 
-            anchor = DataAnchor()
-            anchor.init_from_wind_data(wind_data)
+            anchor = get_data_anchor(wind_data)  # C5-3 单例
             all_anchors = anchor.get_all_anchors()
             if not all_anchors:
                 return "（Wind 数据无法初始化锚点）"
@@ -534,11 +530,11 @@ class ReviewIntegrator:
             lines.append("")
             lines.append("> 铁律：报告中任何财务数字与上表同财年数值偏差>1% 即为数据错误，必须修正。")
             return "\n".join(lines)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Wind 锚点表构建失败: {e}")
             return "（Wind 验证数据构建失败）"
 
-    def _build_review_prompt(self, report_path: str, wind_data: Optional[Dict]) -> str:
+    def _build_review_prompt(self, report_path: str, wind_data: dict | None) -> str:
         """构建审查prompt（包含Phase 5.5自纠闭环检查）"""
         # 读取报告内容（完整）
         with open(report_path, 'r', encoding='utf-8') as f:
@@ -615,8 +611,8 @@ class ReviewIntegrator:
 """
         return prompt
     
-    def _build_fix_prompt(self, original_content: str, issues: List[ReviewIssue],
-                          wind_data: Optional[Dict] = None) -> str:
+    def _build_fix_prompt(self, original_content: str, issues: list[ReviewIssue],
+                          wind_data: dict | None = None) -> str:
         """构建修正prompt（关键修复：强调必须输出完整报告并修正正文）"""
         
         # 构建问题列表
@@ -676,8 +672,8 @@ class ReviewIntegrator:
         self,
         original_content: str,
         fixed_content: str,
-        issues: List[ReviewIssue],
-    ) -> Dict:
+        issues: list[ReviewIssue],
+    ) -> dict:
         """验证修正完整性"""
         result = {"passed": True, "reason": "", "details": []}
         
@@ -703,7 +699,7 @@ class ReviewIntegrator:
         
         return result
     
-    def _force_fix(self, original_content: str, issues: List[ReviewIssue]) -> str:
+    def _force_fix(self, original_content: str, issues: list[ReviewIssue]) -> str:
         """强制修正（当LLM修正失败时使用）"""
         logger.info("使用强制修正模式")
         
@@ -828,7 +824,7 @@ class ReviewIntegrator:
 
         return result
     
-    def _get_issues_to_fix(self, review_result: ReviewResult) -> List[ReviewIssue]:
+    def _get_issues_to_fix(self, review_result: ReviewResult) -> list[ReviewIssue]:
         """根据阈值获取需要修正的问题"""
         issues = []
         
