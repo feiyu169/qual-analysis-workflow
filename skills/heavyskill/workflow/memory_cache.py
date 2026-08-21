@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 import os, sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from configuration import DeliberationRecord, SelectionStrategy
 from .utils import (
@@ -79,8 +80,8 @@ class MemoryCache:
         self,
         contents: List[str],
         latencies: Optional[List[float]] = None,
-        truncated: Optional[List[bool]] = None,
-        content_fallback: Optional[List[bool]] = None,
+        truncated: Optional[list[bool]] = None,
+        content_fallback: Optional[list[bool]] = None,
     ) -> None:
         """Add reasoning trajectories to the cache.
 
@@ -99,7 +100,9 @@ class MemoryCache:
         for i, content in enumerate(contents):
             answer = extract_answer(content)
             is_truncated = bool(truncated and i < len(truncated) and truncated[i])
-            is_fallback = bool(content_fallback and i < len(content_fallback) and content_fallback[i])
+            is_fallback = bool(
+                content_fallback and i < len(content_fallback) and content_fallback[i]
+            )
             if is_fallback:
                 answer = None
             trajectory = Trajectory(
@@ -136,7 +139,11 @@ class MemoryCache:
         Returns:
             List of valid Trajectory objects.
         """
-        return [t for t in self.trajectories if t.is_valid and not t.content.startswith("[ERROR:")]
+        return [
+            t
+            for t in self.trajectories
+            if t.is_valid and not t.content.startswith("[ERROR:")
+        ]
 
     def get_trajectory_contents(self, indices: Optional[List[int]] = None) -> List[str]:
         """Get trajectory contents by indices.
@@ -200,7 +207,9 @@ class MemoryCache:
         selected = rng.sample(valid, min(k, len(valid)))
         return [t.index for t in selected]
 
-    def _select_max_answer_frequency(self, valid: List[Trajectory], k: int) -> List[int]:
+    def _select_max_answer_frequency(
+        self, valid: List[Trajectory], k: int
+    ) -> List[int]:
         """Select trajectories with the most frequently occurring answers."""
         answers = [t.answer for t in valid]
         answer_freq = get_answer_frequencies(answers)

@@ -117,7 +117,9 @@ CLI 加载（配置断裂）；推理模型（v4-pro）思维链计入预算，�
 - 截断轨迹（finish_reason=length）自动**从审议与共识中剔除**（保留在 JSON 的 trajectories 供查证）；
   思维链回退轨迹（content 为空）不参与共识投票。
 - 输出 JSON 新增 **`truncation` 摘要字段**：`{reasoning_truncated_count, content_fallback_count, deliberation_truncated}`。
-- 控制台在存在截断时打印 ⚠️ WARNING。
+- 控制台在存在截断/退化时打印 ⚠️ WARNING。
+- 审议响应截断时自动**回退共识**（不采信残稿结论，P54-R3）。
+- 截断且无最终答案时 **exit 2**（除非 `--accept-partial` 显式接受部分结果，P54-R5）。
 
 **读取审查结果的正确姿势（勿整读 100KB+ JSON，勿只信控制台摘要）**：
 ```python
@@ -130,7 +132,7 @@ print(d["deliberation"][0]["deliberation_response"])
 # 3) 需要逐条轨迹时按关键词切片（如 总体结论/最终答案），不整读
 ```
 **若 `truncation` 非零**：增大 `--summary-max-tokens`（审议截断）或 `--max-tokens`（轨迹截断）后重跑；
-或显式标注"部分结果接受"。
+或加 `--accept-partial` 显式接受部分结果（否则截断且无答案时退出码为 2，自动化可感知）。
 
 ### K 值选择
 

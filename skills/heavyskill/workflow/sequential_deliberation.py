@@ -14,9 +14,17 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import os, sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from agent.openai_compatible import LLMResponse, OpenAICompatibleClient
-from configuration import DeliberationRecord, HeavySkillConfig, Language, PromptType, SelectionStrategy, get_deliberation_prompt
+from configuration import (
+    DeliberationRecord,
+    HeavySkillConfig,
+    Language,
+    PromptType,
+    SelectionStrategy,
+    get_deliberation_prompt,
+)
 from .memory_cache import MemoryCache
 from .utils import extract_answer, estimate_tokens
 
@@ -223,12 +231,16 @@ class SequentialDeliberator:
 
         latency = time.monotonic() - start_time
         deliberation_text = response.content
-        final_answer = extract_answer(deliberation_text)
+        # P54-R3：审议截断时不得从残稿提取 final_answer（残稿可能含
+        # "**最终答案：…但" 等被硬切的残值）——强制走共识回退
+        final_answer = (
+            extract_answer(deliberation_text) if not response.truncated else None
+        )
 
         if response.truncated:
             logger.warning(
                 f"Deliberation response TRUNCATED (finish_reason=length, "
-                f"{len(deliberation_text)} chars) — 审议结论不完整，"
+                f"{len(deliberation_text)} chars) — 结论不可信，已回退共识；"
                 f"请检查输出 JSON 的 deliberation[].truncated 或增大 summary_max_tokens"
             )
 
@@ -246,6 +258,7 @@ class SequentialDeliberator:
             response=deliberation_text,
             extracted_answer=final_answer,
             tokens=response.total_tokens,
+            truncated=response.truncated,
         )
         cache.add_deliberation(record)
 

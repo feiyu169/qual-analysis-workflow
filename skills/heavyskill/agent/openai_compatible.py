@@ -211,7 +211,7 @@ class OpenAICompatibleClient:
 
             # Exponential backoff (skip on last attempt)
             if attempt < self.max_retries:
-                delay = self.retry_base_delay * (2 ** attempt)
+                delay = self.retry_base_delay * (2**attempt)
                 logger.debug(f"Retrying in {delay:.1f}s...")
                 await asyncio.sleep(delay)
 

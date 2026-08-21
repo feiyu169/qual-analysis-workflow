@@ -20,7 +20,10 @@ ANSWER_PATTERNS = [
     # English patterns
     re.compile(r"\*\*(?:Final\s+)?Answer[:\s]*\*\*\s*(.+?)(?:\n|$)", re.IGNORECASE),
     re.compile(r"(?:final|the)\s+answer\s+(?:is|:)\s*(.+?)(?:\n|\.|$)", re.IGNORECASE),
-    re.compile(r"(?:therefore|thus|so|hence),?\s*(?:the\s+answer\s+is\s+)?(.+?)(?:\n|\.|$)", re.IGNORECASE),
+    re.compile(
+        r"(?:therefore|thus|so|hence),?\s*(?:the\s+answer\s+is\s+)?(.+?)(?:\n|\.|$)",
+        re.IGNORECASE,
+    ),
     re.compile(r"answer\s*[:=]\s*(.+?)(?:\n|\.|$)", re.IGNORECASE),
     # Chinese patterns
     re.compile(r"\*\*(?:最终)?答案[：:]\s*\*\*\s*(.+?)(?:\n|$)"),
@@ -59,9 +62,25 @@ def estimate_tokens(text: str) -> int:
 # P54：句子终止符——文本被 max_tokens 硬截断时通常没有终止符，
 # 靠它识别"残稿"，避免把断句/思维碎片当成答案
 SENTENCE_TERMINATORS = (
-    "。", "！", "？", "；", "…",
-    ".", "!", "?", ";",
-    "”", '"', "』", "」", "）", ")", "]", "}", ">", "```",
+    "。",
+    "！",
+    "？",
+    "；",
+    "…",
+    ".",
+    "!",
+    "?",
+    ";",
+    "”",
+    '"',
+    "』",
+    "」",
+    "）",
+    ")",
+    "]",
+    "}",
+    ">",
+    "```",
 )
 
 
@@ -74,8 +93,16 @@ def is_terminated(text: str) -> bool:
 # P54：明显的思考/元话语起始短语——答案开头出现它们说明抓到的是推理过程而非结论。
 # 保守清单：只收录"几乎不可能作为正式答案开头"的元话语，避免误杀"可以合并"这类短裁决。
 _THINKING_STARTS = (
-    "我们", "让我们", "Let", "We need", "I need", "The user", "Need",
-    "需要注意", "用户要求", "要求我们",
+    "我们",
+    "让我们",
+    "Let",
+    "We need",
+    "I need",
+    "The user",
+    "Need",
+    "需要注意",
+    "用户要求",
+    "要求我们",
 )
 
 
@@ -91,9 +118,7 @@ def _is_fragment(answer: str) -> bool:
     a_lower = a.lower()
     if "最终答案" in a or "final answer" in a_lower:
         return True
-    if a.startswith(_THINKING_STARTS):
-        return True
-    return False
+    return a.startswith(_THINKING_STARTS)
 
 
 def extract_answer(text: str) -> Optional[str]:
@@ -103,6 +128,9 @@ def extract_answer(text: str) -> Optional[str]:
 
     P54 加固：截断残稿（无终止符）不走"最后一行"回退；明显是思维链碎片
     （以思考短语开头 / 仍含答案标记）的候选被拒绝，避免共识被垃圾污染。
+    P54-R2：前导冒号改为**净化而非拒绝**——"答案是：42" / "The final answer is: 42"
+    是标准格式，旧守卫把冒号留给 group 后一律拒绝导致误杀；垃圾（思维链片段）的
+    防护由 pipeline 层 content_fallback 标记承担，此处只需清理冒号。
 
     Args:
         text: Full reasoning trajectory text.
@@ -119,7 +147,9 @@ def extract_answer(text: str) -> Optional[str]:
             answer = match.group(1).strip()
             # Clean up common artifacts (含 markdown 加粗闭合符)
             answer = answer.rstrip("。，、；：！？.,;:!?*")
-            if not answer or answer.startswith((":", "：")):
+            # P54-R2：净化前导冒号/空白（"答案是：42"→"42"），净化后为空则跳过
+            answer = answer.lstrip(":： ").strip()
+            if not answer:
                 continue
             if len(answer) < 500:  # Sanity check
                 # P54：匹配内容仍含答案标记（大小写不敏感）= 抓到标记附近的残段，跳过继续找
@@ -169,7 +199,9 @@ def get_answer_frequencies(answers: List[Optional[str]]) -> Counter:
     return Counter(valid_answers)
 
 
-def is_repetitive(text: str, min_unique_ratio: float = 0.3, ngram_size: int = 10) -> bool:
+def is_repetitive(
+    text: str, min_unique_ratio: float = 0.3, ngram_size: int = 10
+) -> bool:
     """Detect if a trajectory is excessively repetitive.
 
     Checks for repeated n-grams that indicate the model is stuck in a loop.
@@ -296,9 +328,7 @@ def select_top_k_trajectories(
     return selected_indices
 
 
-def estimate_total_tokens(
-    trajectories: List[str], deliberation_text: str = ""
-) -> int:
+def estimate_total_tokens(trajectories: List[str], deliberation_text: str = "") -> int:
     """Estimate total tokens used across all trajectories.
 
     Args:
@@ -313,7 +343,9 @@ def estimate_total_tokens(
     return total
 
 
-def format_trajectory_for_display(index: int, trajectory: str, max_chars: int = 200) -> str:
+def format_trajectory_for_display(
+    index: int, trajectory: str, max_chars: int = 200
+) -> str:
     """Format a trajectory for display in logs.
 
     Args:

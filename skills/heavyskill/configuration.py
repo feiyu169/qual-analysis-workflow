@@ -17,18 +17,21 @@ logger = logging.getLogger(__name__)
 
 class PromptType(str, Enum):
     """Domain-specific prompt types."""
+
     GENERAL = "general"
     STEM = "stem"
 
 
 class Language(str, Enum):
     """Supported languages for deliberation prompts."""
+
     EN = "en"
     CN = "cn"
 
 
 class SelectionStrategy(str, Enum):
     """Strategies for selecting trajectories in deliberation."""
+
     RANDOM = "random"
     MAX_ANSWER_FREQUENCY = "max_answer_frequency"
     MAX_DIVERSITY = "max_diversity"
@@ -131,7 +134,9 @@ class HeavySkillConfig:
         if self.max_tokens < 1:
             raise ValueError(f"max_tokens must be >= 1, got {self.max_tokens}")
         if self.summary_max_tokens < 1:
-            raise ValueError(f"summary_max_tokens must be >= 1, got {self.summary_max_tokens}")
+            raise ValueError(
+                f"summary_max_tokens must be >= 1, got {self.summary_max_tokens}"
+            )
         if self.token_budget < 1:
             raise ValueError(f"token_budget must be >= 1, got {self.token_budget}")
 
@@ -183,7 +188,6 @@ Think step-by-step. If most attempts agree on an answer, verify the reasoning is
 
 Provide your final answer in the format:
 **Final Answer:** [your answer here]""",
-
         "stem": """You are given {k} independent reasoning attempts for the following STEM problem.
 
 Problem: {query}
@@ -223,7 +227,6 @@ Provide your final answer in the format:
 
 请按以下格式给出最终答案：
 **最终答案：** [你的答案]""",
-
         "stem": """以下是针对同一 STEM 问题的 {k} 个独立推理尝试。
 
 问题：{query}
@@ -270,6 +273,9 @@ class DeliberationRecord:
     response: str
     extracted_answer: Optional[str] = None
     tokens: int = 0
+    # P54-R5：审议响应截断标记——与 DeliberationResult.truncated 同步，保证
+    # cache 序列化的 deliberation_history 与 result 视图语义一致
+    truncated: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary."""
@@ -280,6 +286,7 @@ class DeliberationRecord:
             "response": self.response,
             "extracted_answer": self.extracted_answer,
             "tokens": self.tokens,
+            "truncated": self.truncated,
         }
 
 

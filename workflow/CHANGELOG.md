@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-08-21 — heavyskill P54 复审修复（R1-R7，HGF 裁决 FAIL → PASS_WITH_WARNING）
+
+### 背景
+对 P54 截断修复做 HGF 审查（门禁 + heavyskill 模式1 K=4 深度审查），裁决 FAIL：
+三条 P1（CLI 标志名断裂/冒号守卫误杀标准格式/审议截断无防垃圾保护）+ 九项 P2 共识。
+审查档案：`docs/lessons/2026-08-21-heavyskill-p54-hgf-review.md`。
+
+### 修复（skills/heavyskill）
+- R1：argparse 双拼写注册短横线别名（`--max-tokens`/`--summary-max-tokens` + 兼容下划线），
+  统一告警文案/SKILL.md/文档
+- R2：extract_answer 冒号守卫改**净化而非拒绝**（`"答案是：42"` → `"42"`）；垃圾防护
+  收敛到 pipeline 层 content_fallback
+- R3：审议截断强制回退共识（残稿结论不采信）；previous_deliberation 不回填截断残稿
+- R4：config 加载抽 `build_config()` 纯函数，全键 `CLI > config.yaml > 默认` 三级解析
+  （修 temperature/language 等 `or` 短路不生效）
+- R5：新增 `--accept-partial`（截断且无答案 exit 2）；has_truncation 纳入思维链回退；
+  早退判定统一 cache 有效集；successful_count 排除截断；DeliberationRecord 补 truncated
+- R6：清 6 项新 ruff 债（SIM103/I001/UP006×2/UP045×2）+ skills/heavyskill scoped ruff
+  配置（存量基线化，tests/ 不豁免）——static_analysis 门禁从 182 项 FAIL 转绿
+- R7：单测 9 → 18（冒号格式/审议回退/build_config×4/全截断端到端/truncated∩fallback/
+  has_truncation 含 fallback）
+
+### 门禁复审（HGF CLI --execute）
+- 9 门禁：8 通过 + 1 环境跳过（safety SHOULD_PASS），**全部 MUST_PASS 通过**（exit=0）；
+  ruff 全绿 / pytest 18 passed（覆盖 64%）/ semgrep 0 / detect-secrets 0 / format 通过
+- 附带修复：`.hgf/failures.jsonl` 1 条历史不完整记录按 V3.3.2 S1 归档
+  （`--failures --archive`），解除 failure_log 门禁自锁
+
+### 文档
+- 新审查档案 `docs/lessons/2026-08-21-heavyskill-p54-hgf-review.md` + README 索引
+  + pitfalls-summary.json lessons 登记
+- `.agents/skills/heavyskill/SKILL.md`：`--accept-partial`/审议回退/exit 2 行为说明
+
 ## 2026-08-21 — heavyskill 模式2 截断治理（P54，技能代码修复，非 HGF 版本变更）
 
 ### 背景

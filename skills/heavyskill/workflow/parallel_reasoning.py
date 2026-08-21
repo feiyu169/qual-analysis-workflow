@@ -15,9 +15,16 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 import os, sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from agent.openai_compatible import LLMResponse, OpenAICompatibleClient
-from configuration import HeavySkillConfig, PromptType, Language, get_reasoning_system_prompt
+from configuration import (
+    HeavySkillConfig,
+    PromptType,
+    Language,
+    get_reasoning_system_prompt,
+)
+from .utils import extract_answer
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +159,6 @@ class ParallelReasoner:
                 answers.append(None)
             else:
                 trajectories.append(response.content)
-                from .utils import extract_answer
 
                 answer = extract_answer(response.content)
                 # P54：content 为空回退思维链的轨迹没有可靠"最终答案"，不参与共识投票
@@ -160,7 +166,10 @@ class ParallelReasoner:
                     answer = None
                 answers.append(answer)
                 total_tokens += response.total_tokens
-                successful += 1
+                # P54-R5：截断轨迹不计入 successful（"完整成功"语义），
+                # 避免 summary 出现 "8/8 successful" 与 ⚠️ 截断告警并存的误导
+                if not response.truncated:
+                    successful += 1
 
                 if response.truncated:
                     logger.warning(

@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import os, sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from configuration import HeavySkillConfig, SelectionStrategy
 from .memory_cache import MemoryCache
@@ -59,7 +60,9 @@ class HeavySkillResult:
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary for JSON output."""
-        reasoning_dict = self.reasoning_result.to_dict() if self.reasoning_result else None
+        reasoning_dict = (
+            self.reasoning_result.to_dict() if self.reasoning_result else None
+        )
         result = {
             "query": self.query,
             "final_answer": self.final_answer,
@@ -71,10 +74,14 @@ class HeavySkillResult:
             # P54：截断摘要——消费端先看这里，>0 必须处理（重跑/增大预算/标记接受）
             "truncation": {
                 "reasoning_truncated_count": (
-                    self.reasoning_result.truncated_count if self.reasoning_result else 0
+                    self.reasoning_result.truncated_count
+                    if self.reasoning_result
+                    else 0
                 ),
                 "content_fallback_count": (
-                    self.reasoning_result.content_fallback_count if self.reasoning_result else 0
+                    self.reasoning_result.content_fallback_count
+                    if self.reasoning_result
+                    else 0
                 ),
                 "deliberation_truncated": any(
                     d.truncated for d in self.deliberation_results
@@ -91,8 +98,15 @@ class HeavySkillResult:
         return result
 
     def has_truncation(self) -> bool:
-        """P54：本次运行是否有任何截断（推理轨迹或审议结论）。"""
-        if self.reasoning_result and self.reasoning_result.truncated_count > 0:
+        """P54-R5：本次运行是否有退化（截断轨迹/思维链回退/审议截断）。
+
+        与 to_dict()["truncation"] 摘要口径一致（含 content_fallback_count），
+        供 CLI/告警判断"结果是否可放心采信"。
+        """
+        if self.reasoning_result and (
+            self.reasoning_result.truncated_count > 0
+            or self.reasoning_result.content_fallback_count > 0
+        ):
             return True
         return any(d.truncated for d in self.deliberation_results)
 
@@ -135,19 +149,27 @@ class HeavySkillResult:
                 for answer, count in list(answer_freq.items())[:5]:
                     lines.append(f"  '{answer}': {count} votes")
 
-        # P54：截断告警——summary 只展示短字段，必须显式提示消费端去读 JSON 详情
+        # P54-R1/R5：退化告警——summary 只展示短字段，必须显式提示消费端去读 JSON 详情
         if self.has_truncation():
             truncated_reasoning = (
                 self.reasoning_result.truncated_count if self.reasoning_result else 0
             )
+            fallback_count = (
+                self.reasoning_result.content_fallback_count
+                if self.reasoning_result
+                else 0
+            )
             delib_truncated = any(d.truncated for d in self.deliberation_results)
             lines.append("")
-            lines.append("⚠️  WARNING: 本次运行存在截断！")
-            lines.append(f"   推理轨迹截断: {truncated_reasoning} 条（已从审议/共识剔除）")
+            lines.append("⚠️  WARNING: 本次运行存在截断或退化！")
+            lines.append(
+                f"   推理轨迹截断: {truncated_reasoning} 条（已从审议/共识剔除）"
+            )
+            lines.append(f"   思维链回退: {fallback_count} 条（不参与共识投票）")
             lines.append(f"   审议结论截断: {'是' if delib_truncated else '否'}")
             lines.append(
                 "   处理：增大 --max-tokens / --summary-max-tokens 后重跑，"
-                "或显式标记接受部分结果"
+                "或使用 --accept-partial 显式接受部分结果"
             )
 
         lines.append("=" * 60)
@@ -219,13 +241,16 @@ class HeavySkillPipeline:
         total_tokens += reasoning_result.total_tokens
 
         # Filter trajectories for quality
-        valid_trajectories, valid_indices = filter_trajectories(
+        # P54-R5：早退判定统一用 cache 的有效集（is_valid 已排除截断轨迹），
+        # 不再用未过滤的 reasoning_result.answers（旧逻辑全截断时仍判"有有效轨迹"）
+        valid_trajectories, _ = filter_trajectories(
             reasoning_result.trajectories,
             reasoning_result.answers,
         )
-
-        if not valid_trajectories:
-            logger.warning("No valid trajectories after filtering")
+        if not valid_trajectories or not cache.get_valid_trajectories():
+            logger.warning(
+                "No valid trajectories after filtering (截断/失败/质量过滤后为空)"
+            )
             return HeavySkillResult(
                 query=query,
                 final_answer=None,
@@ -247,7 +272,9 @@ class HeavySkillPipeline:
 
         async with SequentialDeliberator(self.config) as deliberator:
             for iteration in range(self.config.max_iterations):
-                logger.info(f"Deliberation iteration {iteration + 1}/{self.config.max_iterations}")
+                logger.info(
+                    f"Deliberation iteration {iteration + 1}/{self.config.max_iterations}"
+                )
 
                 delib_result = await deliberator.deliberate(
                     query=query,
@@ -258,11 +285,18 @@ class HeavySkillPipeline:
 
                 deliberation_results.append(delib_result)
                 total_tokens += delib_result.tokens
-                previous_deliberation = delib_result.deliberation_response
+                # P54-R3：截断的审议残稿不回填下一轮迭代（防污染）
+                previous_deliberation = (
+                    delib_result.deliberation_response
+                    if not delib_result.truncated
+                    else None
+                )
 
                 # If we got a confident answer, we can stop early
                 if delib_result.final_answer and iteration > 0:
-                    logger.info(f"Got answer on iteration {iteration + 1}, stopping early")
+                    logger.info(
+                        f"Got answer on iteration {iteration + 1}, stopping early"
+                    )
                     break
 
         # Determine final answer
