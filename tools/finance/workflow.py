@@ -2798,6 +2798,8 @@ def run_analysis(
             company_name=company_name,
             ticker=ticker,
             shares=shares,
+            # B2a-1：current_price 从 Wind quote 动态取（删 quality_enhancer 内置 41.6 默认）
+            current_price=(ctx.wind.quote.get("最新价") if ctx.wind and hasattr(ctx.wind, "quote") and isinstance(ctx.wind.quote, dict) else None),
             fiscal_year=2025,
             llm_caller=llm_caller,
             enable_debate=False,  # 辩论机制已禁用（会导致进程卡死）
@@ -2845,7 +2847,9 @@ def run_analysis(
         try:
             from .market_data import MarketData
             market_data = MarketData(ticker=ticker, market=market)
-            market_data.set_snapshot("latest", price=41.6, currency="HKD")
+            # B2a-1：股价从 Wind quote 动态取（删 41.6 硬编码）
+            _px = (ctx.wind.quote.get("最新价") if ctx.wind and hasattr(ctx.wind, "quote") and isinstance(ctx.wind.quote, dict) else None)
+            market_data.set_snapshot("latest", price=_px or 0.0, currency="HKD")
             logger.info(f"MarketData股价: {market_data.format_price()}")
         except Exception as e:
             logger.warning(f"MarketData获取失败: {e}")
@@ -2854,6 +2858,7 @@ def run_analysis(
     if HAS_FLIP_THRESHOLD:
         try:
             from .valuation.flip_threshold import FlipThresholdCalculator
+            _px2 = (ctx.wind.quote.get("最新价") if ctx.wind and hasattr(ctx.wind, "quote") and isinstance(ctx.wind.quote, dict) else None)
             flip_calc = FlipThresholdCalculator(
                 base_revenue=80.07,
                 base_ebit_margin=0.05,
@@ -2862,7 +2867,7 @@ def run_analysis(
                 shares=10.12,
                 net_debt=-127.81,
             )
-            thresholds = flip_calc.calc_all_thresholds(41.6)
+            thresholds = flip_calc.calc_all_thresholds(_px2 or 0.0)
             logger.info(f"FlipThresholdCalculator翻转点: {len(thresholds)}个")
         except Exception as e:
             logger.warning(f"FlipThresholdCalculator计算失败: {e}")

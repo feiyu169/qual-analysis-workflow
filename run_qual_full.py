@@ -46,6 +46,10 @@ def main():
     company = bundle.get("company_name") or "阅文集团"
     log(f"Wind 数据就绪: shares={shares}亿股, 键={list(wind_data.keys())}")
 
+    # B2a-1：current_price 从 Wind quote 动态取（删 21.48 硬编码）
+    current_price = (wind_data.get("quote") or {}).get("最新价", 0) or 0
+    log(f"当前股价（Wind quote）: {current_price}")
+
     # 2) 财报原文（唯一解析手段：MinerU；失败即中断，报告等待处理）
     try:
         from finance.filing_downloader import fetch_filing
@@ -117,7 +121,7 @@ def main():
             "filing_data": filing,
             "llm_caller": llm_caller,
             "shares": shares,
-            "current_price": 21.48,
+            "current_price": current_price,  # B2a-1：Wind quote 动态取值（无硬编码）
             "fiscal_year": 2025,
             "qual_mode": "soft",     # B1-2：A4 验收后默认从 shadow 翻转为 soft（告警不阻断；enforce 可阻断关键错误）
             "output_dir": out_dir,

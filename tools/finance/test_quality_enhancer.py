@@ -85,7 +85,7 @@ def test_depth_enhancer():
         "income": {"年营业总收入": [1134.7, 1268.98, 1427.76], "年净利润": [63.96, 153.35, 186.17], "年营业利润": [50.43, 130.72, 184.86]},
     }
 
-    result = run_depth_enhancement(chapters, financials, 57.7, 41.6, 43.0)
+    result = run_depth_enhancement(chapters, financials, 57.7, 41.6, 43.0, base_wacc=0.081)
     assert len(result.scenarios) > 0, "应有情景分析"
     assert len(result.yoy_changes) > 0, "应有同比变化"
     assert result.overall_insight_score > 0, "洞察评分应>0"

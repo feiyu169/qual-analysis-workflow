@@ -61,6 +61,9 @@ def quick_verify():
     _safe_print(f"Wind 数据: shares={shares:.2f}亿股, 键={list(wind_data.keys())}")
     _safe_print(f"R5 章节预填: {sorted(chapters.keys())} (共{sum(len(v) for v in chapters.values())}字符)")
 
+    # B2a-1：current_price 从 Wind quote 动态取（删 21.48 硬编码）
+    current_price = (wind_data.get("quote") or {}).get("最新价", 0) or 0
+
     from finance.qual_v8.workflow import QualWorkflow
 
     context = {
@@ -72,7 +75,7 @@ def quick_verify():
         "filing_data": {"sections": {"dummy": "sections"}, "metadata": {}},
         "chapters": chapters,
         "llm_caller": None,          # quick 模式无 LLM
-        "current_price": 21.48,      # Wind 最新价（真实）
+        "current_price": current_price,  # B2a-1：Wind quote 动态取值
         "fiscal_year": 2025,
         "qual_mode": "shadow",
         "human_confirmed": True,

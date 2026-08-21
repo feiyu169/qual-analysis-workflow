@@ -48,8 +48,8 @@ def enhance_report_quality(
     wind_valuation: Optional[dict] = None,
     company_name: str = "",
     ticker: str = "",
-    shares: float = 43.0,
-    current_price: float = 41.6,
+    shares: float = 0.0,
+    current_price: Optional[float] = None,  # B2a-1：不再内置快手默认值 41.6
     fiscal_year: int = 2025,
     llm_caller: Optional[Callable] = None,
     enable_debate: bool = True,
@@ -66,7 +66,7 @@ def enhance_report_quality(
         company_name: 公司名称
         ticker: 股票代码
         shares: 总股本
-        current_price: 当前股价
+        current_price: 当前股价（B2a-1：必须由调用方传入，无默认）
         fiscal_year: 财年
         llm_caller: LLM调用函数
         enable_debate: 是否启用辩论
@@ -204,7 +204,8 @@ def enhance_report_quality(
                     'target_bull': dcf_value * 1.2,
                     'target_base': dcf_value,
                     'target_bear': dcf_value * 0.8,
-                    'upside': (dcf_value - current_price) / current_price if current_price > 0 else 0,
+                    'upside': (dcf_value - current_price) / current_price
+                    if current_price and current_price > 0 else 0,
                 }
                 logger.info(f"[Quality] UnifiedValuation DCF: {dcf_value:.2f}")
             else:
