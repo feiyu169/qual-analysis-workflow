@@ -1,5 +1,14 @@
 # 数值错位根治——双专家综合实施蓝图（2026-08-22）
 
+> **实施状态（2026-08-22 已落地，commit 9174e3f）**：本蓝图 P0 五项全部实现并通过测试——
+> - 层 0 `normalize_values.anchor_deviation`（×10ⁿ/÷10ⁿ、prefix_drop、digit_typo）✅ test_anchor_deviation（7 例）
+> - 层 1 `qual_v8/data_anchor.extract_data_spans` last-wins 修复 ✅（同指标多处出现不漏检，span 逐出现定位）
+> - 层 1 `qual_v8/anchor_repair.py` T1/T3（自证：替换后整章重跑校验器必须通过，否则全量回滚）✅ test_anchor_repair（8 例）
+> - 层 2 `workflow._generate_chapter` 清洗层（clean-then-check：T1 修正后闸门过→不重试；T3→omit 指令"省略该数值"）✅ test_generate_chapter_cleans_misaligned_value
+> - 层 2 `review_repair_loop._repair_chapters` 分层（sweep 先修 + 值类问题不进 LLM prompt）✅ test_repair_chapters_triage_value_issues
+> - 全量 132 测试通过；ruff 零新增告警。P1（T2 开关）、P2（digit_typo 提示/负样本回流）按计划留待后续。
+> 另修复 test_v31_p0a 裸模块属性赋值跨文件泄漏（monkeypatch 化），消除 pytest 全量运行的顺序污染。
+
 问题：LLM 写作数值转写错位（1031.63→31.63），Gate4 拦截但修复循环 LLM 反复产错 → 报告无法产出。
 双专家独立评审后综合：
 - **投资分析专家**（方法论）：`docs/qual-anchor-repair-architecture.md` 前身为方法论评审（本文件合并）
