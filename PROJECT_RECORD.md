@@ -1,7 +1,7 @@
 # HGF 项目记录（会话持久化存档）
 
 > 本文件是 HGF（Hermes Gate Flow）在 DSH 中全部工作的持久化记录，供下次会话恢复上下文。
-> 最后更新：2026-08-18（V3.3.1 架构复审修复完成）
+> 最后更新：2026-08-21（3 项待办完成 + 16/16 gate 全流程端到端跑通）
 
 ---
 
@@ -34,6 +34,7 @@ HGF 是门禁驱动开发工作流，部署于 DSH（Cordis 插件宿主）。�
 | V3.2.11 待办 | 版本号 3.2.11 + 集成测试套件 + 狗粮化修复(shell参数数组/零依赖直通) + user_acceptance 人工通道 | `db2a548`/`024d1f5`/`72d361f` |
 | **V3.3.0** | **架构重构（架构专家评审 6.8/10 的 R1-R4）**：原子写入(state_io) + 统一检查器(tool_runner) + lifecycle 拆分(dag/checkers/metrics) + 矩阵-生命周期解耦(注入回调) | `3dc9c3c` |
 | **V3.3.1** | **架构复审修复（复审共识 7.6/10 的建议 1-4）**：_run_command 委托 tool_runner + mcp_server.check_security 改走 tool_runner + 删 gate_results 死表 + atomic_append_jsonl 诚实化(fsync) + re-export 收敛(__all__) + reopen 异常改 warning | `00faa14` |
+| **V3.3.1 狗粮化** | **3 项待办完成 + 16/16 gate 全流程端到端跑通**：heavyskill 模式2 恢复（.env 已有 key + K=1 冒烟通过）+ .github 已同步 + checkov 无 IaC 直通增强 | `(未提交，见下)` |
 
 ### V3.3.0 架构重构明细（2026-08-18，架构专家 8 轨迹评审后实施）
 
@@ -122,15 +123,29 @@ HGF 是门禁驱动开发工作流，部署于 DSH（Cordis 插件宿主）。�
 
 ---
 
-## 七、待办/下次会话候选任务
+## 七、待办/下次会话候选任务（2026-08-21 更新：全部完成）
 
-1. **补真实集成测试套件**（`tests/integration/`）：`_check_integration_tests` 现在诚实拒绝"无集成测试"的 gate_3_1——项目需补真实集成测试才能推进
-2. **版本号同步**：__version__ 更新到 3.2.11
-3. **.github workflow 同步**：工作区根非 git 仓库，CI workflow 更新未提交（若 CI 在其他仓库需同步）
-4. **用语义模板写真实架构/威胁建模文档**：验证 V3.2.11 新校验器在真实项目上的效果
-5. **用户验收通道落地**：user_acceptance 拒绝 AI 自签，需真实人工通道（ask_user_question 或人工文件）
-6. **可选的 heavyskill 模式2 恢复**：配置 DEEPSEEK_API_KEY + venv 后可复用 Python 流水线
-7. **HGF 对自身狗粮化验收**：用 V3.2.11 全流程跑一个真实功能（如实现一个小模块），验证 16 gate 端到端
+原 7 项待办核查后状态：
+1. ✅ 补真实集成测试套件（tests/integration/ 两处已建，_check_integration_tests 真实通过）
+2. ✅ 版本号同步（当前 3.3.1）
+3. ✅ **.github workflow 同步**（2026-08-21 确认：工作区根已是 git 仓库，HEAD 已含"空变更跳过"——无需处理）
+4. ✅ 语义模板真实文档验证（狗粮化 gate_1_1 STRIDE 文档实证）
+5. ✅ user_acceptance 人工通道（_check_review 含人工验收证据，狗粮化 gate_3_3 实际通过）
+6. ✅ **heavyskill 模式2 恢复**（2026-08-21：httpx 0.28.1 已装于系统 Python；DEEPSEEK_API_KEY 在 config/.env 长度 35；K=1 冒烟 20.5s/1047 tokens 通过。**用法**：从 .env 读 key → `python skills/heavyskill/scripts/run_heavyskill.py --query "..." --reason_k 8 --summary_k 4 --api_key $key`）
+7. ✅ **HGF 狗粮化验收**（2026-08-21：**16/16 gate 全部 done，Phase 0-5 端到端真实跑通**）
+
+### 狗粮化 16 gate 全流程里程碑（2026-08-21）
+- `.hgf-dogfood/`（gitignore）demo 项目从 gate_0_1 推进至 gate_5_2 **全部 done**
+- Phase 3-5 实测：gate_3_2(DAST外部报告) → gate_3_3(user_acceptance 人工通道) →
+  gate_4_1(部署+密钥轮换语义+checkov无IaC直通) → gate_4_2(健康探针真跑) →
+  gate_4_3(监控语义) → gate_5_1(监控探针真跑，曾拦截38.5%错误率→清理测试残留后通过) →
+  gate_5_2(反馈评审)
+- metrics 实测：Phase 3 跨度 71.36h（真实时间）、返工 0、逃逸 0
+- **本轮引擎增强**：`_check_checkov` 无 IaC 资产直通（同 dependency 零依赖逻辑）+ 2 测试
+
+### 剩余可选（非待办）
+- 用 heavyskill 模式2 跑一次完整 K=8 评审（验证流水线全规模可用）
+- 把狗粮化推进过程沉淀为 hgf 技能的教学示例
 
 ---
 
