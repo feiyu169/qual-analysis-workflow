@@ -6,9 +6,7 @@ Qual 工作流缺陷修复回归测试
 2. 辩论合并模式
 3. 上游兼容性
 """
-import pytest
-from unittest.mock import patch, MagicMock
-from quality_enhancer import _merge_debate_result, QualityEnhancementResult
+from finance.quality_enhancer import QualityEnhancementResult, _merge_debate_result
 
 
 class MockDebateResult:

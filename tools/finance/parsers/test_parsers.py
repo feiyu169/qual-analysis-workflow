@@ -9,31 +9,28 @@
 6. ParserRouter
 """
 
-import pytest
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
+
+import pytest
+
+from finance.parsers.docling_parser import DoclingParser
 
 # 导入被测模块
-from hermes_tools.finance.parsers.document_store import (
-    DocumentStore,
+from finance.parsers.document_store import (
     SectionSummary,
     TableSummary,
-    SectionContent,
-    TableContent,
-    SearchHit,
 )
-from hermes_tools.finance.parsers.docling_parser import DoclingParser
-from hermes_tools.finance.parsers.mineru_parser import MinerUParser, MinerUConfig
-from hermes_tools.finance.parsers.fallback_parser import FallbackParser
-from hermes_tools.finance.parsers.financial_enhancer import relabel_tables
-from hermes_tools.finance.parsers.parser_router import create_parser, check_mineru_health
-
+from finance.parsers.fallback_parser import FallbackParser
+from finance.parsers.financial_enhancer import relabel_tables
+from finance.parsers.mineru_parser import MinerUConfig, MinerUParser
+from finance.parsers.parser_router import create_parser
 
 # ============ DocumentStore接口测试 ============
 
 class TestSectionSummary:
     """测试SectionSummary数据类。"""
-    
+
     def test_creation(self):
         """测试创建SectionSummary。"""
         section = SectionSummary(
@@ -56,7 +53,7 @@ class TestSectionSummary:
 
 class TestTableSummary:
     """测试TableSummary数据类。"""
-    
+
     def test_creation(self):
         """测试创建TableSummary。"""
         table = TableSummary(
@@ -83,13 +80,13 @@ class TestTableSummary:
 
 class TestDoclingParser:
     """测试DoclingParser。"""
-    
+
     def test_supports(self):
         """测试supports方法。"""
         assert DoclingParser.supports(Path("test.pdf")) is True
         assert DoclingParser.supports(Path("test.docx")) is True
         assert DoclingParser.supports(Path("test.txt")) is False
-    
+
     def test_get_parser_version(self):
         """测试get_parser_version方法。"""
         version = DoclingParser.get_parser_version()
@@ -100,35 +97,36 @@ class TestDoclingParser:
 
 class TestMinerUParser:
     """测试MinerUParser。"""
-    
+
     def test_supports(self):
         """测试supports方法。"""
         assert MinerUParser.supports(Path("test.pdf")) is True
         assert MinerUParser.supports(Path("test.txt")) is False
-    
+
     def test_get_parser_version(self):
         """测试get_parser_version方法。"""
         version = MinerUParser.get_parser_version()
         assert version.startswith("hermes_mineru_parser")
-    
+
     def test_mineru_config(self):
-        """测试MinerUConfig。"""
+        """测试MinerUConfig（HGF P0-①：对齐本地契约——hermes api_url/timeout 未随迁）"""
         config = MinerUConfig()
-        assert config.api_url == "http://localhost:8080"
-        assert config.timeout == 300
+        # 本地实现契约：timeout 默认 120s、max_retries 3（非 hermes 版 300/3）
+        assert config.timeout == 120
         assert config.max_retries == 3
+        # 本地无 api_url 属性（api_url 按 api_mode 在调用时构造）——不断言 hermes 版默认
 
 
 # ============ FallbackParser测试 ============
 
 class TestFallbackParser:
     """测试FallbackParser。"""
-    
+
     def test_supports(self):
         """测试supports方法。"""
         assert FallbackParser.supports(Path("test.pdf")) is True
         assert FallbackParser.supports(Path("test.txt")) is False
-    
+
     def test_get_parser_version(self):
         """测试get_parser_version方法。"""
         version = FallbackParser.get_parser_version()
@@ -139,7 +137,7 @@ class TestFallbackParser:
 
 class TestFinancialEnhancer:
     """测试FinancialEnhancer。"""
-    
+
     def test_relabel_tables_balance_sheet(self):
         """测试识别资产负债表。"""
         tables = [
@@ -157,13 +155,13 @@ class TestFinancialEnhancer:
                 is_financial=None,
             )
         ]
-        
+
         result = relabel_tables(tables)
-        
+
         assert len(result) == 1
         assert result[0].is_financial is True
         assert result[0].table_type == "balance_sheet"
-    
+
     def test_relabel_tables_income_statement(self):
         """测试识别利润表。"""
         tables = [
@@ -181,13 +179,13 @@ class TestFinancialEnhancer:
                 is_financial=None,
             )
         ]
-        
+
         result = relabel_tables(tables)
-        
+
         assert len(result) == 1
         assert result[0].is_financial is True
         assert result[0].table_type == "income_statement"
-    
+
     def test_relabel_tables_unknown(self):
         """测试未知表格。"""
         tables = [
@@ -205,11 +203,13 @@ class TestFinancialEnhancer:
                 is_financial=None,
             )
         ]
-        
+
         result = relabel_tables(tables)
-        
+
         assert len(result) == 1
-        assert result[0].is_financial is None
+        # 本地实现语义：未命中任何金融关键词 → is_financial=False（非金融），
+        # 非 hermes 版的 None（未知）——HGF P0-① 修复：对齐本地语义
+        assert result[0].is_financial is False
         assert result[0].table_type == "unknown"
 
 
@@ -217,23 +217,24 @@ class TestFinancialEnhancer:
 
 class TestParserRouter:
     """测试ParserRouter。"""
-    
+
     def test_create_parser_file_not_found(self):
         """测试文件不存在。"""
         with pytest.raises(FileNotFoundError):
             create_parser(Path("nonexistent.pdf"))
-    
-    @patch('hermes_tools.finance.parsers.parser_router.check_mineru_health')
+
+    @patch('finance.parsers.parser_router.check_mineru_health')
     def test_create_parser_fallback(self, mock_health):
-        """测试降级到FallbackParser。"""
-        mock_health.return_value = False
-        
+        """测试降级到FallbackParser（HGF P0-①：mock 对齐本地契约——返回 dict 非 bool）"""
+        mock_health.return_value = {"agent_api": False, "precise_api": False,
+                                    "has_token": False, "error": None}
+
         # 创建临时PDF文件
         import tempfile
         with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
             f.write(b"%PDF-1.4 test")
             pdf_path = Path(f.name)
-        
+
         try:
             parser = create_parser(pdf_path)
             assert isinstance(parser, FallbackParser)

@@ -2,7 +2,8 @@
 SOTP 分部估值测试
 """
 import pytest
-from quality.sotp_valuation import compute_sotp_valuation, BusinessSegment, SOTPResult
+
+from finance.quality.sotp_valuation import BusinessSegment, compute_sotp_valuation
 
 
 class TestSOTPValuation:

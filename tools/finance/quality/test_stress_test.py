@@ -2,7 +2,8 @@
 压力测试测试
 """
 import pytest
-from quality.stress_test import run_stress_test, StressScenario, StressTestSuite
+
+from finance.quality.stress_test import StressScenario, run_stress_test
 
 
 class TestStressTest:

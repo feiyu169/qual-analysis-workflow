@@ -1,0 +1,44 @@
+# tools/finance 独立 ruff 配置（HGF P2 修复 2026-08-22）
+# 与 workflow/pyproject.toml 规则集对齐——HGF 门禁标准可复现，
+# 避免默认规则集产生 UP006/UP045 等历史风格噪声。
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+# 与 workflow/pyproject.toml 保持一致的选择规则集（HGF 门禁口径）
+select = [
+    "E",     # pycodestyle 错误
+    "W",     # pycodestyle 警告
+    "F",     # pyflakes
+    "I",     # isort
+    "UP",    # pyupgrade
+    "B",     # bugbear
+    "SIM",   # simplify
+    "RUF",   # ruff 专用
+    "S",     # bandit
+    "DTZ",   # datetime 时区
+    "PERF",  # 性能
+    "PIE",   # 杂项
+    "BLE",   # 盲异常
+    "FBT",   # 布尔位置参数
+]
+ignore = [
+    "DTZ005",   # datetime.now() 无时区——P17 冲突，历史约定
+    "RUF012",   # 类属性可变默认——历史代码大量存在
+    "RUF013",   # 隐式 Optional——历史代码风格
+    "BLE001",   # 裸 Exception——主流程降级捕获是设计（fail-safe）
+    "S110",     # try/except pass——工具函数兜底
+    "S311",     # 伪随机——非安全场景
+    "RUF001",   # 中文注释含全角标点——中文项目误报（与 workflow/pyproject 一致）
+    "RUF002",   # 同上
+    "RUF003",   # 同上
+    "S101",     # assert 用于输入校验（fail-fast 设计）——业务代码广泛使用，非测试专用
+]
+
+[tool.ruff.lint.per-file-ignores]
+# __init__.py 模块级 re-export 惯例（E402：import 在 docstring/常量之后）
+"quality/__init__.py" = ["E402"]
+
+[tool.ruff.format]
+quote-style = "double"
