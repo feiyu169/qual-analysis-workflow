@@ -90,6 +90,12 @@ class HeavySkillConfig:
     language: Language = Language.EN
     selection_strategy: SelectionStrategy = SelectionStrategy.MAX_ANSWER_FREQUENCY
 
+    # P54-增强-路径3：轨迹质量分与动态 K（quality_score 落地，替换恒 1.0 死字段）
+    quality_enabled: bool = True           # 质量分参与选择排序（按分数在策略组内择优）
+    auto_k: bool = False                   # 按 query 长度自动定 K（--auto-k 开关）
+    auto_k_scale: Dict[str, int] = field(default_factory=lambda: {"short": 2, "medium": 4, "long": 8})
+    quality_retry_threshold: float = 60.0  # 首轮平均质量分低于此值且 auto_k 时触发补跑
+
     # HTTP Configuration
     timeout: float = 120.0
     max_retries: int = 3

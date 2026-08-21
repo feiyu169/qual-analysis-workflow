@@ -40,31 +40,22 @@ def setup_function():
     _anchor_cache.clear()
 
 
-# ===== L1 归因服务 =====
+# ===== L1 归因服务（合并为单用例——归因/未命中/历史标记一次覆盖） =====
 
-def test_attribute_value_attributes_fiscal_year():
-    """L1：841.63 → FY2023、1031.63 → FY2025（锚点值归因）"""
+def test_attribute_attribution():
+    """L1：归因服务——命中→财年、未命中→None、历史/最新标记"""
     anchor = get_data_anchor(XPENG_WIND)
-    fy23, _ = anchor.attribute_value("总资产", 841.6254)
-    assert fy23 == 2023
-    fy25, _ = anchor.attribute_value("总资产", 1031.6263)
-    assert fy25 == 2025
-
-
-def test_attribute_value_unmatched_returns_none():
-    """L1：未命中锚点值 → None"""
-    anchor = get_data_anchor(XPENG_WIND)
+    # 命中历史/最新锚点
+    assert anchor.attribute_value("总资产", 841.6254)[0] == 2023
+    assert anchor.attribute_value("总资产", 1031.6263)[0] == 2025
+    # 未命中 → None
     fy, matched = anchor.attribute_value("总资产", 9999.0)
     assert fy is None and matched is None
-
-
-def test_attribute_text_value_flags_historical():
-    """L1：attribute_text_value 标记历史/最新"""
-    anchor = get_data_anchor(XPENG_WIND)
+    # 历史/最新标记
     r = anchor.attribute_text_value("总资产", 841.6254)
-    assert r["fiscal_year"] == 2023
-    assert r["is_historical"] is True
-    assert r["is_latest"] is False
+    assert r["fiscal_year"] == 2023 and r["is_historical"] is True and r["is_latest"] is False
+    r2 = anchor.attribute_text_value("总资产", 1031.6263)
+    assert r2["fiscal_year"] == 2025 and r2["is_historical"] is False and r2["is_latest"] is True
 
 
 # ===== L2 跨章归因（消除历史引用误报） =====
@@ -101,6 +92,44 @@ def test_cross_chapter_same_year_conflict_still_detected():
 
 
 # ===== L3 生成时校验（问题前移） =====
+
+def test_minimal_e2e_gate4_no_historical_false_positive(monkeypatch):
+    """最小端到端：复现 Gate4 失败根因场景（ch3 当期 1031.63 vs ch6 历史 841.63 未标注）
+
+    走 review_and_repair_loop 静态审查路径（LLM 审查 mock 掉，仅 deep 静态跨章归因）——
+    验证 FiscalSemantics 后不再报"总资产最新财年矛盾"（Gate4 失败项消除）。
+    """
+    from unittest.mock import MagicMock
+
+    import finance.quality.review_repair_loop as m
+    from finance.quality.review_repair_loop import review_and_repair_loop
+
+    monkeypatch.setattr(m, "_run_substantive_review", lambda *a, **k: [])
+
+    # 精确复现小鹏 Gate4 失败场景：ch3 写 1031.63（FY2025 当期）、ch6 写 841.63（FY2023 历史未标注）
+    chapters = {
+        3: "总资产1031.63亿元，公司规模持续扩大。",
+        6: "总资产841.63亿元，财务结构稳健。",
+    }
+
+    def fake_caller(name, prompt):
+        return '{"patches": []}'
+
+    result = review_and_repair_loop(
+        chapters=chapters,
+        ctx=MagicMock(),
+        llm_caller=fake_caller,
+        wind_data=XPENG_WIND,
+        max_rounds=1,
+        skip_repair=True,
+    )
+
+    # 归因后 ch6 的 841.63 进 FY2023 桶 → 不再与 ch3 的 FY2025 值判矛盾
+    false_positives = [
+        i for i in result.remaining_issues
+        if "总资产" in i and "最新财年" in i
+    ]
+    assert not false_positives, f"历史引用不应报最新财年矛盾: {false_positives}"
 
 def test_validate_fiscal_references_detects_unlabeled_historical():
     """L3：未标注历史引用（841.63 无 FY 标注）→ 记问题"""
