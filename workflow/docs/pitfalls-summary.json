@@ -13,6 +13,7 @@
     {"p": "P53", "topic": "元门禁自律（自审查沉淀）", "mechanism": "self_audit 检查器 + gate_5_3 + 7 测试 + pre-push/CI"}
   ],
   "lessons": [
-    {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-self-audit.md", "topic": "failure_log 自锁/baseline 损坏/requirements 伪文件", "p": "P53"}
+    {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-self-audit.md", "topic": "failure_log 自锁/baseline 损坏/requirements 伪文件", "p": "P53"},
+    {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-productivity-review.md", "topic": "生产力第三方评审：部分具备，短板为自证闭环/门禁自锁/维护成本", "p": "P53"}
   ]
 }
