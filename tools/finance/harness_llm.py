@@ -22,7 +22,7 @@ def _log(msg: str):
         path = os.path.abspath(path)
         with open(path, "a", encoding="utf-8") as f:
             f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
-    except Exception:  # noqa: BLE001, S110
+    except Exception:
         pass
 
 SYSTEM_PROMPT = """你是一位资深的投资分析师，擅长撰写买方研究报告。
@@ -61,15 +61,15 @@ def _call_bridge(payload: dict, base_url: str, timeout: int) -> dict:
 
 
 def create_harness_caller(
-    base_url: str = None,  # noqa: RUF013
-    model: str = None,  # noqa: RUF013
-    provider: str = None,  # noqa: RUF013
+    base_url: str = None,
+    model: str = None,
+    provider: str = None,
     timeout: int = 300,
     max_retries: int = 2,
     temperature: float = 0.2,
     max_tokens: int = 12000,
-    system: str = None,  # noqa: RUF013
-    deadline: float = None,  # v3.1 P0-B-8：调用级墙钟检查（time.monotonic 值）  # noqa: RUF013
+    system: str = None,
+    deadline: float = None,  # v3.1 P0-B-8：调用级墙钟检查（time.monotonic 值）
 ):
     """创建 llm_caller(chapter_name, prompt) -> str。
 
@@ -135,7 +135,7 @@ def create_harness_caller(
                 return text
             except DeterministicLLMFailure:
                 raise  # 确定性失败不重试（含 WallClockDeadlineExceeded 子类）
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 last_err = e
                 _log(f"失败 {chapter_name} 尝试{attempt+1}: {repr(e)[:200]} ({round(time.time()-t0,1)}s)")
                 if attempt < max_retries:

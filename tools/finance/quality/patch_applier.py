@@ -18,8 +18,9 @@ patch_applier.py — 修复最小侵入（Patch 模式）+ 校验闭环
 import json
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +32,13 @@ class PatchResult:
     """Patch 应用结果"""
     ok: bool
     content: str
-    applied: List[Dict[str, Any]] = field(default_factory=list)
-    rejected: List[Dict[str, Any]] = field(default_factory=list)
-    validation: Dict[str, Any] = field(default_factory=dict)
+    applied: list[dict[str, Any]] = field(default_factory=list)
+    rejected: list[dict[str, Any]] = field(default_factory=list)
+    validation: dict[str, Any] = field(default_factory=dict)
     rollback: bool = False  # 校验失败是否回滚
 
 
-def parse_patch_json(llm_output: str) -> List[Dict[str, Any]]:
+def parse_patch_json(llm_output: str) -> list[dict[str, Any]]:
     """解析 LLM 输出的 patch JSON（容忍代码块/前后噪音）"""
     text = llm_output.strip()
     # 去 ```json ... ``` 包裹
@@ -65,8 +66,8 @@ def parse_patch_json(llm_output: str) -> List[Dict[str, Any]]:
 
 def apply_patches(
     original: str,
-    patches: List[Dict[str, Any]],
-    validators: Optional[List[Callable[[str], List[str]]]] = None,
+    patches: list[dict[str, Any]],
+    validators: list[Callable[[str], list[str]]] | None = None,
     max_patches: int = MAX_PATCHES,
 ) -> PatchResult:
     """应用 patches（唯一匹配 + 预算 + 校验闭环）
@@ -110,7 +111,7 @@ def apply_patches(
 
     # 校验闭环（铁律3）
     if validators:
-        all_issues: List[str] = []
+        all_issues: list[str] = []
         for v in validators:
             try:
                 issues = v(content)

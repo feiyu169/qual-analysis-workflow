@@ -4,15 +4,14 @@ Gate 0: 数据源验证
 严苛模式+人工同意
 """
 
-from typing import Dict, Any, List
+import logging
 from dataclasses import dataclass
 from datetime import datetime
-import logging
-import time
+from typing import Any
 
-from ..core.gate_engine import GateBase, GateSpec, GateResult
-from ..core.circuit_breaker import CircuitBreaker, ErrorType
+from ..core.circuit_breaker import CircuitBreaker
 from ..core.error_classifier import ErrorClassifier
+from ..core.gate_engine import GateBase, GateResult, GateSpec
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +20,8 @@ logger = logging.getLogger(__name__)
 class DataSourceConfig:
     """数据源配置"""
     primary_source: str  # 主数据源
-    fallback_sources: List[str]  # 备用数据源
-    required_fields: List[str]  # 必填字段
+    fallback_sources: list[str]  # 备用数据源
+    required_fields: list[str]  # 必填字段
     min_coverage: float  # 最小覆盖率
     max_deviation: float  # 最大偏差
     timeout: int  # 超时时间
@@ -31,7 +30,7 @@ class DataSourceConfig:
 
 class Gate0DataSourceValidation(GateBase):
     """Gate 0: 数据源验证"""
-    
+
     def __init__(self):
         spec = GateSpec(
             gate_num=0,
@@ -49,7 +48,7 @@ class Gate0DataSourceValidation(GateBase):
             ],
         )
         super().__init__(spec)
-        
+
         self.config = DataSourceConfig(
             primary_source="wind_api",
             fallback_sources=["tushare", "eastmoney", "company_ir"],
@@ -59,16 +58,16 @@ class Gate0DataSourceValidation(GateBase):
             timeout=30,
             max_retries=3,
         )
-        
+
         self.circuit_breaker = CircuitBreaker(
             name="data_source",
             failure_threshold=3,
             reset_timeout=60,
         )
-        
+
         self.error_classifier = ErrorClassifier()
-    
-    def execute(self, context: Dict[str, Any]) -> GateResult:
+
+    def execute(self, context: dict[str, Any]) -> GateResult:
         """执行Gate 0（真实数据源验证）"""
         errors = []
         warnings = []
@@ -123,7 +122,7 @@ class Gate0DataSourceValidation(GateBase):
             timestamp=datetime.now().isoformat(),
         )
 
-    def check_criteria(self, context: Dict[str, Any]) -> bool:
+    def check_criteria(self, context: dict[str, Any]) -> bool:
         """检查通过标准（真实）"""
         # 检查财报文件是否存在
         filing_exists = bool((context.get("filing_data") or {}).get("sections"))
@@ -148,7 +147,7 @@ class Gate0DataSourceValidation(GateBase):
             and data_range_covers_3_years
         )
 
-    def _fetch_filing(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _fetch_filing(self, context: dict[str, Any]) -> dict[str, Any]:
         """获取财报（从 context 取已下载/已解析数据）"""
         filing_data = context.get("filing_data")
         if not filing_data:
@@ -158,15 +157,15 @@ class Gate0DataSourceValidation(GateBase):
             return {"success": False, "error": "filing_data.sections 为空"}
         return {"success": True, "data": filing_data, "sections_count": len(sections)}
 
-    def _fetch_wind_data(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _fetch_wind_data(self, context: dict[str, Any]) -> dict[str, Any]:
         """获取Wind数据（从 context 取已装配数据）"""
         wind_data = context.get("wind_data")
         if not wind_data:
             return {"success": False, "error": "context 无 wind_data"}
         return {"success": True, "data": wind_data}
 
-    def _validate_data(self, filing_result: Dict, wind_result: Dict,
-                       context: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_data(self, filing_result: dict, wind_result: dict,
+                       context: dict[str, Any]) -> dict[str, Any]:
         """验证数据（真实：canonical 键覆盖率 + 3年范围）"""
         errors = []
 
@@ -176,7 +175,7 @@ class Gate0DataSourceValidation(GateBase):
         coverage, missing = 0.0, []
         has_3y = False
         if wind_result["success"]:
-            from ..adapters import wind_coverage, has_3y_range
+            from ..adapters import has_3y_range, wind_coverage
             coverage, missing = wind_coverage(context.get("wind_data"))
             has_3y = has_3y_range(context.get("wind_data"))
             if coverage < self.config.min_coverage:
@@ -192,7 +191,7 @@ class Gate0DataSourceValidation(GateBase):
             "has_3y": has_3y,
         }
 
-    def _check_value_types(self, wind_data: Dict) -> bool:
+    def _check_value_types(self, wind_data: dict) -> bool:
         """检查数值类型（真实：canonical 键的值应为数字列表）"""
         if not wind_data:
             return False
@@ -205,7 +204,7 @@ class Gate0DataSourceValidation(GateBase):
                         return False
         return True
 
-    def _check_data_range(self, wind_data: Dict) -> bool:
+    def _check_data_range(self, wind_data: dict) -> bool:
         """检查数据时间范围（真实：覆盖3年）"""
         from ..adapters import has_3y_range
         return has_3y_range(wind_data)

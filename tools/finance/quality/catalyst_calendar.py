@@ -11,7 +11,6 @@ quality/catalyst_calendar.py — 催化剂日历模块（T18修复）
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +33,12 @@ class CatalystCalendar:
     ticker: str
     company_name: str
     catalysts: list[Catalyst] = field(default_factory=list)
-    
+
     def upcoming(self, days: int = 90) -> list[Catalyst]:
         """获取未来N天内的催化剂"""
         today = datetime.now()
         cutoff = today + timedelta(days=days)
-        
+
         upcoming = []
         for c in self.catalysts:
             try:
@@ -50,13 +49,13 @@ class CatalystCalendar:
                     cat_date = datetime(int(year), month, 28)
                 else:
                     cat_date = datetime.strptime(c.date, "%Y-%m-%d")
-                
+
                 if today <= cat_date <= cutoff:
                     upcoming.append(c)
             except (ValueError, IndexError):
                 # 日期解析失败，跳过
                 pass
-        
+
         # 按日期排序
         upcoming.sort(key=lambda c: c.date)
         return upcoming
@@ -114,33 +113,33 @@ def create_sf_express_calendar() -> CatalystCalendar:
 
 def format_catalyst_report(calendar: CatalystCalendar, days: int = 90) -> str:
     """格式化催化剂日历报告
-    
+
     Args:
         calendar: 催化剂日历
         days: 显示未来N天内的催化剂
-    
+
     Returns:
         Markdown格式报告
     """
     upcoming = calendar.upcoming(days)
-    
+
     lines = []
     lines.append(f"## 催化剂日历（未来{days}天）")
     lines.append("")
-    
+
     if not upcoming:
         lines.append("暂无近期催化剂。")
         return "\n".join(lines)
-    
+
     lines.append("| 日期 | 催化剂 | 类型 | 优先级 | 预期影响 | 验证方法 |")
     lines.append("|------|--------|------|--------|----------|----------|")
-    
+
     for c in upcoming:
         priority_emoji = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(c.priority, "⚪")
         lines.append(
             f"| {c.date} | {c.name} | {c.catalyst_type} | {priority_emoji} "
             f"| {c.expected_impact[:30]}... | {c.verification_method[:20]}... |"
         )
-    
+
     lines.append("")
     return "\n".join(lines)

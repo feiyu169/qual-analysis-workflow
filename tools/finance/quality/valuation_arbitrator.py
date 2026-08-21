@@ -10,10 +10,9 @@
 - F4: 三套估值方法互不收敛
 """
 
-import re
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +23,7 @@ class ValuationMethod:
     name: str  # 方法名称
     value_per_share: float  # 每股价值
     currency: str  # 币种
-    probability: Optional[float] = None  # 概率权重
+    probability: float | None = None  # 概率权重
 
 
 @dataclass
@@ -33,22 +32,22 @@ class ArbitrationIssue:
     issue_type: str  # "non_convergence", "currency_mismatch", "weight_issue"
     severity: str  # "fatal", "important", "suggestion"
     description: str
-    methods: List[str]
+    methods: list[str]
 
 
 @dataclass
 class ArbitrationResult:
     """仲裁结果"""
     passed: bool
-    issues: List[ArbitrationIssue] = field(default_factory=list)
+    issues: list[ArbitrationIssue] = field(default_factory=list)
     score: float = 100.0
-    recommended_value: Optional[float] = None  # 推荐的每股价值
-    recommended_method: Optional[str] = None  # 推荐的方法
+    recommended_value: float | None = None  # 推荐的每股价值
+    recommended_method: str | None = None  # 推荐的方法
 
 
 class ValuationArbitrator:
     """估值仲裁器"""
-    
+
     def __init__(self):
         # 估值方法正则模式
         self.valuation_patterns = {
@@ -79,69 +78,69 @@ class ValuationArbitrator:
                 r"目标价.*?(\d+\.?\d*)\s*港元",
             ],
         }
-        
+
         # 币种转换（港元兑人民币）
         self.hkd_to_cny = 0.92
-    
+
     def check(
         self,
-        chapters: Dict[int, str],
-        current_price: Optional[float] = None,
+        chapters: dict[int, str],
+        current_price: float | None = None,
         current_currency: str = "HKD",
     ) -> ArbitrationResult:
         """
         检查估值一致性
-        
+
         Args:
             chapters: 各章节内容 {chapter_num: content}
             current_price: 当前股价
             current_currency: 当前股价币种
-        
+
         Returns:
             ArbitrationResult
         """
         issues = []
-        
+
         # 1. 提取所有估值方法
         methods = self._extract_valuation_methods(chapters)
-        
+
         if not methods:
             return ArbitrationResult(
                 passed=True,
                 issues=[],
                 score=100.0,
             )
-        
+
         # 2. 统一币种
         unified_methods = self._unify_currency(methods)
-        
+
         # 3. 检查估值是否收敛
         convergence_issues = self._check_convergence(unified_methods, current_price, current_currency)
         issues.extend(convergence_issues)
-        
+
         # 4. 检查币种一致性
         currency_issues = self._check_currency_consistency(methods)
         issues.extend(currency_issues)
-        
+
         # 5. 计算推荐估值
         recommended_value, recommended_method = self._calculate_recommendation(unified_methods)
-        
+
         # 计算评分
         fatal_count = sum(1 for i in issues if i.severity == "fatal")
         important_count = sum(1 for i in issues if i.severity == "important")
         suggestion_count = sum(1 for i in issues if i.severity == "suggestion")
-        
+
         score = 100.0
         score -= fatal_count * 40
         score -= important_count * 15
         score -= suggestion_count * 5
         score = max(0.0, min(100.0, score))
-        
+
         passed = fatal_count == 0 and score >= 60.0
-        
+
         if not passed:
             logger.warning(f"估值仲裁检查不通过: score={score:.0f}, issues={len(issues)}")
-        
+
         return ArbitrationResult(
             passed=passed,
             issues=issues,
@@ -149,11 +148,11 @@ class ValuationArbitrator:
             recommended_value=recommended_value,
             recommended_method=recommended_method,
         )
-    
-    def _extract_valuation_methods(self, chapters: Dict[int, str]) -> List[ValuationMethod]:
+
+    def _extract_valuation_methods(self, chapters: dict[int, str]) -> list[ValuationMethod]:
         """提取所有估值方法"""
         methods = []
-        
+
         for ch_num, content in chapters.items():
             # 提取情景分析
             for pattern in self.valuation_patterns["情景分析"]:
@@ -165,14 +164,14 @@ class ValuationArbitrator:
                     else:
                         value = float(match)
                         prob = None
-                    
+
                     methods.append(ValuationMethod(
-                        name=f"情景分析_基准",
+                        name="情景分析_基准",
                         value_per_share=value,
                         currency="CNY",
                         probability=prob,
                     ))
-            
+
             # 提取概率加权
             for pattern in self.valuation_patterns["概率加权"]:
                 match = re.search(pattern, content)
@@ -182,7 +181,7 @@ class ValuationArbitrator:
                         value_per_share=float(match.group(1)),
                         currency="CNY",
                     ))
-            
+
             # 提取PE估值
             for pattern in self.valuation_patterns["PE估值"]:
                 match = re.search(pattern, content)
@@ -197,7 +196,7 @@ class ValuationArbitrator:
                         value_per_share=value,
                         currency="CNY",
                     ))
-            
+
             # 提取叙述结论
             for pattern in self.valuation_patterns["叙述结论"]:
                 match = re.search(pattern, content)
@@ -212,13 +211,13 @@ class ValuationArbitrator:
                             value_per_share=float(match.group(1)),
                             currency="HKD",
                         ))
-        
+
         return methods
-    
-    def _unify_currency(self, methods: List[ValuationMethod]) -> List[ValuationMethod]:
+
+    def _unify_currency(self, methods: list[ValuationMethod]) -> list[ValuationMethod]:
         """统一币种为人民币"""
         unified = []
-        
+
         for method in methods:
             if method.currency == "HKD":
                 # 转换为人民币
@@ -230,30 +229,30 @@ class ValuationArbitrator:
                 ))
             else:
                 unified.append(method)
-        
+
         return unified
-    
+
     def _check_convergence(
         self,
-        methods: List[ValuationMethod],
-        current_price: Optional[float],
+        methods: list[ValuationMethod],
+        current_price: float | None,
         current_currency: str,
-    ) -> List[ArbitrationIssue]:
+    ) -> list[ArbitrationIssue]:
         """检查估值是否收敛"""
         issues = []
-        
+
         if len(methods) < 2:
             return issues
-        
+
         # 提取所有估值值
         values = [m.value_per_share for m in methods]
-        
+
         # 计算标准差和变异系数
         mean_value = sum(values) / len(values)
         variance = sum((v - mean_value) ** 2 for v in values) / len(values)
         std_dev = variance ** 0.5
         cv = std_dev / mean_value if mean_value > 0 else 0
-        
+
         # 如果变异系数超过100%，报告问题
         if cv > 1.0:
             method_names = [m.name for m in methods]
@@ -263,15 +262,15 @@ class ValuationArbitrator:
                 description=f"估值方法不收敛：变异系数={cv*100:.1f}%，各方法估值差异过大",
                 methods=method_names,
             ))
-        
+
         # 检查基准值与概率加权值的差异
         base_values = [m for m in methods if "基准" in m.name]
         weighted_values = [m for m in methods if "加权" in m.name]
-        
+
         if base_values and weighted_values:
             base_val = base_values[0].value_per_share
             weighted_val = weighted_values[0].value_per_share
-            
+
             # 如果差距超过100%，报告问题
             if abs(weighted_val - base_val) / base_val > 1.0:
                 issues.append(ArbitrationIssue(
@@ -280,7 +279,7 @@ class ValuationArbitrator:
                     description=f"基准估值{base_val:.1f}元与概率加权估值{weighted_val:.1f}元差距过大",
                     methods=["基准", "概率加权"],
                 ))
-        
+
         # 检查估值与当前股价的关系
         if current_price:
             # 统一当前股价币种
@@ -288,11 +287,11 @@ class ValuationArbitrator:
                 current_price_cny = current_price * self.hkd_to_cny
             else:
                 current_price_cny = current_price
-            
+
             # 检查基准估值与当前股价的差异
             for method in methods:
                 ratio = method.value_per_share / current_price_cny
-                
+
                 # 如果估值低于当前股价50%以上，但叙述说"低估"，报告问题
                 if ratio < 0.5:
                     issues.append(ArbitrationIssue(
@@ -301,16 +300,16 @@ class ValuationArbitrator:
                         description=f"{method.name}估值{method.value_per_share:.1f}元低于当前股价{current_price_cny:.1f}元{(1-ratio)*100:.1f}%，暗示高估",
                         methods=[method.name],
                     ))
-        
+
         return issues
-    
-    def _check_currency_consistency(self, methods: List[ValuationMethod]) -> List[ArbitrationIssue]:
+
+    def _check_currency_consistency(self, methods: list[ValuationMethod]) -> list[ArbitrationIssue]:
         """检查币种一致性"""
         issues = []
-        
+
         # 检查是否有币种混用
         currencies = set(m.currency for m in methods)
-        
+
         if len(currencies) > 1:
             method_names = [f"{m.name}({m.currency})" for m in methods]
             issues.append(ArbitrationIssue(
@@ -319,42 +318,42 @@ class ValuationArbitrator:
                 description=f"估值方法币种不一致：{', '.join(method_names)}",
                 methods=method_names,
             ))
-        
+
         return issues
-    
+
     def _calculate_recommendation(
         self,
-        methods: List[ValuationMethod],
-    ) -> Tuple[Optional[float], Optional[str]]:
+        methods: list[ValuationMethod],
+    ) -> tuple[float | None, str | None]:
         """计算推荐估值"""
         if not methods:
             return None, None
-        
+
         # 如果有概率加权值，使用它
         weighted_methods = [m for m in methods if "加权" in m.name]
         if weighted_methods:
             return weighted_methods[0].value_per_share, "概率加权"
-        
+
         # 否则使用所有方法的平均值
         values = [m.value_per_share for m in methods]
         mean_value = sum(values) / len(values)
-        
+
         return mean_value, "多方法平均"
 
 
 def check_valuation_arbitration(
-    chapters: Dict[int, str],
-    current_price: Optional[float] = None,
+    chapters: dict[int, str],
+    current_price: float | None = None,
     current_currency: str = "HKD",
 ) -> ArbitrationResult:
     """
     检查估值仲裁（入口函数）
-    
+
     Args:
         chapters: 各章节内容 {chapter_num: content}
         current_price: 当前股价
         current_currency: 当前股价币种
-    
+
     Returns:
         ArbitrationResult
     """

@@ -13,22 +13,21 @@ Filing Service - 财报查询服务
 
 import logging
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
-from .filing_downloader import get_downloader, download_with_cache as _download_with_cache
-from .filing_downloader import list_filings as _list_filings
-from .pdf_parser import get_parser, parse_filing as _parse_filing
-from .parsers.base import ParsedFiling
 from .downloaders.base import FilingInfo
+from .filing_downloader import list_filings as _list_filings
+from .parsers.base import ParsedFiling
+from .pdf_parser import parse_filing as _parse_filing
+from .processors.base import BaseProcessor
 from .processors.cn_sections import CNSectionsProcessor
 from .processors.hk_sections import HKSectionsProcessor
+from .processors.section_identifier import SectionIdentifier
+from .processors.table_extractor import FinancialTableExtractor
+from .processors.us_8k_sections import US8KSectionsProcessor
 from .processors.us_10k_sections import US10KSectionsProcessor
 from .processors.us_10q_sections import US10QSectionsProcessor
 from .processors.us_20f_sections import US20FSectionsProcessor
-from .processors.us_8k_sections import US8KSectionsProcessor
-from .processors.table_extractor import FinancialTableExtractor
-from .processors.section_identifier import SectionIdentifier
-from .processors.base import BaseProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +81,7 @@ class FilingService:
     整合了下载器、解析器和处理器的功能。
     """
 
-    def __init__(self, cache_base_dir: Optional[Path] = None):
+    def __init__(self, cache_base_dir: Path | None = None):
         """
         Args:
             cache_base_dir: 缓存基础目录
@@ -99,7 +98,7 @@ class FilingService:
         self,
         ticker: str,
         market: Literal["us", "cn", "hk"],
-        form_types: Optional[list[str]] = None,
+        form_types: list[str] | None = None,
         limit: int = 10,
     ) -> list[FilingInfo]:
         """列出可用的财报文件
@@ -120,7 +119,7 @@ class FilingService:
         ticker: str,
         filing: FilingInfo,
     ) -> Path:
-        """带缓存的下载
+        """带缓存的下载（HGF 遗留①：改用真实下载器 download_filing）
 
         Args:
             ticker: 股票代码
@@ -129,16 +128,32 @@ class FilingService:
         Returns:
             PDF 文件路径
         """
+        from .filing_downloader import _create_downloader
+
         cache_dir = self.cache_base_dir / ticker
-        return _download_with_cache(ticker, filing, cache_dir)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        # 优先用缓存
+        if filing.cache_filename():
+            cached = cache_dir / filing.cache_filename()
+            if cached.exists():
+                logger.info(f"使用缓存财报: {cached}")
+                return cached
+        try:
+            downloader = _create_downloader(filing.market)
+            pdf_path = downloader.download_filing(filing)
+            if pdf_path:
+                return Path(pdf_path)
+        except Exception as e:
+            logger.error(f"下载财报失败: {e}")
+        return cache_dir / (filing.cache_filename() or "unknown.pdf")
 
     def _get_or_parse(
         self,
         ticker: str,
         form_type: str,
         market: Literal["us", "cn", "hk"],
-        pdf_path: Optional[Path] = None,
-        filing: Optional[FilingInfo] = None,
+        pdf_path: Path | None = None,
+        filing: FilingInfo | None = None,
     ) -> ParsedFiling:
         """获取解析结果（带缓存）
 
@@ -178,8 +193,8 @@ class FilingService:
         form_type: str,
         section_name: str,
         market: Literal["us", "cn", "hk"] = "us",
-        pdf_path: Optional[Path] = None,
-    ) -> Optional[str]:
+        pdf_path: Path | None = None,
+    ) -> str | None:
         """获取财报的指定章节
 
         Args:
@@ -220,7 +235,7 @@ class FilingService:
         form_type: str,
         query: str,
         market: Literal["us", "cn", "hk"] = "us",
-        pdf_path: Optional[Path] = None,
+        pdf_path: Path | None = None,
         max_results: int = 5,
     ) -> list[dict]:
         """搜索章节内容
@@ -280,8 +295,8 @@ class FilingService:
         form_type: str,
         table_type: str,
         market: Literal["us", "cn", "hk"] = "us",
-        pdf_path: Optional[Path] = None,
-    ) -> Optional[dict]:
+        pdf_path: Path | None = None,
+    ) -> dict | None:
         """获取财报的指定表格
 
         Args:

@@ -12,8 +12,7 @@ AuditValidator模块
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -82,25 +81,25 @@ KNOWN_ISSUES = {
 
 class AuditValidator:
     """审计验证器"""
-    
-    def __init__(self, known_issues: Optional[Dict[str, AuditIssue]] = None):
+
+    def __init__(self, known_issues: dict[str, AuditIssue] | None = None):
         self.known_issues = known_issues or KNOWN_ISSUES
-    
-    def check_known_issues(self, content: str) -> List[AuditIssue]:
+
+    def check_known_issues(self, content: str) -> list[AuditIssue]:
         """检查已知问题模式"""
         import re
         issues = []
-        
+
         for pattern_name, issue in self.known_issues.items():
             if re.search(issue.pattern, content, re.IGNORECASE):
                 issues.append(issue)
-        
+
         return issues
-    
-    def check_config_consistency(self, config: Dict) -> List[AuditIssue]:
+
+    def check_config_consistency(self, config: dict) -> list[AuditIssue]:
         """检查配置一致性"""
         issues = []
-        
+
         # 检查WACC范围
         wacc = config.get("wacc", 0)
         if wacc < 0.04 or wacc > 0.20:
@@ -110,7 +109,7 @@ class AuditValidator:
                 message=f"WACC值{wacc:.2%}超出合理区间[4%, 20%]",
                 suggestion="检查WACC计算参数",
             ))
-        
+
         # 检查g < WACC
         g = config.get("g", 0)
         if g >= wacc and wacc > 0:
@@ -120,13 +119,13 @@ class AuditValidator:
                 message=f"永续增长率{g:.2%} >= WACC{wacc:.2%}",
                 suggestion="修正永续增长率",
             ))
-        
+
         return issues
-    
-    def check_module_calls(self, module_calls: List[str]) -> List[AuditIssue]:
+
+    def check_module_calls(self, module_calls: list[str]) -> list[AuditIssue]:
         """检查模块调用序列"""
         issues = []
-        
+
         # 检查是否有遗漏的必需模块
         required_modules = ["WACC计算", "DCF估值", "敏感性分析"]
         for module in required_modules:
@@ -137,13 +136,13 @@ class AuditValidator:
                     message=f"未调用{module}模块",
                     suggestion=f"添加{module}模块调用",
                 ))
-        
+
         return issues
-    
-    def check_self_audit(self, audit_results: List[Dict]) -> List[AuditIssue]:
+
+    def check_self_audit(self, audit_results: list[dict]) -> list[AuditIssue]:
         """检查自身审计结果"""
         issues = []
-        
+
         # 检查评分标准差
         scores = [r.get("score", 0) for r in audit_results if "score" in r]
         if len(scores) >= 3:
@@ -156,18 +155,18 @@ class AuditValidator:
                     message=f"评分标准差{stddev:.2f}过小，可能过于乐观",
                     suggestion="增加评分差异性",
                 ))
-        
+
         return issues
-    
+
     def check_cross_validation(
         self,
         dcf_value: float,
         market_price: float,
         tolerance: float = 0.5,
-    ) -> List[AuditIssue]:
+    ) -> list[AuditIssue]:
         """交叉验证"""
         issues = []
-        
+
         if market_price > 0:
             diff_ratio = abs(dcf_value - market_price) / market_price
             if diff_ratio > tolerance:
@@ -177,27 +176,27 @@ class AuditValidator:
                     message=f"DCF估值{dcf_value:.2f}与市场价格{market_price:.2f}差异过大({diff_ratio:.1%})",
                     suggestion="检查DCF假设或市场情绪",
                 ))
-        
+
         return issues
-    
-    def validate(self, content: str, config: Optional[Dict] = None) -> List[AuditIssue]:
+
+    def validate(self, content: str, config: dict | None = None) -> list[AuditIssue]:
         """完整审计验证"""
         issues = []
-        
+
         # 已知问题检查
         issues.extend(self.check_known_issues(content))
-        
+
         # 配置一致性检查
         if config:
             issues.extend(self.check_config_consistency(config))
-        
+
         return issues
-    
-    def generate_audit_report(self, issues: List[AuditIssue]) -> str:
+
+    def generate_audit_report(self, issues: list[AuditIssue]) -> str:
         """生成审计报告"""
         if not issues:
             return "## 审计报告\n\n✅ 未发现问题"
-        
+
         lines = [
             "## 审计报告",
             "",
@@ -206,8 +205,8 @@ class AuditValidator:
             "| 严重度 | 问题 | 建议 |",
             "|--------|------|------|",
         ]
-        
+
         for issue in issues:
             lines.append(f"| {issue.severity} | {issue.message} | {issue.suggestion} |")
-        
+
         return "\n".join(lines)

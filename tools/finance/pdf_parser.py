@@ -8,7 +8,7 @@ PDF Parser - 统一解析接口
 
 import logging
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 from .parsers.base import BaseParser, ParsedFiling
 from .parsers.docling_parser import DoclingParser

@@ -11,10 +11,8 @@
 from __future__ import annotations
 
 import logging
-import re
-from typing import Optional
 
-from .document_store import TableSummary, TableContent
+from .document_store import TableContent, TableSummary
 
 logger = logging.getLogger(__name__)
 
@@ -38,31 +36,31 @@ CASH_FLOW_KEYWORDS = [
 
 def relabel_tables(tables: list[TableSummary], markdown: str = "") -> list[TableSummary]:
     """为表格添加金融语义标注。
-    
+
     与Dayu的FinsDoclingProcessor.relabel_tables()签名兼容。
-    
+
     识别并标注财务报表类型：
     - balance_sheet: 资产负债表
     - income_statement: 利润表
     - cash_flow: 现金流量表
-    
+
     Args:
         tables: 原始表格摘要列表。
         markdown: 文档全文（可选，用于上下文分析）。
-        
+
     Returns:
         标注后的表格摘要列表（is_financial和table_type字段已更新）。
     """
     enhanced_tables = []
-    
+
     for table in tables:
         is_financial = False
         table_type = table.table_type
-        
+
         # 策略1：检查表格标题
         if table.caption:
             caption_lower = table.caption.lower()
-            
+
             if any(kw in caption_lower for kw in BALANCE_SHEET_KEYWORDS):
                 table_type = "balance_sheet"
                 is_financial = True
@@ -72,11 +70,11 @@ def relabel_tables(tables: list[TableSummary], markdown: str = "") -> list[Table
             elif any(kw in caption_lower for kw in CASH_FLOW_KEYWORDS):
                 table_type = "cash_flow"
                 is_financial = True
-        
+
         # 策略2：检查表头
         if not is_financial and table.headers:
             headers_text = " ".join(table.headers).lower()
-            
+
             if any(kw in headers_text for kw in BALANCE_SHEET_KEYWORDS):
                 table_type = "balance_sheet"
                 is_financial = True
@@ -86,11 +84,11 @@ def relabel_tables(tables: list[TableSummary], markdown: str = "") -> list[Table
             elif any(kw in headers_text for kw in CASH_FLOW_KEYWORDS):
                 table_type = "cash_flow"
                 is_financial = True
-        
+
         # 策略3：检查表格前的上下文
         if not is_financial and table.context_before:
             context_lower = table.context_before.lower()
-            
+
             if any(kw in context_lower for kw in BALANCE_SHEET_KEYWORDS):
                 table_type = "balance_sheet"
                 is_financial = True
@@ -100,7 +98,7 @@ def relabel_tables(tables: list[TableSummary], markdown: str = "") -> list[Table
             elif any(kw in context_lower for kw in CASH_FLOW_KEYWORDS):
                 table_type = "cash_flow"
                 is_financial = True
-        
+
         # 创建增强后的表格摘要
         enhanced_tables.append(TableSummary(
             table_ref=table.table_ref,
@@ -115,20 +113,20 @@ def relabel_tables(tables: list[TableSummary], markdown: str = "") -> list[Table
             internal_ref=table.internal_ref,
             is_financial=is_financial,
         ))
-    
+
     logger.info(f"金融标注完成: {sum(1 for t in enhanced_tables if t.is_financial)} 个财务表格")
     return enhanced_tables
 
 
 def relabel_table_content(table_content: TableContent, markdown: str = "") -> TableContent:
     """为表格内容添加金融语义标注。
-    
+
     对应Dayu的FinsDoclingProcessor.relabel_tables()的内容级标注。
-    
+
     Args:
         table_content: 原始表格内容。
         markdown: 文档全文（可选）。
-        
+
     Returns:
         标注后的表格内容（table_type字段已更新）。
     """
@@ -146,10 +144,10 @@ def relabel_table_content(table_content: TableContent, markdown: str = "") -> Ta
         internal_ref=table_content.internal_ref,
         is_financial=None,
     )
-    
+
     # 执行标注
     enhanced_summary = relabel_tables([temp_summary], markdown)[0]
-    
+
     # 返回增强后的表格内容
     return TableContent(
         table_ref=table_content.table_ref,

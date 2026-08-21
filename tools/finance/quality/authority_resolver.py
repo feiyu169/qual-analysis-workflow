@@ -14,7 +14,6 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -38,9 +37,9 @@ class AuthorityResult:
     """权威检查结果"""
     level: AuthorityLevel
     passed: bool
-    score: Optional[float] = None
-    issues: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    score: float | None = None
+    issues: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -49,14 +48,14 @@ class ConflictResolution:
     mode: ConflictMode
     winner: AuthorityLevel
     final_passed: bool
-    final_score: Optional[float] = None
+    final_score: float | None = None
     reasoning: str = ""
-    warnings: List[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 class AuthorityResolver:
     """权威冲突解决器
-    
+
     决策矩阵:
     ┌─────────────────────────────────────────────────────────────┐
     │ 场景                │ 模式    │ 规则                        │
@@ -69,23 +68,23 @@ class AuthorityResolver:
     │ L3发现WARN          │ -       │ 仅记录, 不影响结果          │
     └─────────────────────────────────────────────────────────────┘
     """
-    
+
     # 权威权重
     WEIGHTS = {
         AuthorityLevel.PRIMARY: 0.7,
         AuthorityLevel.SUPPLEMENTARY: 0.3,
         AuthorityLevel.SUPERVISORY: 0.5,  # 仅用于ERROR级别
     }
-    
+
     def resolve(
         self,
         l1_result: AuthorityResult,
-        l2_result: Optional[AuthorityResult] = None,
-        l3_result: Optional[AuthorityResult] = None,
+        l2_result: AuthorityResult | None = None,
+        l3_result: AuthorityResult | None = None,
     ) -> ConflictResolution:
         """解决权威冲突"""
         warnings = []
-        
+
         # 场景1: L3发现FATAL → 否决模式
         if l3_result and self._has_fatal(l3_result):
             return ConflictResolution(
@@ -96,7 +95,7 @@ class AuthorityResolver:
                 reasoning=f"L3否决: {self._get_fatal_issues(l3_result)}",
                 warnings=warnings
             )
-        
+
         # 场景2: L1失败 → 级联模式
         if not l1_result.passed:
             return ConflictResolution(
@@ -107,21 +106,21 @@ class AuthorityResolver:
                 reasoning=f"L1失败级联: {l1_result.issues}",
                 warnings=warnings
             )
-        
+
         # 场景3: L1通过, L2存在且失败 → 投票模式
         if l2_result and not l2_result.passed:
             return self._voting_resolution(l1_result, l2_result, warnings)
-        
+
         # 场景4: L1通过, L2通过或不存在 → 直接通过
         final_passed = True
         final_score = l1_result.score
-        
+
         # L3的ERROR/WARN追加到warnings
         if l3_result:
             if self._has_error(l3_result):
                 warnings.extend(self._get_error_issues(l3_result))
             warnings.extend(l3_result.warnings)
-        
+
         return ConflictResolution(
             mode=ConflictMode.VOTING,
             winner=AuthorityLevel.PRIMARY,
@@ -130,29 +129,29 @@ class AuthorityResolver:
             reasoning="L1通过, 无冲突",
             warnings=warnings
         )
-    
+
     def _voting_resolution(
         self,
         l1: AuthorityResult,
         l2: AuthorityResult,
-        warnings: List[str],
+        warnings: list[str],
     ) -> ConflictResolution:
         """投票模式解决"""
         w1 = self.WEIGHTS[AuthorityLevel.PRIMARY]
         w2 = self.WEIGHTS[AuthorityLevel.SUPPLEMENTARY]
-        
+
         # 加权投票
         l1_vote = w1 * (1.0 if l1.passed else 0.0)
         l2_vote = w2 * (1.0 if l2.passed else 0.0)
         total_vote = l1_vote + l2_vote
-        
+
         final_passed = total_vote >= 0.5
-        
+
         # 计算加权分数
         l1_score = l1.score or 0
         l2_score = l2.score or 0
         final_score = l1_score * w1 + l2_score * w2 if l1_score and l2_score else None
-        
+
         return ConflictResolution(
             mode=ConflictMode.VOTING,
             winner=AuthorityLevel.PRIMARY if l1.passed else AuthorityLevel.SUPPLEMENTARY,
@@ -161,28 +160,28 @@ class AuthorityResolver:
             reasoning=f"投票: L1({w1})={'通过' if l1.passed else '失败'}, L2({w2})={'通过' if l2.passed else '失败'}, 总分={total_vote:.2f}",
             warnings=warnings
         )
-    
+
     def _has_fatal(self, result: AuthorityResult) -> bool:
         """检查是否有FATAL级别问题"""
         return any("FATAL" in issue for issue in result.issues)
-    
+
     def _has_error(self, result: AuthorityResult) -> bool:
         """检查是否有ERROR级别问题"""
         return any("ERROR" in issue for issue in result.issues)
-    
-    def _get_fatal_issues(self, result: AuthorityResult) -> List[str]:
+
+    def _get_fatal_issues(self, result: AuthorityResult) -> list[str]:
         """获取FATAL级别问题"""
         return [i for i in result.issues if "FATAL" in i]
-    
-    def _get_error_issues(self, result: AuthorityResult) -> List[str]:
+
+    def _get_error_issues(self, result: AuthorityResult) -> list[str]:
         """获取ERROR级别问题"""
         return [i for i in result.issues if "ERROR" in i]
-    
+
     def resolve_with_fallback(
         self,
         l1_result: AuthorityResult,
-        l2_result: Optional[AuthorityResult] = None,
-        l3_result: Optional[AuthorityResult] = None,
+        l2_result: AuthorityResult | None = None,
+        l3_result: AuthorityResult | None = None,
     ) -> ConflictResolution:
         """带回退的权威冲突解决"""
         try:
@@ -198,8 +197,8 @@ class AuthorityResolver:
                 reasoning=f"AuthorityResolver异常回退: {e}",
                 warnings=[f"AuthorityResolver异常: {e}"]
             )
-    
-    def get_decision_matrix(self) -> Dict:
+
+    def get_decision_matrix(self) -> dict:
         """获取决策矩阵（用于文档和测试）"""
         return {
             "L1_pass_L2_pass": {"mode": "-", "result": "通过"},

@@ -97,7 +97,7 @@ def enhance_report_quality(
             'warnings': repair_result.warnings,
         }
         result.total_fixes += repair_result.source_fixes + repair_result.ai_trace_fixes
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.error(f"Stage 1 失败: {e}")
         result.warnings.append(f"数据修复失败: {e}")
 
@@ -120,7 +120,7 @@ def enhance_report_quality(
             'pe_history_avg': base_val.pe_history_avg,
         }
         valuation_summary = base_val.summary()
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.error(f"Stage 2 失败: {e}")
         result.warnings.append(f"基础估值失败: {e}")
         valuation_summary = ""  # noqa: F841 —— 保留统一命名（Stage 2 结果占位，后续扩展审计用）
@@ -157,7 +157,7 @@ def enhance_report_quality(
                         logger.info(f"[Debate] 第{ch_num}章增强完成")
                     else:
                         logger.warning(f"[Debate] 第{ch_num}章增强无效（辩论降级或失败），保留原文")
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     logger.warning(f"第{ch_num}章辩论失败: {e}")
 
     # === Stage 4: 完整估值 ===
@@ -175,14 +175,14 @@ def enhance_report_quality(
                 revenue = _rev_list[-1] if _rev_list else financials.get('revenue', 0)
                 operating_profit = _op_list[-1] if _op_list else financials.get('operating_profit', 0)
                 ebit_margin = operating_profit / revenue if revenue > 0 else 0.05
-                
+
                 # 修复：create_default_assumptions不支持base_ebit_margin参数
                 # 使用自定义方式创建assumptions
                 from .valuation.assumptions import (
                     AssumptionSource,
                     ValuationAssumptions,
                 )
-                
+
                 assumptions = ValuationAssumptions(
                     base_revenue=revenue,
                     revenue_growth_rates=[0.05, 0.04, 0.03, 0.02, 0.02],
@@ -197,13 +197,13 @@ def enhance_report_quality(
                     confidence=70,
                     justification=f"基于营业利润/营收计算: {operating_profit}/{revenue}={ebit_margin:.2%}",
                 )
-                
+
                 valuation = UnifiedValuation(
                     assumptions=assumptions,
                     shares=shares,
                     net_debt=financials.get('net_debt', 0),
                 )
-                
+
                 dcf_value = valuation.calc_dcf()
                 result.valuation_result = {
                     'dcf_value': dcf_value,
@@ -244,7 +244,7 @@ def enhance_report_quality(
                     chapters[7] = chapters[7] + val_text
                     logger.info("[Quality] 估值结果已注入第7章")
 
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(f"Stage 4 失败: {e}")
             result.warnings.append(f"估值失败: {e}")
 
@@ -253,7 +253,7 @@ def enhance_report_quality(
         logger.info("[Quality] Stage 5: 深度优化")
         try:
             from .depth_enhancer import format_depth_for_report, run_depth_enhancement
-            
+
             # 计算WACC（使用CAPM）
             rf = 0.023  # 无风险利率
             beta = 1.2  # Beta系数
@@ -262,7 +262,7 @@ def enhance_report_quality(
             kd = 0.05  # 债务成本
             tax_rate = 0.25
             wacc = ke * 0.85 + kd * (1 - tax_rate) * 0.15  # 0.081
-            
+
             depth = run_depth_enhancement(
                 chapters=chapters,
                 financials=financials,
@@ -285,7 +285,7 @@ def enhance_report_quality(
                 chapters[7] = chapters[7] + "\n\n" + depth_report
                 logger.info("[Quality] 深度优化结果已注入第7章")
 
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(f"Stage 5 失败: {e}")
             result.warnings.append(f"深度优化失败: {e}")
 

@@ -12,8 +12,7 @@ FinancialStandards模块
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -100,104 +99,104 @@ ROIC_STANDARDS = {
 
 class FinancialStandards:
     """财务口径标准化"""
-    
+
     def __init__(self):
         self.profit_standards = PROFIT_STANDARDS
         self.fcf_standards = FCF_STANDARDS
         self.roic_standards = ROIC_STANDARDS
-    
+
     def normalize_profit(
         self,
         net_profit_parent: float,
-        net_profit_total: Optional[float] = None,
-        minority_interest: Optional[float] = None,
-    ) -> Dict[str, float]:
+        net_profit_total: float | None = None,
+        minority_interest: float | None = None,
+    ) -> dict[str, float]:
         """标准化利润口径"""
         result = {
             "归母净利润": net_profit_parent,
         }
-        
+
         # 如果有少数股东损益，计算总净利润
         if minority_interest is not None:
             result["净利润"] = net_profit_parent + minority_interest
         elif net_profit_total is not None:
             result["净利润"] = net_profit_total
-        
+
         return result
-    
+
     def validate_profit_consistency(
         self,
         net_profit_parent: float,
         net_profit_total: float,
         tolerance: float = 0.05,
-    ) -> List[str]:
+    ) -> list[str]:
         """验证利润一致性"""
         issues = []
-        
+
         # 检查归母净利润是否大于总净利润（不应出现）
         if net_profit_parent > net_profit_total * (1 + tolerance):
             issues.append(f"归母净利润({net_profit_parent:.1f})大于总净利润({net_profit_total:.1f})")
-        
+
         # 检查差异是否过大
         if net_profit_total != 0:
             diff_ratio = abs(net_profit_parent - net_profit_total) / abs(net_profit_total)
             if diff_ratio > tolerance:
                 issues.append(f"归母净利润与总净利润差异过大({diff_ratio:.1%} > {tolerance:.1%})")
-        
+
         return issues
-    
+
     def normalize_fcf(
         self,
         operating_cashflow: float,
         capex: float,
-        net_income: Optional[float] = None,
-        depreciation: Optional[float] = None,
-        working_capital_change: Optional[float] = None,
-        net_borrowing: Optional[float] = None,
+        net_income: float | None = None,
+        depreciation: float | None = None,
+        working_capital_change: float | None = None,
+        net_borrowing: float | None = None,
         tax_rate: float = 0.25,
-        ebit: Optional[float] = None,
-    ) -> Dict[str, float]:
+        ebit: float | None = None,
+    ) -> dict[str, float]:
         """标准化FCF口径"""
         result = {}
-        
+
         # LFCF = Operating CF - CapEx
         result["LFCF"] = operating_cashflow - capex
-        
+
         # FCFF (如果有足够数据)
         if ebit is not None and depreciation is not None and working_capital_change is not None:
             nopat = ebit * (1 - tax_rate)
             result["FCFF"] = nopat + depreciation - capex - working_capital_change
-        
+
         # FCFE (如果有足够数据)
         if net_income is not None and depreciation is not None and working_capital_change is not None and net_borrowing is not None:
             result["FCFE"] = net_income + depreciation - capex - working_capital_change + net_borrowing
-        
+
         return result
-    
+
     def validate_fcf_consistency(
         self,
         fcf: float,
         operating_cashflow: float,
         net_income: float,
         fcf_type: str = "LFCF",
-    ) -> List[str]:
+    ) -> list[str]:
         """验证FCF一致性"""
         issues = []
-        
+
         # FCF/OCF比值检查
         if operating_cashflow != 0:
             fcf_ocf_ratio = fcf / operating_cashflow
             if fcf_ocf_ratio < 0.5:
                 issues.append(f"FCF/OCF比值({fcf_ocf_ratio:.2f})低于0.5")
-        
+
         # FCF/NI比值检查
         if net_income != 0:
             fcf_ni_ratio = fcf / net_income
             if fcf_ni_ratio < 0.3 or fcf_ni_ratio > 3.0:
                 issues.append(f"FCF/NI比值({fcf_ni_ratio:.2f})超出[0.3, 3.0]区间")
-        
+
         return issues
-    
+
     def calculate_roic(
         self,
         nopat: float,
@@ -207,7 +206,7 @@ class FinancialStandards:
         if invested_capital == 0:
             return 0.0
         return nopat / invested_capital
-    
+
     def calculate_invested_capital(
         self,
         total_equity: float,
@@ -217,7 +216,7 @@ class FinancialStandards:
     ) -> float:
         """计算投入资本"""
         return total_equity + total_debt - cash - non_operating_assets
-    
+
     def generate_standards_report(self) -> str:
         """生成口径报告"""
         lines = [
@@ -228,10 +227,10 @@ class FinancialStandards:
             "| 名称 | 标准名称 | 公式 |",
             "|------|----------|------|",
         ]
-        
+
         for key, standard in self.profit_standards.items():
             lines.append(f"| {standard.name} | {standard.standard_name} | {standard.formula} |")
-        
+
         lines.extend([
             "",
             "### FCF口径",
@@ -239,8 +238,8 @@ class FinancialStandards:
             "| 名称 | 公式 | 用途 |",
             "|------|------|------|",
         ])
-        
+
         for key, standard in self.fcf_standards.items():
             lines.append(f"| {standard['name']} | {standard['formula']} | {standard['use_case']} |")
-        
+
         return "\n".join(lines)

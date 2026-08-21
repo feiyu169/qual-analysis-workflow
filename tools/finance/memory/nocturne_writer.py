@@ -47,7 +47,7 @@ def write_to_nocturne(ctx: "DataContext", report: str) -> bool:
 
 def _build_nocturne_content(ctx: "DataContext", report: str) -> str:
     """构建 nocturne 记忆内容"""
-    
+
     # 提取关键指标
     key_metrics = ""
     if ctx.wind and ctx.wind.quote:

@@ -6,7 +6,6 @@ HK Sections - 港股章节映射
 
 import logging
 import re
-from typing import Optional
 
 from .base import BaseProcessor
 
@@ -114,7 +113,7 @@ class HKSectionsProcessor(BaseProcessor):
         self,
         text: str,
         patterns: list[str],
-    ) -> Optional[str]:
+    ) -> str | None:
         """查找章节内容"""
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
@@ -183,7 +182,7 @@ class HKSectionsProcessor(BaseProcessor):
         logger.info(f"港股表格提取: {len(tables)} 个")
         return tables
 
-    def _extract_table_region(self, text: str, start_pos: int, max_chars: int = 20000) -> Optional[str]:
+    def _extract_table_region(self, text: str, start_pos: int, max_chars: int = 20000) -> str | None:
         """提取表格区域"""
         end_pos = min(start_pos + max_chars, len(text))
         return text[start_pos:end_pos].strip()

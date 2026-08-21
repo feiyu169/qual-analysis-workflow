@@ -2,8 +2,7 @@
 """报告完整性检查器 — V5.0"""
 
 import re
-from typing import Dict, List, Any
-
+from typing import Any
 
 REQUIRED_SECTIONS = [
     "投资摘要", "公司概况", "行业分析", "财务分析",
@@ -26,7 +25,7 @@ FORBIDDEN_PATTERNS = [
 TABLE_SEPARATOR_PATTERN = re.compile(r'^\|[\s\-:]+\|', re.MULTILINE)
 
 
-def _is_in_excluded_context(text: str, pos: int, exclude_contexts: List[str]) -> bool:
+def _is_in_excluded_context(text: str, pos: int, exclude_contexts: list[str]) -> bool:
     """检查匹配位置是否在排除上下文中"""
     start = max(0, pos - 50)
     end = min(len(text), pos + 50)
@@ -37,7 +36,7 @@ def _is_in_excluded_context(text: str, pos: int, exclude_contexts: List[str]) ->
     return False
 
 
-def lint_report(report: str) -> Dict[str, Any]:
+def lint_report(report: str) -> dict[str, Any]:
     """检查报告完整性
 
     Args:

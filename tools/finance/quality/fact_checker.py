@@ -9,10 +9,10 @@
 审查原则：不降低买方报告分析的专业性和质量
 """
 
-import re
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class FactIssue:
 class FactCheckResult:
     """事实核查结果"""
     passed: bool
-    issues: List[FactIssue] = field(default_factory=list)
+    issues: list[FactIssue] = field(default_factory=list)
     score: float = 100.0
     checked_count: int = 0
     error_count: int = 0
@@ -43,7 +43,7 @@ class FactCheckResult:
 
 class FactChecker:
     """事实核查器"""
-    
+
     def __init__(self):
         # 需要核查的财务指标（wind_field 一律用 canonical 键，见 canonical.py 唯一真源）
         self.financial_indicators = {
@@ -89,7 +89,7 @@ class FactChecker:
                 "tolerance": 0.10,  # 现金流允许10%误差
             },
         }
-        
+
         # 需要核查的计算指标
         self.calculated_indicators = {
             "毛利率": {
@@ -108,26 +108,26 @@ class FactChecker:
                 "tolerance": 0.05,
             },
         }
-    
+
     def check(
         self,
-        chapters: Dict[int, str],
-        wind_data: Dict[str, Any],
+        chapters: dict[int, str],
+        wind_data: dict[str, Any],
     ) -> FactCheckResult:
         """
         执行事实核查
-        
+
         Args:
             chapters: 各章节内容 {chapter_num: content}
             wind_data: Wind数据
-        
+
         Returns:
             FactCheckResult
         """
         issues = []
         checked_count = 0
         error_count = 0
-        
+
         # 1. 核查直接引用的数据
         for ch_num, content in chapters.items():
             for indicator, config in self.financial_indicators.items():
@@ -139,7 +139,7 @@ class FactChecker:
                     if result.severity in ["fatal", "important"]:
                         error_count += 1
                     issues.append(result)
-        
+
         # 2. 核查计算结果
         for ch_num, content in chapters.items():
             for indicator, config in self.calculated_indicators.items():
@@ -151,30 +151,30 @@ class FactChecker:
                     if result.severity in ["fatal", "important"]:
                         error_count += 1
                     issues.append(result)
-        
+
         # 3. 核查同比变化
         for ch_num, content in chapters.items():
             yoy_issues = self._check_yoy_changes(content, ch_num, wind_data)
             issues.extend(yoy_issues)
             checked_count += len(yoy_issues)
             error_count += sum(1 for i in yoy_issues if i.severity in ["fatal", "important"])
-        
+
         # 计算评分
         fatal_count = sum(1 for i in issues if i.severity == "fatal")
         important_count = sum(1 for i in issues if i.severity == "important")
         suggestion_count = sum(1 for i in issues if i.severity == "suggestion")
-        
+
         score = 100.0
         score -= fatal_count * 40
         score -= important_count * 15
         score -= suggestion_count * 5
         score = max(0.0, min(100.0, score))
-        
+
         passed = fatal_count == 0 and score >= 60.0
-        
+
         if not passed:
             logger.warning(f"事实核查不通过: score={score:.0f}, issues={len(issues)}")
-        
+
         return FactCheckResult(
             passed=passed,
             issues=issues,
@@ -182,34 +182,34 @@ class FactChecker:
             checked_count=checked_count,
             error_count=error_count,
         )
-    
+
     def _check_direct_data(
         self,
         content: str,
         ch_num: int,
         indicator: str,
-        config: Dict,
-        wind_data: Dict,
-    ) -> Optional[FactIssue]:
+        config: dict,
+        wind_data: dict,
+    ) -> FactIssue | None:
         """核查直接引用的数据"""
-        
+
         # 从报告中提取数据
         report_value = self._extract_value(content, config["patterns"])
         if report_value is None:
             return None
-        
+
         # 从Wind数据中获取实际值
         wind_field = config["wind_field"]
         actual_value = self._get_wind_value(wind_data, wind_field)
         if actual_value is None:
             return None
-        
+
         # 计算偏差
         if actual_value != 0:
             deviation = abs(report_value - actual_value) / abs(actual_value)
         else:
             deviation = abs(report_value - actual_value)
-        
+
         # 检查是否超出容忍度
         tolerance = config["tolerance"]
         if deviation > tolerance:
@@ -220,9 +220,9 @@ class FactChecker:
                 severity = "important"
             else:
                 severity = "suggestion"
-            
+
             line = self._find_line_number(content, indicator)
-            
+
             return FactIssue(
                 issue_type="data_mismatch",
                 severity=severity,
@@ -234,58 +234,58 @@ class FactChecker:
                 chapter=ch_num,
                 line=line,
             )
-        
+
         return None
-    
+
     def _check_calculated_data(
         self,
         content: str,
         ch_num: int,
         indicator: str,
-        config: Dict,
-        wind_data: Dict,
-    ) -> Optional[FactIssue]:
+        config: dict,
+        wind_data: dict,
+    ) -> FactIssue | None:
         """核查计算结果"""
-        
+
         # 从报告中提取计算结果
         report_value = self._extract_value(content, [fr"{indicator}.*?(\d+\.?\d*)\s*%"])
         if report_value is None:
             return None
-        
+
         # 根据指标类型计算实际值
         actual_value = None
-        
+
         if indicator == "毛利率":
             revenue = self._get_wind_value(wind_data, "年营业收入")
             cost = self._get_wind_value(wind_data, "年营业成本")
             if revenue and cost and revenue > 0:
                 actual_value = (revenue - cost) / revenue * 100
-        
+
         elif indicator == "营收增长率":
             revenues = self._get_wind_list(wind_data, "年营业收入")
             if len(revenues) >= 2 and revenues[-2] > 0:
                 actual_value = (revenues[-1] - revenues[-2]) / revenues[-2] * 100
-        
+
         elif indicator == "净利润增长率":
             profits = self._get_wind_list(wind_data, "年净利润")
             if len(profits) >= 2 and profits[-2] != 0:
                 actual_value = (profits[-1] - profits[-2]) / abs(profits[-2]) * 100
-        
+
         if actual_value is None:
             return None
-        
+
         # 计算偏差
         if actual_value != 0:
             deviation = abs(report_value - actual_value) / abs(actual_value)
         else:
             deviation = abs(report_value - actual_value)
-        
+
         # 检查是否超出容忍度
         tolerance = config["tolerance"]
         if deviation > tolerance:
             severity = "important" if deviation > 0.20 else "suggestion"
             line = self._find_line_number(content, indicator)
-            
+
             return FactIssue(
                 issue_type="calculation_error",
                 severity=severity,
@@ -297,39 +297,39 @@ class FactChecker:
                 chapter=ch_num,
                 line=line,
             )
-        
+
         return None
-    
+
     def _check_yoy_changes(
         self,
         content: str,
         ch_num: int,
-        wind_data: Dict,
-    ) -> List[FactIssue]:
+        wind_data: dict,
+    ) -> list[FactIssue]:
         """核查同比变化"""
         issues = []
-        
+
         # 提取同比变化描述
         yoy_patterns = [
             r"同比增长.*?(\d+\.?\d*)\s*%",
             r"增长.*?(\d+\.?\d*)\s*%",
             r"同比.*?(\d+\.?\d*)\s*%",
         ]
-        
+
         for pattern in yoy_patterns:
             matches = re.findall(pattern, content)
             for match in matches:
                 try:
                     report_growth = float(match)
-                    
+
                     # 计算实际增长率
                     revenues = self._get_wind_list(wind_data, "年营业收入")
                     if len(revenues) >= 2 and revenues[-2] > 0:
                         actual_growth = (revenues[-1] - revenues[-2]) / revenues[-2] * 100
-                        
+
                         # 检查偏差
                         deviation = abs(report_growth - actual_growth) / abs(actual_growth)
-                        
+
                         if deviation > 0.10:  # 偏差超过10%
                             line = self._find_line_number(content, "增长")
                             issues.append(FactIssue(
@@ -345,10 +345,10 @@ class FactChecker:
                             ))
                 except ValueError:
                     continue
-        
+
         return issues
-    
-    def _extract_value(self, content: str, patterns: List[str]) -> Optional[float]:
+
+    def _extract_value(self, content: str, patterns: list[str]) -> float | None:
         """从内容中提取数值"""
         for pattern in patterns:
             matches = re.findall(pattern, content)
@@ -358,16 +358,16 @@ class FactChecker:
                 except ValueError:
                     continue
         return None
-    
-    def _get_wind_value(self, wind_data: Dict, field: str) -> Optional[float]:
+
+    def _get_wind_value(self, wind_data: dict, field: str) -> float | None:
         """从Wind数据中获取单个值（canonical 别名兜底）"""
         if not wind_data:
             return None
-        
+
         income = wind_data.get("income", {})
         balance = wind_data.get("balance", {})
         cashflow = wind_data.get("cashflow", {})
-        
+
         # 在各个表中查找（先精确，再 canonical 别名）
         for table in [income, balance, cashflow]:
             if field in table:
@@ -382,18 +382,18 @@ class FactChecker:
                 return series[-1]
         except ImportError:
             pass
-        
+
         return None
-    
-    def _get_wind_list(self, wind_data: Dict, field: str) -> List[float]:
+
+    def _get_wind_list(self, wind_data: dict, field: str) -> list[float]:
         """从Wind数据中获取列表（canonical 别名兜底）"""
         if not wind_data:
             return []
-        
+
         income = wind_data.get("income", {})
         balance = wind_data.get("balance", {})
         cashflow = wind_data.get("cashflow", {})
-        
+
         for table in [income, balance, cashflow]:
             if field in table:
                 values = table[field]
@@ -405,9 +405,9 @@ class FactChecker:
             return get_series(wind_data, field)
         except ImportError:
             pass
-        
+
         return []
-    
+
     def _find_line_number(self, content: str, keyword: str) -> int:
         """查找关键词所在行号"""
         lines = content.split("\n")
@@ -418,16 +418,16 @@ class FactChecker:
 
 
 def check_facts(
-    chapters: Dict[int, str],
-    wind_data: Dict[str, Any],
+    chapters: dict[int, str],
+    wind_data: dict[str, Any],
 ) -> FactCheckResult:
     """
     事实核查（入口函数）
-    
+
     Args:
         chapters: 各章节内容 {chapter_num: content}
         wind_data: Wind数据
-    
+
     Returns:
         FactCheckResult
     """

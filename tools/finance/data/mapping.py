@@ -7,10 +7,10 @@
 3. schema自动校验
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-from datetime import datetime
 import logging
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class FieldMapping:
     """字段映射"""
     canonical_name: str  # 标准名称
-    aliases: List[str]  # 别名列表
+    aliases: list[str]  # 别名列表
     source: str  # 数据来源
     口径: str  # 计算口径
     unit: str  # 单位
@@ -29,9 +29,9 @@ class FieldMapping:
 
 class DataMappingRegistry:
     """数据字段映射注册表"""
-    
+
     # 字段映射配置
-    FIELD_MAPPINGS: Dict[str, FieldMapping] = {
+    FIELD_MAPPINGS: dict[str, FieldMapping] = {
         # 利润表
         "营业总收入": FieldMapping(
             canonical_name="营业总收入",
@@ -61,7 +61,7 @@ class DataMappingRegistry:
             口径="归母",
             unit="亿元",
         ),
-        
+
         # 资产负债表
         "负债合计": FieldMapping(
             canonical_name="负债合计",
@@ -91,7 +91,7 @@ class DataMappingRegistry:
             口径="IFRS",
             unit="亿元",
         ),
-        
+
         # 现金流量表
         "经营活动现金流": FieldMapping(
             canonical_name="经营活动现金流",
@@ -108,43 +108,43 @@ class DataMappingRegistry:
             unit="亿元",
         ),
     }
-    
+
     # 版本历史
-    version_history: List[Dict] = []
-    
+    version_history: list[dict] = []
+
     @classmethod
-    def get_canonical_name(cls, alias: str) -> Optional[str]:
+    def get_canonical_name(cls, alias: str) -> str | None:
         """获取标准名称"""
         for canonical, mapping in cls.FIELD_MAPPINGS.items():
             if alias in mapping.aliases:
                 return canonical
         return None
-    
+
     @classmethod
     def get_field_value(cls, data: dict, field_name: str):
         """获取字段值（支持多种别名）"""
         mapping = cls.FIELD_MAPPINGS.get(field_name)
         if not mapping:
             return None
-        
+
         for alias in mapping.aliases:
             if alias in data:
                 return data[alias]
-        
+
         return None
-    
+
     @classmethod
-    def validate_consistency(cls, data: dict) -> List[str]:
+    def validate_consistency(cls, data: dict) -> list[str]:
         """验证数据一致性"""
         errors = []
-        
+
         # 检查是否存在多口径
         for canonical, mapping in cls.FIELD_MAPPINGS.items():
             values = []
             for alias in mapping.aliases:
                 if alias in data:
                     values.append((alias, data[alias]))
-            
+
             if len(values) > 1:
                 # 检查是否一致
                 base_value = values[0][1]
@@ -152,14 +152,14 @@ class DataMappingRegistry:
                     if isinstance(value, (int, float)) and isinstance(base_value, (int, float)):
                         if abs(value - base_value) / abs(base_value) > 0.01:  # 1%容差
                             errors.append(f"{canonical}存在多口径: {values}")
-        
+
         return errors
-    
+
     @classmethod
-    def validate_schema(cls, data: dict) -> List[str]:
+    def validate_schema(cls, data: dict) -> list[str]:
         """验证schema"""
         errors = []
-        
+
         # 检查必需字段
         required_fields = ["营业总收入", "营业利润", "净利润"]
         for field in required_fields:
@@ -174,14 +174,14 @@ class DataMappingRegistry:
                             break
                     if not found:
                         errors.append(f"缺少必需字段: {field}")
-        
+
         return errors
-    
+
     @classmethod
     def update_mapping(cls, field_name: str, new_mapping: FieldMapping):
         """更新映射（记录版本历史）"""
         old_mapping = cls.FIELD_MAPPINGS.get(field_name)
-        
+
         # 记录版本历史
         cls.version_history.append({
             "timestamp": datetime.now().isoformat(),
@@ -190,34 +190,34 @@ class DataMappingRegistry:
             "new_version": new_mapping.version,
             "change_description": f"更新{field_name}映射",
         })
-        
+
         cls.FIELD_MAPPINGS[field_name] = new_mapping
-    
+
     @classmethod
-    def get_version_history(cls) -> List[Dict]:
+    def get_version_history(cls) -> list[dict]:
         """获取版本历史"""
         return cls.version_history.copy()
-    
+
     @classmethod
-    def validate_mappings(cls, data: dict) -> Dict[str, Any]:
+    def validate_mappings(cls, data: dict) -> dict[str, Any]:
         """验证字段映射（兼容workflow.py调用）
-        
+
         Args:
             data: Wind数据字典
-            
+
         Returns:
             dict: {"success": bool, "warnings": list}
         """
         warnings = []
-        
+
         # 验证一致性
         consistency_errors = cls.validate_consistency(data)
         warnings.extend(consistency_errors)
-        
+
         # 验证schema
         schema_errors = cls.validate_schema(data)
         warnings.extend(schema_errors)
-        
+
         return {
             "success": len(warnings) == 0,
             "warnings": warnings,

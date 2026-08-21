@@ -12,7 +12,7 @@ Gate 4.3: 修复子代理 (Chapter Repairer)
 
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from .auditor import semantic_audit
 from .structural_check import AuditResult, structural_check
@@ -93,8 +93,8 @@ def repair_chapter(
     content: str,
     issues: list[str],
     *,
-    contract: Optional[dict] = None,
-    llm_caller: Optional[Any] = None,
+    contract: dict | None = None,
+    llm_caller: Any | None = None,
     max_rounds: int = _MAX_REPAIR_ROUNDS,
 ) -> dict:
     """修复章节：审计-修复循环
@@ -275,7 +275,7 @@ def _call_llm_repair(
     audit_result: AuditResult,
     contract: dict,
     llm_caller: Any,
-) -> Optional[str]:
+) -> str | None:
     """调用 LLM 执行修复
 
     Args:
@@ -323,7 +323,7 @@ def _call_llm_repair(
         response = llm_caller(prompt)
 
         # Patch 模式（规范审查）：LLM 输出 patch JSON → 程序应用 + 校验闭环
-        from .patch_applier import parse_patch_json, apply_patches, build_repair_instruction
+        from .patch_applier import apply_patches, parse_patch_json
 
         patches = parse_patch_json(response)
         if patches:
@@ -349,7 +349,7 @@ def _call_llm_repair(
         return None
 
 
-def _extract_markdown(text: str) -> Optional[str]:
+def _extract_markdown(text: str) -> str | None:
     """从 LLM 响应中提取 Markdown 内容
 
     处理以下格式:

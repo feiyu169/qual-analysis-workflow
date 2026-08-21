@@ -7,10 +7,9 @@
 3. 行业分类自动过滤
 """
 
-from dataclasses import dataclass
-from typing import Dict, List, Optional
-from enum import Enum
 import logging
+from dataclasses import dataclass
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +35,9 @@ class CompanyProfile:
 
 class ComparableConfig:
     """可比公司配置"""
-    
+
     # 公司画像库
-    COMPANY_PROFILES: Dict[str, CompanyProfile] = {
+    COMPANY_PROFILES: dict[str, CompanyProfile] = {
         "掌阅科技": CompanyProfile(
             name="掌阅科技",
             ticker="603533.SH",
@@ -82,24 +81,24 @@ class ComparableConfig:
             sub_industry="影视娱乐",
         ),
     }
-    
+
     # 可比公司白名单
-    COMPARABLE_WHITELIST: Dict[str, List[str]] = {
+    COMPARABLE_WHITELIST: dict[str, list[str]] = {
         "阅读": ["掌阅科技", "中文在线", "阅文集团"],
         "影视": ["华策影视", "光线传媒", "迪士尼"],
         "内容平台": ["B站", "爱奇艺"],
     }
-    
+
     # 可比公司黑名单
-    COMPARABLE_BLACKLIST: Dict[str, List[str]] = {
+    COMPARABLE_BLACKLIST: dict[str, list[str]] = {
         "阅读": ["B站", "爱奇艺", "抖音", "Meta", "拼多多", "美团"],
     }
-    
+
     @classmethod
-    def get_comparable_companies(cls, industry: str, market: str = None) -> List[str]:
+    def get_comparable_companies(cls, industry: str, market: str = None) -> list[str]:
         """获取可比公司"""
         companies = cls.COMPARABLE_WHITELIST.get(industry, [])
-        
+
         if market:
             # 按市场过滤
             filtered = []
@@ -108,73 +107,73 @@ class ComparableConfig:
                 if profile and profile.market == market:
                     filtered.append(company)
             return filtered
-        
+
         return companies
-    
+
     @classmethod
     def is_comparable(cls, industry: str, company: str) -> bool:
         """检查是否为可比公司"""
         whitelist = cls.COMPARABLE_WHITELIST.get(industry, [])
         blacklist = cls.COMPARABLE_BLACKLIST.get(industry, [])
-        
+
         if company in blacklist:
             return False
-        
+
         if company in whitelist:
             return True
-        
+
         return False
-    
+
     @classmethod
-    def filter_by_industry(cls, industry: IndustryClassification, 
-                          companies: List[str]) -> List[str]:
+    def filter_by_industry(cls, industry: IndustryClassification,
+                          companies: list[str]) -> list[str]:
         """按行业过滤可比公司"""
         filtered = []
-        
+
         for company in companies:
             profile = cls.COMPANY_PROFILES.get(company)
             if profile and profile.industry == industry:
                 filtered.append(company)
             else:
                 logger.info(f"过滤非同业公司: {company}")
-        
+
         return filtered
-    
+
     @classmethod
-    def validate_comparable(cls, industry: str, companies: List[str]) -> List[str]:
+    def validate_comparable(cls, industry: str, companies: list[str]) -> list[str]:
         """验证可比公司"""
         errors = []
-        
+
         for company in companies:
             if not cls.is_comparable(industry, company):
                 errors.append(f"{company}不是{industry}行业的可比公司")
-        
+
         return errors
-    
+
     @classmethod
-    def get_company_profile(cls, company: str) -> Optional[CompanyProfile]:
+    def get_company_profile(cls, company: str) -> CompanyProfile | None:
         """获取公司画像"""
         return cls.COMPANY_PROFILES.get(company)
-    
+
     @classmethod
     def add_company_profile(cls, profile: CompanyProfile):
         """添加公司画像"""
         cls.COMPANY_PROFILES[profile.name] = profile
-    
+
     @classmethod
     def add_to_whitelist(cls, industry: str, company: str):
         """添加到白名单"""
         if industry not in cls.COMPARABLE_WHITELIST:
             cls.COMPARABLE_WHITELIST[industry] = []
-        
+
         if company not in cls.COMPARABLE_WHITELIST[industry]:
             cls.COMPARABLE_WHITELIST[industry].append(company)
-    
+
     @classmethod
     def add_to_blacklist(cls, industry: str, company: str):
         """添加到黑名单"""
         if industry not in cls.COMPARABLE_BLACKLIST:
             cls.COMPARABLE_BLACKLIST[industry] = []
-        
+
         if company not in cls.COMPARABLE_BLACKLIST[industry]:
             cls.COMPARABLE_BLACKLIST[industry].append(company)

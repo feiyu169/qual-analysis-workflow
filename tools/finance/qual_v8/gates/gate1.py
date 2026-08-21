@@ -31,7 +31,7 @@ class TypeInferenceConfig:
 
 class Gate1TypeInference(GateBase):
     """Gate 1: 类型推断 + 数据提取"""
-    
+
     def __init__(self):
         spec = GateSpec(
             gate_num=1,
@@ -48,14 +48,14 @@ class Gate1TypeInference(GateBase):
             ],
         )
         super().__init__(spec)
-        
+
         self.config = TypeInferenceConfig(
             allowed_markets=["A股", "港股", "美股"],
             # operating_income（营业利润）非事实提取强制输出，从必填移除
             required_fields=["revenue", "net_income", "total_assets", "operating_cash_flow"],
             max_deviation=0.02,
         )
-    
+
     def execute(self, context: dict[str, Any]) -> GateResult:
         """执行Gate 1（真实：市场推断 + 事实提取 + Wind 交叉验证）"""
         errors = []
@@ -123,7 +123,7 @@ class Gate1TypeInference(GateBase):
             errors=errors,
             warnings=warnings,
             execution_time=0.0,
-            timestamp=datetime.now().isoformat(),  # noqa: DTZ005
+            timestamp=datetime.now().isoformat(),
         )
 
     def check_criteria(self, context: dict[str, Any]) -> bool:
@@ -159,7 +159,7 @@ class Gate1TypeInference(GateBase):
             from ...workflow import infer_market
             market = infer_market(ticker)
             return {"cn": "A股", "hk": "港股", "us": "美股"}.get(market, "未知")
-        except Exception:  # noqa: BLE001
+        except Exception:
             if ticker.endswith((".SH", ".SZ")):
                 return "A股"
             elif ticker.endswith(".HK"):
@@ -244,14 +244,14 @@ class Gate1TypeInference(GateBase):
                         if fy_result is not None:
                             by_year[int(fy)] = fy_result
                             logger.info(f"Gate1 多财年提取: FY{fy} 完成")
-                    except Exception as e:  # noqa: BLE001
+                    except Exception as e:
                         logger.warning(f"Gate1 多财年提取 FY{fy} 失败: {e}")
                 if by_year:
                     result.by_year = by_year
                     logger.info(f"Gate1 多财年事实表: {sorted(by_year.keys())} 年（B3-1）")
 
             return result
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             import traceback as _tb
             logger.error(f"Gate1 事实提取失败: {e}\n{_tb.format_exc()}")
             return {}

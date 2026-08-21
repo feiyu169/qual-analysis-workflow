@@ -24,7 +24,7 @@ class ValuationResult:
 
 class Gate5QualityEnhancement(GateBase):
     """Gate 5: 质量增强 + 组件集成"""
-    
+
     def __init__(self):
         spec = GateSpec(
             gate_num=5,
@@ -41,7 +41,7 @@ class Gate5QualityEnhancement(GateBase):
             ],
         )
         super().__init__(spec)
-        
+
         # 组件列表
         self.components = [
             "T9_FactTable",
@@ -51,7 +51,7 @@ class Gate5QualityEnhancement(GateBase):
             "T13_InsightAuditor",
             "T14_ROICChecker",
         ]
-    
+
     def execute(self, context: dict[str, Any]) -> GateResult:
         """执行Gate 5（真实：enhance_report_quality，参数从 context 强传）"""
         errors = []
@@ -101,7 +101,7 @@ class Gate5QualityEnhancement(GateBase):
             errors=errors,
             warnings=warnings,
             execution_time=0.0,
-            timestamp=datetime.now().isoformat(),  # noqa: DTZ005
+            timestamp=datetime.now().isoformat(),
         )
 
     def check_criteria(self, context: dict[str, Any]) -> bool:
@@ -153,7 +153,7 @@ class Gate5QualityEnhancement(GateBase):
             dcf_value = context.get("dcf_params")
             if current_price > 0 and dcf_value:
                 pass  # 范围检查交由 _cross_validate
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             errors.append(f"估值计算失败: {e}")
 
         return {
@@ -212,7 +212,7 @@ class Gate5QualityEnhancement(GateBase):
                 "chapters_enhanced": getattr(quality_result, "chapters_enhanced", 0),
                 "warnings": list(getattr(quality_result, "warnings", []))[:5],
             }
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             errors.append(f"质量增强失败: {e}")
 
         return {
@@ -239,7 +239,7 @@ class Gate5QualityEnhancement(GateBase):
                 from ..data_anchor import get_data_anchor
                 anchor = get_data_anchor(wind_data)
                 context["data_anchor"] = anchor
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"Gate5 锚点准备失败（非阻断）: {e}")
 
         return {

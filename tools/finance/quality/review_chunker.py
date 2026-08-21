@@ -11,7 +11,6 @@ Gate8 红队、review_report_text、fix_report 统一复用。
 
 import logging
 import re
-from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +19,7 @@ def split_report(
     report: str,
     max_chars: int = 12000,
     by: str = "chapter",
-) -> List[Tuple[int, str]]:
+) -> list[tuple[int, str]]:
     """把报告分成可送审的片段列表
 
     Args:
@@ -37,7 +36,7 @@ def split_report(
     # 1. 按 "# 第N章" 切分（语义完整边界）
     parts = re.split(r"(?m)^#\s*第(\d+)章\s*", report)
     # parts: [pre, num, body, num, body, ...]
-    chunks: List[Tuple[int, str]] = []
+    chunks: list[tuple[int, str]] = []
     if len(parts) > 1:
         i = 1
         while i + 1 < len(parts):
@@ -49,7 +48,7 @@ def split_report(
         chunks = [(0, report)]
 
     # 2. 单片段超限 → 按小节再切
-    result: List[Tuple[int, str]] = []
+    result: list[tuple[int, str]] = []
     for num, body in chunks:
         if len(body) <= max_chars:
             result.append((num, body))
@@ -69,7 +68,7 @@ def split_report(
             result.append((cur_num, cur_text))
 
     # 3. 仍有超限（如单个小节 > max_chars）→ 按句子边界切
-    final: List[Tuple[int, str]] = []
+    final: list[tuple[int, str]] = []
     for num, body in result:
         if len(body) <= max_chars:
             final.append((num, body))
@@ -93,7 +92,7 @@ def split_report(
     return final
 
 
-def merge_batch_issues(batch_results: Dict[int, Dict]) -> Dict:
+def merge_batch_issues(batch_results: dict[int, dict]) -> dict:
     """聚合多批审查结果（P1：单批失败不丢整份）
 
     Args:

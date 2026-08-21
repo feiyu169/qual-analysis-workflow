@@ -75,7 +75,7 @@ def print_mapping():
     print("=" * 80)
     print("Step/Gate映射表")
     print("=" * 80)
-    
+
     for gate_num in range(9):
         steps = get_steps_for_gate(gate_num)
         gate_name = get_gate_name(gate_num)

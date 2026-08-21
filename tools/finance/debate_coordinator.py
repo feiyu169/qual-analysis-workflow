@@ -10,8 +10,8 @@ debate_coordinator.py — Layer 2: 辩论机制模块
 
 import logging
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 class LLMTimeoutError(Exception):
     """LLM调用超时异常"""
-    pass
 
 
 def llm_caller_with_timeout(
@@ -40,33 +39,33 @@ def llm_caller_with_timeout(
         prompt: 提示词
         timeout_seconds: 超时秒数（默认 240——推理模型思考+生成；原 60s 过严，见
             docs/qual-debate-timeout-redesign.md；需 < harness_llm 网络超时 300s）
-    
+
     Returns:
         LLM响应内容
-    
+
     Raises:
         LLMTimeoutError: 调用超时
     """
     result = [None]
     exception = [None]
-    
+
     def target():
         try:
             result[0] = llm_caller(chapter_name, prompt)
         except Exception as e:
             exception[0] = e
-    
+
     thread = threading.Thread(target=target, daemon=True)
     thread.start()
     thread.join(timeout=timeout_seconds)
-    
+
     if thread.is_alive():
         # 超时，线程仍在运行（daemon线程会随主进程退出）
         raise LLMTimeoutError(f"LLM调用超时({timeout_seconds}s): {chapter_name}")
-    
+
     if exception[0]:
         raise exception[0]
-    
+
     return result[0]
 
 
@@ -197,7 +196,7 @@ def run_debate(
     chapter_content: str,
     base_valuation_summary: str,
     llm_caller: Callable[[str, str], str],
-    contract: Optional[dict] = None,
+    contract: dict | None = None,
     llm_timeout_seconds: int = 60,  # 新增：超时参数
 ) -> DebateResult:
     """
@@ -274,7 +273,7 @@ def run_debate(
     if result.stages["bear"] != "ok":
         result.partial = True
         result.degraded = True
-        logger.warning(f"[Debate] Bear 缺失，使用 Bull 论点（部分辩论）")
+        logger.warning("[Debate] Bear 缺失，使用 Bull 论点（部分辩论）")
         result.pm_synthesis = result.bull_argument  # 兼容：用 Bull 草稿
         return result
 
@@ -352,7 +351,7 @@ def _build_bull_prompt(
     chapter_title: str,
     chapter_content: str,
     valuation_summary: str,
-    contract: Optional[dict],
+    contract: dict | None,
 ) -> str:
     """构建看多分析师prompt"""
     must_answer = ""
@@ -380,7 +379,7 @@ def _build_bear_prompt(
     chapter_title: str,
     bull_argument: str,
     valuation_summary: str,
-    contract: Optional[dict],
+    contract: dict | None,
 ) -> str:
     """构建看空分析师prompt"""
     return f"""{BEAR_SYSTEM}
@@ -403,7 +402,7 @@ def _build_pm_prompt(
     bull_argument: str,
     bear_argument: str,
     valuation_summary: str,
-    contract: Optional[dict],
+    contract: dict | None,
 ) -> str:
     """构建PM综合判断prompt"""
     must_answer = ""

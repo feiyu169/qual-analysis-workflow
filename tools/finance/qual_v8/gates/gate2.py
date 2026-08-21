@@ -26,7 +26,7 @@ class DCFParams:
 
 class Gate2DataCollection(GateBase):
     """Gate 2: 数据收集 + 参数提取"""
-    
+
     def __init__(self):
         spec = GateSpec(
             gate_num=2,
@@ -44,7 +44,7 @@ class Gate2DataCollection(GateBase):
             ],
         )
         super().__init__(spec)
-        
+
         # 参数范围配置（FCF 允许为负：亏损/投资期公司 FCF<0 是真实状态，只要求非零）
         self.param_ranges = {
             "fcf": {"min": float("-inf"), "max": float("inf"), "nonzero": True},
@@ -53,7 +53,7 @@ class Gate2DataCollection(GateBase):
             "revenue_growth": {"min": -0.30, "max": 1.00},
             "tax_rate": {"min": 0.10, "max": 0.35},
         }
-    
+
     def execute(self, context: dict[str, Any]) -> GateResult:
         """执行Gate 2（真实：Wind→canonical DCF 参数 + 初始化数据锚点）"""
         errors = []
@@ -101,7 +101,7 @@ class Gate2DataCollection(GateBase):
             errors=errors,
             warnings=warnings,
             execution_time=0.0,
-            timestamp=datetime.now().isoformat(),  # noqa: DTZ005
+            timestamp=datetime.now().isoformat(),
         )
 
     def check_criteria(self, context: dict[str, Any]) -> bool:
@@ -138,7 +138,7 @@ class Gate2DataCollection(GateBase):
                 calculation_formula="FCF = OCF - Capex; WACC = CAPM (finance.workflow.extract_dcf_params)",
                 data_source="Wind canonical",
             )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(f"Gate2 真实 DCF 提取失败: {e}，回退确定性计算")
             # 回退：确定性计算（canonical 键）
             income = wind_data.get("income", {})
@@ -200,7 +200,7 @@ class Gate2DataCollection(GateBase):
                 "latest_fy": anchor.get_latest_fiscal_year(),
                 "anchor": anchor,
             }
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(f"Gate2 DataAnchor 初始化失败: {e}")
             return {"count": 0, "anchor": None}
 

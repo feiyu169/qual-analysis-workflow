@@ -73,7 +73,7 @@ def with_fallback(
                     return out + (degrade_marker or "")
             except (LLMCallBudgetExceeded, WallClockDeadlineExceeded):
                 raise  # 白名单：逃生路径同样不吞终止性异常
-            except Exception:  # noqa: BLE001, S110
+            except Exception:
                 pass
             raise
         except Exception:
@@ -87,7 +87,7 @@ def with_fallback(
                         return direct(chapter_name, prompt)
                 except (LLMCallBudgetExceeded, WallClockDeadlineExceeded):
                     raise  # 白名单：逃生路径同样不吞终止性异常
-                except Exception:  # noqa: BLE001, S110
+                except Exception:
                     pass
             raise
 

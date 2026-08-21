@@ -11,9 +11,8 @@ Table Extractor - 财务表格提取器
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
-from .base import BaseProcessor, TableResult
+from .base import BaseProcessor
 
 logger = logging.getLogger(__name__)
 

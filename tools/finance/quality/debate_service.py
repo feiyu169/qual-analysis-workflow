@@ -72,7 +72,7 @@ class DebateService:
                 rows.append(f"| {k} | " + " | ".join(row.get(fy, "—") for fy in fys) + " |")
             return ("| 指标 | " + " | ".join(f"FY{fy}" for fy in fys) + " |\n|------|"
                     + "--------|" * len(fys) + "\n" + "\n".join(rows))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"辩论锚点构建失败: {e}")
             return ""
 
@@ -119,7 +119,7 @@ class DebateService:
                 if debate.stages.get("bull") == "ok":
                     break
                 logger.warning(f"辩论第{chapter_num}章第{attempt+1}次尝试 Bull 缺失，重试")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"辩论第{chapter_num}章第{attempt+1}次尝试失败: {e}")
                 debate = None
         if debate is None:

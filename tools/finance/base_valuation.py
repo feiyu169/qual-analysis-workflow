@@ -9,7 +9,6 @@ base_valuation.py — Layer 1.5: 基础估值模块
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -25,27 +24,27 @@ class BaseValuation:
     company_name: str
 
     # 估值倍数
-    pe_ttm: Optional[float] = None      # 滚动PE
-    pe_forward: Optional[float] = None   # 远期PE
-    pb: Optional[float] = None           # PB
-    ps_ttm: Optional[float] = None       # PS
+    pe_ttm: float | None = None      # 滚动PE
+    pe_forward: float | None = None   # 远期PE
+    pb: float | None = None           # PB
+    ps_ttm: float | None = None       # PS
 
     # 市值
-    market_cap: Optional[float] = None   # 总市值（亿港元）
-    market_cap_cny: Optional[float] = None  # 总市值（亿人民币）
+    market_cap: float | None = None   # 总市值（亿港元）
+    market_cap_cny: float | None = None  # 总市值（亿人民币）
 
     # 股价
-    price: Optional[float] = None        # 当前股价（港元）
-    shares: Optional[float] = None       # 总股本（亿股）
+    price: float | None = None        # 当前股价（港元）
+    shares: float | None = None       # 总股本（亿股）
 
     # 财务数据（用于计算）
-    net_profit: Optional[float] = None   # 净利润（亿人民币）
-    revenue: Optional[float] = None      # 营收（亿人民币）
-    book_value: Optional[float] = None   # 净资产（亿人民币）
+    net_profit: float | None = None   # 净利润（亿人民币）
+    revenue: float | None = None      # 营收（亿人民币）
+    book_value: float | None = None   # 净资产（亿人民币）
 
     # 历史对比
-    pe_history_avg: Optional[float] = None  # 历史PE中枢
-    pe_percentile: Optional[float] = None   # PE所处历史分位
+    pe_history_avg: float | None = None  # 历史PE中枢
+    pe_percentile: float | None = None   # PE所处历史分位
 
     # 数据来源
     source: str = "Wind MCP"
@@ -57,7 +56,7 @@ class BaseValuation:
         return self.pe_ttm is not None or self.pb is not None
 
     @property
-    def pe_discount(self) -> Optional[float]:
+    def pe_discount(self) -> float | None:
         """PE相对历史中枢的折价"""
         if self.pe_ttm and self.pe_history_avg:
             return (self.pe_history_avg - self.pe_ttm) / self.pe_history_avg
@@ -102,9 +101,9 @@ class BaseValuation:
 def compute_base_valuation(
     ticker: str,
     company_name: str,
-    wind_valuation: Optional[dict] = None,
-    wind_financials: Optional[dict] = None,
-    shares: Optional[float] = None,
+    wind_valuation: dict | None = None,
+    wind_financials: dict | None = None,
+    shares: float | None = None,
     exchange_rate: float = 0.92,  # HKD/CNY
 ) -> BaseValuation:
     """

@@ -13,20 +13,20 @@ ARCH_GEN = "v8"
 __version__ = "8.4.0"
 
 # 核心组件（供workflow.py使用）
-from .core.state_machine import StateMachine, GateState, WorkflowState
 from .core.audit_logger import AuditLogger
 from .core.circuit_breaker import CircuitBreaker, ErrorType, calculate_backoff
 from .core.error_classifier import ErrorClassifier
+from .core.state_machine import GateState, StateMachine, WorkflowState
 from .core.supervisor import FlowComplianceChecker
-
-# 工作流上下文（非侵入式挂载）
-from .workflow_context import WorkflowContext, QualConfig, get_workflow_context
 
 # 模式管理
 from .mode_manager import ModeManager, QualMode, get_initial_mode
 
 # Step/Gate映射
-from .step_gate_mapping import get_gate_for_step, get_steps_for_gate, get_gate_name
+from .step_gate_mapping import get_gate_for_step, get_gate_name, get_steps_for_gate
+
+# 工作流上下文（非侵入式挂载）
+from .workflow_context import QualConfig, WorkflowContext, get_workflow_context
 
 __all__ = [
     # 架构代次
@@ -41,17 +41,17 @@ __all__ = [
     "calculate_backoff",
     "ErrorClassifier",
     "FlowComplianceChecker",
-    
+
     # 工作流上下文
     "WorkflowContext",
     "QualConfig",
     "get_workflow_context",
-    
+
     # 模式管理
     "ModeManager",
     "QualMode",
     "get_initial_mode",
-    
+
     # Step/Gate映射
     "get_gate_for_step",
     "get_steps_for_gate",

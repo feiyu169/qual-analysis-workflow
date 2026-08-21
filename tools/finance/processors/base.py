@@ -10,7 +10,6 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,7 @@ class SectionResult:
     content: str
     start_pos: int = 0
     end_pos: int = 0
-    page_ref: Optional[str] = None
+    page_ref: str | None = None
 
 
 @dataclass
@@ -34,7 +33,7 @@ class TableResult:
     table_type: str  # income_statement, balance_sheet, cash_flow, segment, other
     data: list[dict] = field(default_factory=list)
     columns: list[str] = field(default_factory=list)
-    page_ref: Optional[str] = None
+    page_ref: str | None = None
     confidence: float = 0.0
 
 
@@ -74,7 +73,7 @@ class BaseProcessor(ABC):
         text: str,
         pattern: str,
         flags: int = re.IGNORECASE | re.MULTILINE,
-    ) -> Optional[re.Match]:
+    ) -> re.Match | None:
         """查找正则匹配
 
         Args:
@@ -93,7 +92,7 @@ class BaseProcessor(ABC):
         start_pattern: str,
         end_pattern: str,
         flags: int = re.IGNORECASE | re.MULTILINE,
-    ) -> Optional[str]:
+    ) -> str | None:
         """提取两个模式之间的文本
 
         Args:

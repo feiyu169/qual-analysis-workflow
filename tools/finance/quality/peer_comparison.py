@@ -103,13 +103,13 @@ def compute_peer_rankings(
     peers: list[PeerCompany],
 ) -> dict[str, dict]:
     """计算目标公司在同行中的排名
-    
+
     Returns:
         {指标名: {"排名": int, "总数": int, "分位数": float}}
     """
     all_companies = [target] + peers
     rankings = {}
-    
+
     # 需要排名的指标
     metrics = [
         ("revenue", "营收", "desc"),
@@ -118,15 +118,15 @@ def compute_peer_rankings(
         ("roe", "ROE", "desc"),
         ("pe", "PE", "asc"),  # PE越低越好
     ]
-    
+
     for field_name, display_name, order in metrics:
         values = [(c.name, getattr(c, field_name)) for c in all_companies if getattr(c, field_name) > 0]
-        
+
         if order == "desc":
             values.sort(key=lambda x: x[1], reverse=True)
         else:
             values.sort(key=lambda x: x[1])
-        
+
         # 找到目标公司排名
         for rank, (name, value) in enumerate(values, 1):
             if name == target.name:
@@ -137,7 +137,7 @@ def compute_peer_rankings(
                     "percentile": (len(values) - rank) / len(values) * 100,
                 }
                 break
-    
+
     return rankings
 
 
@@ -150,7 +150,7 @@ def format_peer_comparison(
     lines = []
     lines.append("## 同行对比矩阵")
     lines.append("")
-    
+
     # 排名摘要
     lines.append("### 关键指标排名")
     lines.append("")
@@ -158,14 +158,14 @@ def format_peer_comparison(
         emoji = "🥇" if info["rank"] == 1 else "🥈" if info["rank"] == 2 else "🥉" if info["rank"] == 3 else "📊"
         lines.append(f"- {emoji} {metric}: 第{info['rank']}/{info['total']} (分位数{info['percentile']:.0f}%)")
     lines.append("")
-    
+
     # 详细对比表
     all_companies = [target] + [p for p in peers if p.name != target.name]
     lines.append("### 详细对比")
     lines.append("")
     lines.append("| 公司 | 市场 | 营收(亿) | 增速 | 净利率 | ROE | PE | PB |")
     lines.append("|------|------|----------|------|--------|-----|-----|-----|")
-    
+
     for c in all_companies:
         marker = "⭐" if c.name == target.name else ""
         pe_str = f"{c.pe:.1f}x" if c.pe > 0 else "N/A"
@@ -174,6 +174,6 @@ def format_peer_comparison(
             f"{c.revenue_growth:.1f}% | {c.net_margin:.1f}% | {c.roe:.0f}% | "
             f"{pe_str} | {c.pb:.1f}x |"
         )
-    
+
     lines.append("")
     return "\n".join(lines)

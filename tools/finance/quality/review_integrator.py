@@ -26,12 +26,12 @@ class ReviewConfig:
     max_rounds: int = 5
     threshold: str = "P1"  # P0/P1/P2
     model: str = "deepseek-v4-pro"
-    
+
     # 自动修正配置
     auto_fix_p0: bool = True
     auto_fix_p1: bool = True
     auto_fix_p2: bool = True
-    
+
     # 输出配置
     save_review: bool = True
     save_fix_log: bool = True
@@ -88,15 +88,15 @@ class AnalysisWithReviewResult:
 
 class ReviewIntegrator:
     """审查集成器 (v2 - 修复自纠闭环)"""
-    
+
     def __init__(self, config: ReviewConfig | None = None):
         self.config = config or ReviewConfig()
         self._llm_caller: Callable | None = None
-    
+
     def set_llm_caller(self, llm_caller: Callable):
         """设置LLM调用器"""
         self._llm_caller = llm_caller
-    
+
     def review_report(
         self,
         report_path: str,
@@ -107,23 +107,23 @@ class ReviewIntegrator:
         调用buy_side_report_review skill审查报告
         """
         logger.info(f"开始审查报告: {report_path}")
-        
+
         # 创建审查输出目录
         review_dir = Path(output_dir) / self.config.review_subdir
         review_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # 构建审查prompt（包含Phase 5.5自纠闭环检查）
         prompt = self._build_review_prompt(report_path, wind_data)
-        
+
         # 调用LLM审查
         if self._llm_caller is None:
             raise ValueError("LLM调用器未设置，请先调用set_llm_caller()")
-        
+
         review_content = self._llm_caller("buy_side_report_review", prompt)
-        
+
         # 解析审查结果
         review_result = self._parse_review_result(review_content)
-        
+
         # 保存审查报告
         if self.config.save_review:
             report_name = Path(report_path).stem
@@ -132,7 +132,7 @@ class ReviewIntegrator:
                 f.write(review_content)
             review_result.review_path = str(review_path)
             logger.info(f"审查报告已保存: {review_path}")
-        
+
         return review_result
 
     def review_report_text(
@@ -171,7 +171,7 @@ class ReviewIntegrator:
                     f.write(review_content)
                 review_result.review_path = str(review_path)
                 logger.info(f"审查报告已保存: {review_path}")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"审查报告保存失败: {e}")
 
         logger.info(
@@ -263,10 +263,10 @@ class ReviewIntegrator:
         根据审查结果修正报告（关键修复：修正必须落地到正文）
         """
         logger.info(f"开始修正报告 (Round {round_number})")
-        
+
         # 确定需要修正的问题
         issues_to_fix = self._get_issues_to_fix(review_result)
-        
+
         if not issues_to_fix:
             logger.info("无需修正的问题")
             return FixResult(
@@ -276,9 +276,9 @@ class ReviewIntegrator:
                 round_number=round_number,
                 integrity_check_passed=True,
             )
-        
+
         # 读取原报告完整内容
-        with open(report_path, 'r', encoding='utf-8') as f:
+        with open(report_path, encoding='utf-8') as f:
             original_content = f.read()
 
         # 构建修正prompt（Patch 模式：只输出修改点，不整报告重写）
@@ -305,7 +305,7 @@ class ReviewIntegrator:
                     from .structural_check import structural_check
                     r = structural_check("report", content)
                     return r.issues if not r.passed else []
-                except Exception:  # noqa: BLE001
+                except Exception:
                     return []
 
             def _numeric(content: str) -> list:
@@ -322,7 +322,7 @@ class ReviewIntegrator:
                         ch_num = int(m.group(1))
                         errs.extend(anchor.validate_chapter(ch_num, content, fiscal_year=latest_fy))
                     return [f"数字锚点: {e}" for e in errs[:5]]
-                except Exception:  # noqa: BLE001
+                except Exception:
                     return []
 
             result = apply_patches(
@@ -365,7 +365,7 @@ class ReviewIntegrator:
             round_number=round_number,
             integrity_check_passed=integrity_check["passed"],
         )
-    
+
     def run_analysis_with_review(
         self,
         ticker: str,
@@ -381,10 +381,10 @@ class ReviewIntegrator:
         运行qual分析 + 自动审查修正循环
         """
         logger.info(f"开始带审查的分析: {ticker} {company_name}")
-        
+
         # 设置LLM调用器
         self.set_llm_caller(llm_caller)
-        
+
         # Step 1: 运行原始qual分析
         logger.info("Step 1: 运行qual分析")
         analysis_result = run_analysis_func(
@@ -396,7 +396,7 @@ class ReviewIntegrator:
             shares=shares,
             output_dir=output_dir,
         )
-        
+
         if not analysis_result.get("success"):
             return AnalysisWithReviewResult(
                 success=False,
@@ -407,9 +407,9 @@ class ReviewIntegrator:
                 quality_score=0.0,
                 error=analysis_result.get("error", "qual分析失败"),
             )
-        
+
         report_path = analysis_result.get("report_path", "")
-        
+
         if not self.config.enabled:
             logger.info("审查未启用，跳过审查")
             return AnalysisWithReviewResult(
@@ -420,21 +420,21 @@ class ReviewIntegrator:
                 final_issues={"fatal": 0, "important": 0, "suggestion": 0},
                 quality_score=100.0,
             )
-        
+
         # Step 2-6: 审查-修正循环
         fix_log = []
         current_report_path = report_path
-        
+
         for round_num in range(1, self.config.max_rounds + 1):
             logger.info(f"Step {round_num + 1}: 审查 Round {round_num}")
-            
+
             # 审查
             review_result = self.review_report(
                 report_path=current_report_path,
                 output_dir=output_dir,
                 wind_data=wind_data,
             )
-            
+
             # 检查是否通过
             if self._is_review_passed(review_result):
                 logger.info(f"Round {round_num} 审查通过")
@@ -444,7 +444,7 @@ class ReviewIntegrator:
                     "fixes": [],
                 })
                 break
-            
+
             # 修正
             logger.info(f"Round {round_num} 需要修正")
             fix_result = self.fix_report(
@@ -454,17 +454,17 @@ class ReviewIntegrator:
                 round_number=round_num,
                 wind_data=wind_data,
             )
-            
+
             fix_log.append({
                 "round": round_num,
                 "action": "修正",
                 "fixes": fix_result.fixes_applied,
                 "integrity_check": fix_result.integrity_check_passed,
             })
-            
+
             # 更新当前报告路径
             current_report_path = fix_result.fixed_path
-        
+
         # 最终审查
         logger.info("最终审查")
         final_review = self.review_report(
@@ -472,10 +472,10 @@ class ReviewIntegrator:
             output_dir=output_dir,
             wind_data=wind_data,
         )
-        
+
         # 计算质量评分
         quality_score = self._calculate_quality_score(final_review)
-        
+
         return AnalysisWithReviewResult(
             success=True,
             report_path=current_report_path,
@@ -489,7 +489,7 @@ class ReviewIntegrator:
             quality_score=quality_score,
             fix_log=fix_log,
         )
-    
+
     def _build_wind_anchor_table(self, wind_data: dict | None) -> str:
         """从 wind_data 动态生成 Wind 验证数据表（修复：原硬编码美团数据，审查锚点失真）
 
@@ -530,19 +530,19 @@ class ReviewIntegrator:
             lines.append("")
             lines.append("> 铁律：报告中任何财务数字与上表同财年数值偏差>1% 即为数据错误，必须修正。")
             return "\n".join(lines)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"Wind 锚点表构建失败: {e}")
             return "（Wind 验证数据构建失败）"
 
     def _build_review_prompt(self, report_path: str, wind_data: dict | None) -> str:
         """构建审查prompt（包含Phase 5.5自纠闭环检查）"""
         # 读取报告内容（完整）
-        with open(report_path, 'r', encoding='utf-8') as f:
+        with open(report_path, encoding='utf-8') as f:
             report_content = f.read()
-        
+
         # 动态构建 Wind 验证数据表（修复：不再硬编码美团数据）
         wind_str = self._build_wind_anchor_table(wind_data)
-        
+
         prompt = f"""你是资深买方（Long-only，价值+成长复合策略）投资分析师，现在承担研究质量控制（Research QC / 红队）角色。
 
 ## 审查任务
@@ -610,11 +610,11 @@ class ReviewIntegrator:
 7. 可落地改进清单（P0/P1/P2）
 """
         return prompt
-    
+
     def _build_fix_prompt(self, original_content: str, issues: list[ReviewIssue],
                           wind_data: dict | None = None) -> str:
         """构建修正prompt（关键修复：强调必须输出完整报告并修正正文）"""
-        
+
         # 构建问题列表
         issues_str = ""
         for i, issue in enumerate(issues, 1):
@@ -626,7 +626,7 @@ class ReviewIntegrator:
 - 位置: {issue.location}
 - 修正建议: {issue.fix_suggestion}
 """
-        
+
         prompt = f"""你是资深买方投资分析师，负责修正买方研究报告。
 
 ## 修正任务
@@ -667,7 +667,7 @@ class ReviewIntegrator:
 3. **只输出 JSON，不要其他文字**
 """
         return prompt
-    
+
     def _verify_fix_integrity(
         self,
         original_content: str,
@@ -676,19 +676,19 @@ class ReviewIntegrator:
     ) -> dict:
         """验证修正完整性"""
         result = {"passed": True, "reason": "", "details": []}
-        
+
         # 检查1: 修正后报告长度不能太短
         if len(fixed_content) < len(original_content) * 0.5:
             result["passed"] = False
             result["reason"] = f"修正后报告长度({len(fixed_content)})显著小于原报告({len(original_content)})"
             return result
-        
+
         # 检查2: 修正后报告不应包含"修正说明"附录
         if "修正说明" in fixed_content and "以下问题已在审查中识别" in fixed_content:
             result["passed"] = False
             result["reason"] = "修正后报告仍包含'修正说明'附录，修正未落地到正文"
             return result
-        
+
         # 检查3: 关键章节不应丢失
         required_chapters = ["第0章", "第1章", "第2章", "第3章", "第4章", "第5章", "第6章", "第7章", "第8章", "第9章", "第10章"]
         for chapter in required_chapters:
@@ -696,13 +696,13 @@ class ReviewIntegrator:
                 result["passed"] = False
                 result["reason"] = f"修正后报告缺少{chapter}"
                 return result
-        
+
         return result
-    
+
     def _force_fix(self, original_content: str, issues: list[ReviewIssue]) -> str:
         """强制修正（当LLM修正失败时使用）"""
         logger.info("使用强制修正模式")
-        
+
         # 在原报告开头添加修正声明
         fix_declaration = """
 ## ⚠️ 修正声明
@@ -714,16 +714,16 @@ class ReviewIntegrator:
             fix_declaration += f"{i}. **{issue.level}**: {issue.description}\n"
             if issue.fix_suggestion:
                 fix_declaration += f"   - 修正: {issue.fix_suggestion}\n"
-        
+
         fix_declaration += "\n---\n\n"
-        
+
         # 删除原报告中的"修正说明"附录（如有）
         content = original_content
         if "## 修正说明" in content:
             content = content[:content.index("## 修正说明")]
-        
+
         return fix_declaration + content
-    
+
     def _parse_review_result(self, review_content: str) -> ReviewResult:
         """解析审查结果（兼容多种格式：【致命】/ F-1 / 表格 / # 标题）"""
         result = ReviewResult(review_path="", raw_content=review_content)
@@ -823,53 +823,53 @@ class ReviewIntegrator:
             ))
 
         return result
-    
+
     def _get_issues_to_fix(self, review_result: ReviewResult) -> list[ReviewIssue]:
         """根据阈值获取需要修正的问题"""
         issues = []
-        
+
         if self.config.auto_fix_p0:
             issues.extend(review_result.fatal_issues)
-        
+
         if self.config.auto_fix_p1:
             issues.extend(review_result.important_issues)
-        
+
         if self.config.auto_fix_p2:
             issues.extend(review_result.suggestion_issues)
-        
+
         # 添加自纠闭环问题
         issues.extend(review_result.self_check_issues)
-        
+
         return issues
-    
+
     def _is_review_passed(self, review_result: ReviewResult) -> bool:
         """检查审查是否通过"""
         threshold = self.config.threshold
-        
+
         # 自纠闭环问题视为致命
         has_self_check_issues = len(review_result.self_check_issues) > 0
-        
+
         if threshold == "P0":
             return len(review_result.fatal_issues) == 0 and not has_self_check_issues
         elif threshold == "P1":
-            return (len(review_result.fatal_issues) == 0 and 
+            return (len(review_result.fatal_issues) == 0 and
                     len(review_result.important_issues) == 0 and
                     not has_self_check_issues)
         elif threshold == "P2":
-            return (len(review_result.fatal_issues) == 0 and 
+            return (len(review_result.fatal_issues) == 0 and
                     len(review_result.important_issues) == 0 and
                     len(review_result.suggestion_issues) == 0 and
                     not has_self_check_issues)
         else:
             return False
-    
+
     def _calculate_quality_score(self, review_result: ReviewResult) -> float:
         """计算质量评分"""
         score = 100.0
-        
+
         score -= len(review_result.fatal_issues) * 20
         score -= len(review_result.important_issues) * 5
         score -= len(review_result.suggestion_issues) * 1
         score -= len(review_result.self_check_issues) * 20  # 自纠闭环问题视为致命
-        
+
         return max(0.0, min(100.0, score))

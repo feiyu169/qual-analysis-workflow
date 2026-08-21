@@ -8,14 +8,14 @@ Phase 5: 记忆集成
 - memory_manager: 三层记忆管理器 (Gate 5.4)
 """
 
-from .gbrain_writer import write_to_gbrain
 from .flomo_writer import write_to_flomo
-from .nocturne_writer import write_to_nocturne
+from .gbrain_writer import write_to_gbrain
 from .memory_manager import MemoryManager
+from .nocturne_writer import write_to_nocturne
 
 __all__ = [
-    "write_to_gbrain",
-    "write_to_flomo",
-    "write_to_nocturne",
     "MemoryManager",
+    "write_to_flomo",
+    "write_to_gbrain",
+    "write_to_nocturne",
 ]

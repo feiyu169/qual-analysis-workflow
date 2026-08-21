@@ -12,10 +12,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Literal, NamedTuple, Optional
+from typing import Any, Literal, NamedTuple
 
 from pydantic import BaseModel, Field
-
 
 # ─────────────────────────────────────────────────
 # 枚举类型
@@ -106,8 +105,8 @@ class CausalRelation:
     cause: str
     effect: str
     strength: CausalStrength
-    granger_pvalue: Optional[float] = None
-    sensitivity_robust: Optional[float] = None
+    granger_pvalue: float | None = None
+    sensitivity_robust: float | None = None
 
 
 @dataclass
@@ -116,8 +115,8 @@ class CausalGraph:
     relations: list[CausalRelation]
     confidence: float
     assumptions: list[str] = field(default_factory=list)
-    granger_pvalue: Optional[float] = None
-    sensitivity_robust_ratio: Optional[float] = None
+    granger_pvalue: float | None = None
+    sensitivity_robust_ratio: float | None = None
 
 
 @dataclass
@@ -137,7 +136,7 @@ class FalsificationIndicator:
     description: str
     measurement_method: str
     threshold: float
-    current_value: Optional[float] = None
+    current_value: float | None = None
     is_triggered: bool = False
 
 

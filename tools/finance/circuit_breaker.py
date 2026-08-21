@@ -11,11 +11,11 @@ V5.0 特性:
 - 双重检查锁的全局注册表
 """
 
-import threading
 import logging
-from enum import Enum
-from typing import Dict, Any, Optional
+import threading
 from datetime import datetime, timedelta
+from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,7 @@ class CircuitBreaker:
         self._lock = threading.Lock()
         self._state = CircuitState.CLOSED
         self._failure_count = 0
-        self._last_failure_time: Optional[datetime] = None
+        self._last_failure_time: datetime | None = None
         self._half_open_calls = 0
 
     @property
@@ -110,7 +110,7 @@ class CircuitBreaker:
                     f"(failures={self._failure_count})"
                 )
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """获取状态"""
         with self._lock:
             return {
@@ -137,7 +137,7 @@ class CircuitBreaker:
 
 # 全局熔断器注册表（线程安全）
 _breaker_lock = threading.Lock()
-_circuit_breakers: Dict[str, CircuitBreaker] = {}
+_circuit_breakers: dict[str, CircuitBreaker] = {}
 
 
 def get_circuit_breaker(name: str, **kwargs) -> CircuitBreaker:
@@ -165,7 +165,7 @@ def with_circuit_breaker(name: str):
                 result = func(*args, **kwargs)
                 cb.record_success()
                 return result
-            except Exception as e:
+            except Exception:
                 cb.record_failure()
                 raise
         return wrapper

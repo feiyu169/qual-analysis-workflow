@@ -10,17 +10,17 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 from .exceptions import BudgetExceededError, CircuitOpenError
+
 
 @dataclass
 @dataclass
 class BudgetController:
     """Budget controller - soft limit
-    
+
     Tracks resource consumption and determines if execution can continue
-    
+
     Attributes:
         total_time: Total time budget (seconds)
         total_llm_calls: Total LLM call budget
@@ -39,33 +39,33 @@ class BudgetController:
     tokens_used: int = 0
     min_time_threshold: float = 30.0  # Minimum time threshold (seconds)
     min_tokens_threshold: int = 1000  # Minimum tokens threshold
-    
+
     def remaining_time(self) -> float:
         """Remaining time"""
         return max(0, self.total_time - self.elapsed)
-    
+
     def remaining_calls(self) -> int:
         """Remaining LLM calls"""
         return max(0, self.total_llm_calls - self.llm_calls_used)
-    
+
     def remaining_tokens(self) -> int:
         """Remaining tokens"""
         return max(0, self.total_tokens - self.tokens_used)
-    
+
     def can_proceed(self) -> bool:
         """Check if can continue"""
         return (self.remaining_time() > self.min_time_threshold
                 and self.remaining_calls() > 0
                 and self.remaining_tokens() > self.min_tokens_threshold)
-    
+
     def consume(self, time_delta: float, calls: int = 0, tokens: int = 0) -> bool:
         """消耗预算
-        
+
         Args:
             time_delta: 消耗的时间（秒）
             calls: 消耗的LLM调用次数
             tokens: 消耗的token数
-            
+
         Returns:
             bool: 是否消耗成功
         """
@@ -75,10 +75,10 @@ class BudgetController:
         self.llm_calls_used += calls
         self.tokens_used += tokens
         return True
-    
+
     def consume_or_raise(self, time_delta: float, calls: int = 0, tokens: int = 0) -> None:
         """消耗预算，不足时抛出异常
-        
+
         Raises:
             BudgetExceededError: 预算耗尽
         """
@@ -91,7 +91,7 @@ class BudgetController:
                     "remaining_tokens": self.remaining_tokens(),
                 }
             )
-    
+
     def get_status(self) -> dict:
         """获取预算状态"""
         return {
@@ -110,20 +110,20 @@ class BudgetController:
 
 class CircuitBreaker:
     """Circuit breaker - hard block, system protection
-    
+
     When consecutive failures reach threshold, triggers circuit breaker to block subsequent calls
-    
+
     States:
         CLOSED: Normal state, allows calls
         OPEN: Circuit broken, blocks calls
         HALF_OPEN: Half-open state, allows probe calls
-    
+
     State machine: CLOSED -> OPEN -> HALF_OPEN -> CLOSED
     """
-    
+
     def __init__(
-        self, 
-        failure_threshold: int = 3, 
+        self,
+        failure_threshold: int = 3,
         recovery_timeout: float = 60.0,
         half_open_max_probes: int = 3  # HALF_OPEN max probe count
     ):
@@ -134,7 +134,7 @@ class CircuitBreaker:
         self.last_failure_time = 0.0
         self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
         self.half_open_probe_count = 0  # HALF_OPEN probe count
-    
+
     def record_failure(self) -> None:
         """Record failure"""
         self.failure_count += 1
@@ -145,13 +145,13 @@ class CircuitBreaker:
                 self.state = "OPEN"  # Probe failed, back to OPEN
         elif self.failure_count >= self.failure_threshold:
             self.state = "OPEN"
-    
+
     def record_success(self) -> None:
         """Record success"""
         self.failure_count = 0
         self.half_open_probe_count = 0
         self.state = "CLOSED"
-    
+
     def is_open(self) -> bool:
         """Check if circuit is open"""
         if self.state == "OPEN":
@@ -164,10 +164,10 @@ class CircuitBreaker:
             # HALF_OPEN state allows probing
             return False
         return False
-    
+
     def check_or_raise(self) -> None:
         """检查熔断状态，熔断时抛出异常
-        
+
         Raises:
             CircuitOpenError: 熔断器已触发
         """
@@ -176,7 +176,7 @@ class CircuitBreaker:
                 message="熔断器已触发",
                 failure_count=self.failure_count
             )
-    
+
     def get_status(self) -> dict:
         """Get circuit breaker status"""
         return {
@@ -194,35 +194,35 @@ class CircuitBreaker:
 @dataclass
 class ReasoningBudget:
     """推理预算 - 组合BudgetController和CircuitBreaker
-    
+
     提供统一的预算管理接口
     """
     budget: BudgetController = field(default_factory=BudgetController)
     circuit_breaker: CircuitBreaker = field(default_factory=CircuitBreaker)
-    
+
     def can_proceed(self) -> bool:
         """检查是否可以继续"""
         return self.budget.can_proceed() and not self.circuit_breaker.is_open()
-    
+
     def consume(self, time_delta: float, calls: int = 0, tokens: int = 0) -> bool:
         """消耗预算"""
         if not self.can_proceed():
             return False
         return self.budget.consume(time_delta, calls, tokens)
-    
+
     def consume_or_raise(self, time_delta: float, calls: int = 0, tokens: int = 0) -> None:
         """消耗预算，不足时抛出异常"""
         self.circuit_breaker.check_or_raise()
         self.budget.consume_or_raise(time_delta, calls, tokens)
-    
+
     def record_failure(self) -> None:
         """记录失败"""
         self.circuit_breaker.record_failure()
-    
+
     def record_success(self) -> None:
         """记录成功"""
         self.circuit_breaker.record_success()
-    
+
     def get_status(self) -> dict:
         """获取预算状态"""
         return {

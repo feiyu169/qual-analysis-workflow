@@ -46,7 +46,7 @@ class DepthReviewResult:
 
 class DepthReviewer:
     """分析深度审查器"""
-    
+
     def __init__(self):
         # 分析深度评估维度
         self.depth_dimensions = {
@@ -71,7 +71,7 @@ class DepthReviewer:
                 "weight": 0.1,
             },
         }
-        
+
         # LLM审查prompt模板
         self.review_prompt_template = """
 请评估以下章节的分析深度：
@@ -97,7 +97,7 @@ class DepthReviewer:
 总分: [分数]
 问题: [具体问题描述]
 """
-    
+
     def check(
         self,
         chapters: dict[int, str],
@@ -106,12 +106,12 @@ class DepthReviewer:
     ) -> DepthReviewResult:
         """
         执行分析深度审查
-        
+
         Args:
             chapters: 各章节内容 {chapter_num: content}
             llm_caller: LLM调用函数（可选）
             wind_data: Wind 数据（用于构建锚点表，注入 prompt 供 LLM 对照）
-        
+
         Returns:
             DepthReviewResult
         """
@@ -134,28 +134,28 @@ class DepthReviewer:
                         rows.append(f"| {k} | " + " | ".join(row.get(fy, "—") for fy in fys) + " |")
                     wind_anchor = "| 指标 | " + " | ".join(f"FY{fy}" for fy in fys) + " |\n|------|" + \
                         "--------|" * len(fys) + "\n" + "\n".join(rows)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"深度审查锚点构建失败: {e}")
 
         for ch_num, content in chapters.items():
             # 1. 使用关键词进行快速评估
             keyword_score = self._evaluate_by_keywords(content)
-            
+
             # 2. 使用LLM进行深度评估（如果可用）
             llm_score = None
             llm_issues = []
             if llm_caller:
                 llm_score, llm_issues = self._evaluate_by_llm(content, ch_num, llm_caller, wind_anchor)
-            
+
             # 3. 综合评分
             if llm_score is not None:
                 # LLM评分权重更高
                 final_score = int(keyword_score * 0.3 + llm_score * 0.7)
             else:
                 final_score = keyword_score
-            
+
             chapter_scores[ch_num] = final_score
-            
+
             # 4. 检查是否低于阈值
             if final_score < 60:
                 severity = "fatal" if final_score < 40 else "important"
@@ -166,49 +166,49 @@ class DepthReviewer:
                     chapter=ch_num,
                     score=final_score,
                 ))
-            
+
             # 5. 添加LLM发现的具体问题
             issues.extend(llm_issues)
-        
+
         # 计算总体评分
         if chapter_scores:
             overall_score = sum(chapter_scores.values()) / len(chapter_scores)
         else:
             overall_score = 100.0
-        
+
         # 检查是否有致命问题
         fatal_count = sum(1 for i in issues if i.severity == "fatal")
         important_count = sum(1 for i in issues if i.severity == "important")
-        
+
         score = overall_score
         score -= fatal_count * 10
         score -= important_count * 5
         score = max(0.0, min(100.0, score))
-        
+
         passed = fatal_count == 0 and score >= 60.0
-        
+
         if not passed:
             logger.warning(f"分析深度审查不通过: score={score:.0f}, issues={len(issues)}")
-        
+
         return DepthReviewResult(
             passed=passed,
             issues=issues,
             score=score,
             chapter_scores=chapter_scores,
         )
-    
+
     def _evaluate_by_keywords(self, content: str) -> int:
         """使用关键词进行快速评估"""
         score = 0
         total_weight = 0
-        
+
         for dimension, config in self.depth_dimensions.items():  # noqa: PERF102
             keywords = config["keywords"]
             weight = config["weight"]
-            
+
             # 统计关键词出现次数
             keyword_count = sum(1 for kw in keywords if kw in content)
-            
+
             # 计算该维度得分（0-100）
             if keyword_count >= 3:
                 dimension_score = 100
@@ -218,15 +218,15 @@ class DepthReviewer:
                 dimension_score = 40
             else:
                 dimension_score = 0
-            
+
             score += dimension_score * weight
             total_weight += weight
-        
+
         # 归一化到0-100
         if total_weight > 0:
             return int(score / total_weight)
         return 0
-    
+
     def _evaluate_by_llm(
         self,
         content: str,
@@ -264,10 +264,10 @@ class DepthReviewer:
 
         except (DeterministicLLMFailure, LLMCallBudgetExceeded, WallClockDeadlineExceeded):
             raise  # v3.1 P0-A-3 白名单：预算/墙钟/确定性失败不降级（fail-closed）
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"LLM深度审查失败: {e}")
             return None, []
-    
+
     def _parse_llm_score(self, response: str) -> int:
         """解析LLM返回的评分"""
         # 尝试提取总分
@@ -275,7 +275,7 @@ class DepthReviewer:
         match = re.search(total_pattern, response)
         if match:
             return int(match.group(1))
-        
+
         # 尝试提取各个分数并计算平均
         scores = []
         for dimension in self.depth_dimensions.keys():  # noqa: SIM118
@@ -283,23 +283,23 @@ class DepthReviewer:
             match = re.search(pattern, response)
             if match:
                 scores.append(int(match.group(1)))
-        
+
         if scores:
             return int(sum(scores) / len(scores))
-        
+
         # 默认返回中等分数
         return 50
-    
+
     def _parse_llm_issues(self, response: str, ch_num: int) -> list[DepthIssue]:
         """解析LLM返回的问题"""
         issues = []
-        
+
         # 提取问题描述
         problem_pattern = r"问题[：:]\s*(.+?)(?:\n|$)"
         match = re.search(problem_pattern, response)
         if match:
             problem_text = match.group(1).strip()
-            
+
             # 根据问题内容判断类型
             if "定量" in problem_text or "数据" in problem_text:
                 issue_type = "missing_quantitative"
@@ -309,7 +309,7 @@ class DepthReviewer:
                 issue_type = "missing_comparison"
             else:
                 issue_type = "shallow_analysis"
-            
+
             issues.append(DepthIssue(
                 issue_type=issue_type,
                 severity="suggestion",
@@ -317,7 +317,7 @@ class DepthReviewer:
                 chapter=ch_num,
                 score=0,
             ))
-        
+
         return issues
 
 
@@ -328,12 +328,12 @@ def check_depth(
 ) -> DepthReviewResult:
     """
     分析深度审查（入口函数）
-    
+
     Args:
         chapters: 各章节内容 {chapter_num: content}
         llm_caller: LLM调用函数（可选）
         wind_data: Wind 数据（注入锚点表）
-    
+
     Returns:
         DepthReviewResult
     """

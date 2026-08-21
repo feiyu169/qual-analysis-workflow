@@ -10,7 +10,6 @@ US 10-K Sections - 美股 10-K 年报章节映射
 
 import logging
 import re
-from typing import Optional
 
 from .base import BaseProcessor
 

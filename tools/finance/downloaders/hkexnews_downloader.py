@@ -8,14 +8,13 @@ HKEXNews Downloader - 香港交易所披露易下载器
 import json
 import logging
 from pathlib import Path
-from typing import Optional
-from urllib.request import Request, urlopen
-from urllib.error import URLError, HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
-from .base import BaseDownloader, FilingInfo
-from ..rate_limiter import HKEX_RATE_LIMITER
 from ..exceptions import DataCollectionError
+from ..rate_limiter import HKEX_RATE_LIMITER
+from .base import BaseDownloader, FilingInfo
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +48,7 @@ class HKEXNewsDownloader(BaseDownloader):
     - 支持年报/半年报/季报
     """
 
-    def __init__(self, cache_base_dir: Optional[Path] = None):
+    def __init__(self, cache_base_dir: Path | None = None):
         super().__init__(cache_base_dir)
         self._stock_mapping_cache: dict[str, str] = {}  # stock_code -> stock_id
 
@@ -142,7 +141,7 @@ class HKEXNewsDownloader(BaseDownloader):
     def list_filings(
         self,
         ticker: str,
-        form_types: Optional[list[str]] = None,
+        form_types: list[str] | None = None,
         limit: int = 10,
     ) -> list[FilingInfo]:
         """列出披露易上可用的港股财报
@@ -311,7 +310,7 @@ class HKEXNewsDownloader(BaseDownloader):
             if len(data) < 1024:
                 raise DataCollectionError(f"PDF 文件过小: {len(data)} bytes")
             if not data.startswith(b"%PDF-"):
-                raise DataCollectionError(f"不是有效的 PDF 文件")
+                raise DataCollectionError("不是有效的 PDF 文件")
 
             # 保存文件
             save_path.parent.mkdir(parents=True, exist_ok=True)

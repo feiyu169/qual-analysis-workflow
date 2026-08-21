@@ -8,10 +8,9 @@
 4. 语义一致性验证
 """
 
-import re
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -20,13 +19,13 @@ logger = logging.getLogger(__name__)
 class ValidationResult:
     """验证结果"""
     passed: bool
-    errors: List[str] = field(default_factory=list)
-    warnings: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 class ContentValidator:
     """内容验证器"""
-    
+
     # 无效内容特征
     INVALID_PATTERNS = [
         "[Placeholder]",
@@ -41,13 +40,13 @@ class ContentValidator:
         "待补充",
         "待完善",
     ]
-    
+
     # 最小内容长度
     MIN_CONTENT_LENGTH = 100
-    
+
     # 必需章节标记
     REQUIRED_SECTIONS = ["## ", "### "]
-    
+
     # 关键数字模式（用于语义验证）
     KEY_NUMBER_PATTERNS = [
         (r'(-?\d+\.?\d*)\s*亿元', '金额'),
@@ -56,7 +55,7 @@ class ContentValidator:
         (r'PB\s*(\d+\.?\d*)x', 'PB倍数'),
         (r'PS\s*(\d+\.?\d*)x', 'PS倍数'),
     ]
-    
+
     # 语义一致性规则
     SEMANTIC_RULES = [
         {
@@ -78,44 +77,44 @@ class ContentValidator:
             "error": "净利润为正但描述为亏损",
         },
     ]
-    
+
     @classmethod
     def validate(cls, content: str, chapter_id: str = "unknown") -> ValidationResult:
         """验证内容"""
         errors = []
         warnings = []
-        
+
         if not content:
             return ValidationResult(passed=False, errors=["内容为空"])
-        
+
         # 1. 模式匹配验证
         for pattern in cls.INVALID_PATTERNS:
             if pattern in content:
                 errors.append(f"包含无效模式: {pattern}")
-        
+
         # 2. 长度验证
         if len(content) < cls.MIN_CONTENT_LENGTH:
             errors.append(f"内容过短: {len(content)}字符 (最小{cls.MIN_CONTENT_LENGTH})")
-        
+
         # 3. 章节标记验证
         if not any(s in content for s in cls.REQUIRED_SECTIONS):
             warnings.append("缺少章节标记 (## 或 ###)")
-        
+
         # 4. 语义一致性验证
         semantic_errors = cls._validate_semantic_consistency(content)
         errors.extend(semantic_errors)
-        
+
         return ValidationResult(
             passed=len(errors) == 0,
             errors=errors,
             warnings=warnings,
         )
-    
+
     @classmethod
-    def _validate_semantic_consistency(cls, content: str) -> List[str]:
+    def _validate_semantic_consistency(cls, content: str) -> list[str]:
         """语义一致性验证"""
         errors = []
-        
+
         # 应用语义规则
         for rule in cls.SEMANTIC_RULES:
             matches = re.finditer(rule["pattern"], content)
@@ -125,14 +124,14 @@ class ContentValidator:
                         errors.append(f"语义不一致: {rule['error']}")
                 except (ValueError, AttributeError):
                     pass
-        
+
         # 检查数字合理性
         for pattern, name in cls.KEY_NUMBER_PATTERNS:
             matches = re.finditer(pattern, content)
             for match in matches:
                 try:
                     value = float(match.group(1))
-                    
+
                     # 检查异常值
                     if name == '金额' and abs(value) > 10000:
                         errors.append(f"金额异常大: {value}亿元")
@@ -142,28 +141,28 @@ class ContentValidator:
                         errors.append(f"{name}为负值: {value}")
                 except (ValueError, AttributeError):
                     pass
-        
+
         return errors
-    
+
     @classmethod
     def validate_for_checkpoint(cls, content: str, chapter_id: str) -> bool:
         """验证内容是否适合保存到checkpoint"""
         result = cls.validate(content, chapter_id)
-        
+
         if not result.passed:
             logger.info(f"第{chapter_id}章内容验证失败: {result.errors}")
             return False
-        
+
         if result.warnings:
             logger.warning(f"第{chapter_id}章内容有警告: {result.warnings}")
-        
+
         return True
-    
+
     @classmethod
-    def get_invalid_patterns(cls) -> List[str]:
+    def get_invalid_patterns(cls) -> list[str]:
         """获取无效模式列表"""
         return cls.INVALID_PATTERNS.copy()
-    
+
     @classmethod
     def add_invalid_pattern(cls, pattern: str):
         """添加无效模式"""

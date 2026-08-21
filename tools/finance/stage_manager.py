@@ -15,13 +15,13 @@
 """
 
 import json
+import logging
 import sqlite3
 import threading
-import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional
-from pathlib import Path
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -56,12 +56,12 @@ def _json_serializer(obj: Any) -> Any:
 class StageDefinition:
     """阶段定义"""
     name: str
-    required_outputs: List[str]
-    blocking_checks: List[str] = field(default_factory=list)
+    required_outputs: list[str]
+    blocking_checks: list[str] = field(default_factory=list)
     on_circuit_break: str = "block"  # block | skip | retry
 
 
-STAGES: Dict[int, StageDefinition] = {
+STAGES: dict[int, StageDefinition] = {
     0: StageDefinition(
         name="路由", required_outputs=["skill_loaded", "ticker"],
         on_circuit_break="skip"),
@@ -93,13 +93,13 @@ class StageManager:
     DB_PATH = Path.home() / ".hermes" / "data" / "investment_stages.db"
     _lock = threading.Lock()
 
-    def __init__(self, session_id: str, db_path: Optional[Path] = None):
+    def __init__(self, session_id: str, db_path: Path | None = None):
         self.session_id = session_id
         self.current_stage = 0
-        self.completed_stages: List[int] = []
-        self.stage_outputs: Dict[str, Any] = {}
-        self.stage_timestamps: Dict[int, str] = {}
-        self.blocking_results: Dict[str, bool] = {}
+        self.completed_stages: list[int] = []
+        self.stage_outputs: dict[str, Any] = {}
+        self.stage_timestamps: dict[int, str] = {}
+        self.blocking_results: dict[str, bool] = {}
         self._version = 0
         if db_path:
             self.DB_PATH = db_path
@@ -130,7 +130,7 @@ class StageManager:
         conn.execute("PRAGMA busy_timeout=5000")
         return conn
 
-    def check_stage_completion(self, stage: int) -> Dict[str, Any]:
+    def check_stage_completion(self, stage: int) -> dict[str, Any]:
         """检查阶段是否完成"""
         if stage not in STAGES:
             return {"stage": stage, "completed": False, "error": f"未知阶段: {stage}"}
@@ -164,7 +164,7 @@ class StageManager:
         self.blocking_results[check] = passed
         self._save_state()
 
-    def advance_to_next_stage(self, circuit_breaker=None) -> Dict[str, Any]:
+    def advance_to_next_stage(self, circuit_breaker=None) -> dict[str, Any]:
         """尝试进入下一阶段（集成熔断器）"""
         # 熔断器检查
         if circuit_breaker is not None:
@@ -201,7 +201,7 @@ class StageManager:
         else:
             return {"success": False, "reason": result}
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """获取当前状态"""
         return {
             "session_id": self.session_id,

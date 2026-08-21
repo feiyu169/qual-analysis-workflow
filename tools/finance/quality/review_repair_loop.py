@@ -163,7 +163,7 @@ def review_and_repair_loop(
             else:
                 deep_issues = _run_deep_review(chapters, wind_data)
             round_issues.extend(deep_issues)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             review_incomplete = True
             logger.warning(f"深度审查异常（非阻断）: {e}")
 
@@ -181,7 +181,7 @@ def review_and_repair_loop(
             round_issues.extend(substantive_issues)
         except (LLMCallBudgetExceeded, WallClockDeadlineExceeded, DeterministicLLMFailure):
             raise  # v3.1 P0-A-3：预算/墙钟/确定性失败不降级（fail-closed）
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             review_incomplete = True
             logger.warning(f"实质审查异常（非阻断）: {e}")
 
@@ -259,7 +259,7 @@ def review_and_repair_loop(
                                            enable_t2=enable_t2)
         except (WallClockDeadlineExceeded, LLMCallBudgetExceeded):
             raise  # 预算/墙钟异常 → fail-closed，向上传播
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"修复异常: {e}")
             fixed_count = 0
         issues_fixed += fixed_count
@@ -281,7 +281,7 @@ def review_and_repair_loop(
                     {str(k): [str(v) for v in vs] for k, vs in CHAPTER_DEPENDENCIES.items()},
                 )
                 _affected_chapters = {int(c) for c in _affected_chapters}
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"C2-3 受影响集传播失败（保守全量）: {e}")
                 _affected_chapters = set(chapters.keys())
         logger.info(f"修复轮受影响章节: {sorted(_affected_chapters) if _affected_chapters else '无'}（C2-2/3 增量）")
@@ -302,7 +302,7 @@ def review_and_repair_loop(
                 chapters.update(_snapshot_before_round)
                 issues_fixed -= fixed_count  # 先减后置零（v3.1 P0-A-3 顺序）
                 fixed_count = 0
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"单调守卫异常（非阻断）: {e}")
 
         # 7. 豁免学习（v3.1：同签名跨轮 ≥2 次且从未修复成功 → 豁免）
@@ -338,25 +338,25 @@ def review_and_repair_loop(
 def _run_deep_review(chapters: dict[int, str], wind_data: dict | None) -> list[str]:
     """执行深度审查"""
     issues = []
-    
+
     # 1. 跨章节一致性检查（FiscalSemantics 归因——wind_data 传入定位未标注引用的财年）
     try:
         from .cross_chapter_consistency import check_cross_chapter_consistency
         result = check_cross_chapter_consistency(chapters, wind_data=wind_data)
         if not result.passed:
             issues.extend([f"[跨章节一致性] {issue.description}" for issue in result.issues])
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"跨章节一致性检查失败: {e}")
-    
+
     # 2. 逻辑一致性检查
     try:
         from .logic_consistency_check import check_logic_consistency
         result = check_logic_consistency(chapters)
         if not result.passed:
             issues.extend([f"[逻辑一致性] {issue.description}" for issue in result.issues])
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"逻辑一致性检查失败: {e}")
-    
+
     # 3. 数据合理性验证
     try:
         from .data_reasonableness_check import check_data_reasonableness
@@ -368,27 +368,27 @@ def _run_deep_review(chapters: dict[int, str], wind_data: dict | None) -> list[s
         result = check_data_reasonableness(chapters, actual_financials)
         if not result.passed:
             issues.extend([f"[数据合理性] {issue.description}" for issue in result.issues])
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"数据合理性验证失败: {e}")
-    
+
     # 4. 估值仲裁
     try:
         from .valuation_arbitrator import check_valuation_arbitration
         result = check_valuation_arbitration(chapters)
         if not result.passed:
             issues.extend([f"[估值仲裁] {issue.description}" for issue in result.issues])
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"估值仲裁失败: {e}")
-    
+
     # 5. 日期锚点检查
     try:
         from .date_anchor_check import check_date_anchor
         result = check_date_anchor(chapters)
         if not result.passed:
             issues.extend([f"[日期锚点] {issue.description}" for issue in result.issues])
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"日期锚点检查失败: {e}")
-    
+
     return issues
 
 
@@ -448,7 +448,7 @@ def _build_review_caller(
             deadline=deadline,  # v3.1 P0-5：逃生直连同样受墙钟约束
         )
         return _make_budgeted_caller(fb, budget_state, deadline, llm_call_budget)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"审查 caller 构造失败，使用主 caller: {e}")
         return _make_budgeted_caller(primary, budget_state, deadline, llm_call_budget)
 
@@ -482,16 +482,16 @@ def _run_substantive_review(
     review_caller = llm_caller
     if llm_caller is not None and budget_state is not None:
         review_caller = _build_review_caller(llm_caller, budget_state, deadline, llm_call_budget)
-    
+
     # 1. 事实核查
     try:
         from .fact_checker import check_facts
         result = check_facts(chapters, wind_data or {})
         if not result.passed:
             issues.extend([f"[事实核查] {issue.description}" for issue in result.issues])
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"事实核查失败: {e}")
-    
+
     # 2. 分析深度审查（注入 Wind 锚点）
     try:
         from .depth_reviewer import check_depth
@@ -500,9 +500,9 @@ def _run_substantive_review(
             issues.extend([f"[分析深度] {issue.description}" for issue in result.issues])
     except (LLMCallBudgetExceeded, WallClockDeadlineExceeded, DeterministicLLMFailure):
         raise  # v3.1 P0-A-3：预算/墙钟/确定性失败不降级（fail-closed）
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"分析深度审查失败: {e}")
-    
+
     # 3. 结论合理性审查（注入 Wind 锚点）
     try:
         from .conclusion_validator import check_conclusion
@@ -511,16 +511,16 @@ def _run_substantive_review(
             issues.extend([f"[结论合理性] {issue.description}" for issue in result.issues])
     except (LLMCallBudgetExceeded, WallClockDeadlineExceeded, DeterministicLLMFailure):
         raise  # v3.1 P0-A-3：预算/墙钟/确定性失败不降级（fail-closed）
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"结论合理性审查失败: {e}")
-    
+
     # 4. 假设合理性审查
     try:
         from .assumption_checker import check_assumptions
         result = check_assumptions(chapters, industry, wind_data)
         if not result.passed:
             issues.extend([f"[假设合理性] {issue.description}" for issue in result.issues])
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"假设合理性审查失败: {e}")
 
     # 5. 对抗性辩论审查（v3.1：enable_debate 门控——已知卡死组件，默认 False）
@@ -549,9 +549,9 @@ def _run_substantive_review(
                         logger.info(f"对抗辩论审查 第{ch_num}章: 发现 {len(debate_issues)} 个问题")
                 except (LLMCallBudgetExceeded, WallClockDeadlineExceeded, DeterministicLLMFailure):
                     raise  # v3.1 P0-A-3：预算/墙钟/确定性失败不降级（fail-closed）
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     logger.warning(f"对抗辩论审查 第{ch_num}章失败（非阻断）: {e}")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"对抗辩论审查初始化失败（非阻断）: {e}")
 
     return issues
@@ -571,7 +571,7 @@ def _repair_chapters(
     整章主题漂移（模板泄漏）走专用重写路径；未点名内容物理不变。
     """
     fixed_count = 0
-    
+
     # ADVC 阶段0：确定性数值清洗（先于 LLM 修复——值类问题由程序修正，
     # 不再让 LLM 反复产错；docs/qual-anchor-repair-architecture.md）
     if wind_data:
@@ -597,7 +597,7 @@ def _repair_chapters(
                 logger.info(
                     f"ADVC sweep: {len(_advc_hints)} 处弱签名（digit_typo）仅提示不阻断"
                 )
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"ADVC sweep 失败（非阻断）: {e}")
 
     # 按章节分组问题
@@ -610,12 +610,12 @@ def _repair_chapters(
             if ch_num not in chapter_issues:
                 chapter_issues[ch_num] = []
             chapter_issues[ch_num].append(issue)
-    
+
     # 修复每个章节
     for ch_num, ch_issues in chapter_issues.items():
         if ch_num not in chapters:
             continue
-        
+
         content = chapters[ch_num]
 
         # ADVC triage：值类问题（数字锚点/财务数字不一致）不进 LLM prompt——
@@ -653,7 +653,7 @@ def _repair_chapters(
                     wind_anchor = "## Wind 验证锚点（修复后的财务数字必须与此一致）\n\n| 指标 | " + \
                         " | ".join(f"FY{fy}" for fy in fys) + " |\n|------|" + "--------|" * len(fys) + \
                         "\n" + "\n".join(rows)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"修复锚点构建失败: {e}")
 
         # 铁律1：patch 模式（LLM 只输出修改点）
@@ -684,7 +684,7 @@ def _repair_chapters(
 4. **最多 5 个 patch**；超过则本轮修复失败
 5. 只输出 JSON，不要其他文字
 """
-        
+
         try:
             from .cross_chapter_consistency import check_cross_chapter_consistency
             from .patch_applier import (
@@ -710,7 +710,7 @@ def _repair_chapters(
                 try:
                     r = check_cross_chapter_consistency({ch_num: content})  # noqa: B023
                     return [i.description for i in r.issues] if not r.passed else []
-                except Exception:  # noqa: BLE001
+                except Exception:
                     return []
 
             def _numeric(content: str) -> list:
@@ -726,7 +726,7 @@ def _repair_chapters(
                     anchor = get_data_anchor(wind_data)  # C5-3 单例
                     errs = anchor.validate_chapter_any_fy(ch_num, content)  # noqa: B023
                     return [f"数字锚点: {e}" for e in errs]
-                except Exception:  # noqa: BLE001
+                except Exception:
                     return []
 
             result = apply_patches(
@@ -746,7 +746,7 @@ def _repair_chapters(
 
         except (LLMCallBudgetExceeded, WallClockDeadlineExceeded, DeterministicLLMFailure):
             raise  # v3.1 P0-A-3：预算/墙钟/确定性失败不降级（fail-closed）
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"第{ch_num}章 patch 修复失败: {e}")
-    
+
     return fixed_count

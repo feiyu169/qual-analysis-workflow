@@ -10,7 +10,6 @@ Section Identifier - 通用章节识别
 
 import logging
 import re
-from typing import Optional
 
 from .base import BaseProcessor
 

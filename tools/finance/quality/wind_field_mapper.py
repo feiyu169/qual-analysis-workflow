@@ -12,8 +12,7 @@ WindFieldMapper模块
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -91,20 +90,20 @@ FIELD_MAPPINGS = {
 
 class WindFieldMapper:
     """Wind字段映射器"""
-    
+
     def __init__(self):
         self.mappings = FIELD_MAPPINGS
-    
+
     def get_field_name(
         self,
         standard_name: str,
         market: str,  # "a_share" | "hk_share" | "us_share"
-    ) -> Optional[str]:
+    ) -> str | None:
         """获取Wind字段名"""
         mapping = self.mappings.get(standard_name)
         if not mapping:
             return None
-        
+
         if market == "a_share":
             return mapping.a_share
         elif market == "hk_share":
@@ -113,7 +112,7 @@ class WindFieldMapper:
             return mapping.us_share
         else:
             return None
-    
+
     def detect_market(self, windcode: str) -> str:
         """根据股票代码检测市场"""
         if windcode.endswith(".SH") or windcode.endswith(".SZ"):
@@ -124,15 +123,15 @@ class WindFieldMapper:
             return "us_share"
         else:
             return "a_share"  # 默认A股
-    
+
     def map_financial_data(
         self,
-        data: Dict[str, any],
+        data: dict[str, any],
         market: str,
-    ) -> Dict[str, any]:
+    ) -> dict[str, any]:
         """映射财务数据字段"""
         mapped = {}
-        
+
         for standard_name, value in data.items():
             wind_field = self.get_field_name(standard_name, market)
             if wind_field:
@@ -140,19 +139,19 @@ class WindFieldMapper:
             else:
                 # 保持原字段名
                 mapped[standard_name] = value
-        
+
         return mapped
-    
+
     def validate_field_names(
         self,
-        data: Dict[str, any],
+        data: dict[str, any],
         market: str,
-    ) -> Tuple[List[str], List[str]]:
+    ) -> tuple[list[str], list[str]]:
         """验证字段名"""
         valid = []
         invalid = []
-        
-        for field_name in data.keys():
+
+        for field_name in data:
             # 检查是否是已知的标准名称
             if field_name in self.mappings:
                 valid.append(field_name)
@@ -160,27 +159,21 @@ class WindFieldMapper:
                 # 检查是否是正确的Wind字段名
                 is_valid = False
                 for mapping in self.mappings.values():
-                    if market == "a_share" and field_name == mapping.a_share:
+                    if (market == "a_share" and field_name == mapping.a_share) or (market == "hk_share" and field_name == mapping.hk_share) or (market == "us_share" and field_name == mapping.us_share):
                         is_valid = True
                         break
-                    elif market == "hk_share" and field_name == mapping.hk_share:
-                        is_valid = True
-                        break
-                    elif market == "us_share" and field_name == mapping.us_share:
-                        is_valid = True
-                        break
-                
+
                 if is_valid:
                     valid.append(field_name)
                 else:
                     invalid.append(field_name)
-        
+
         return valid, invalid
-    
-    def get_common_mistakes(self, market: str) -> List[str]:
+
+    def get_common_mistakes(self, market: str) -> list[str]:
         """获取常见错误"""
         mistakes = []
-        
+
         if market == "a_share":
             mistakes = [
                 "使用港股字段名前缀(NET_CASH_*)",
@@ -199,9 +192,9 @@ class WindFieldMapper:
                 "使用港股字段名前缀(NET_CASH_*)",
                 "缺少市场后缀(*_TTM)",
             ]
-        
+
         return mistakes
-    
+
     def generate_mapping_report(self, market: str) -> str:
         """生成映射报告"""
         lines = [
@@ -210,10 +203,10 @@ class WindFieldMapper:
             "| 标准名称 | Wind字段 |",
             "|----------|----------|",
         ]
-        
+
         for standard_name, mapping in self.mappings.items():
             wind_field = self.get_field_name(standard_name, market)
             if wind_field:
                 lines.append(f"| {mapping.description} | {wind_field} |")
-        
+
         return "\n".join(lines)

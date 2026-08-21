@@ -3,7 +3,7 @@ GBrain Writer - 将投资分析结果写入 GBrain 知识图谱
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -26,7 +26,7 @@ def write_to_gbrain(ctx: "DataContext", report: str) -> bool:
         True 如果写入成功，False 如果失败
     """
     try:
-        today = datetime.now(timezone.utc).strftime("%Y%m%d")
+        today = datetime.now(UTC).strftime("%Y%m%d")
         slug = f"investment/{ctx.ticker.lower()}-{today}"
 
         content = _build_gbrain_content(ctx, report)
@@ -49,7 +49,7 @@ def write_to_gbrain(ctx: "DataContext", report: str) -> bool:
 
 def _build_gbrain_content(ctx: "DataContext", report: str) -> str:
     """构建 GBrain 页面内容"""
-    
+
     # 提取关键指标
     key_metrics = ""
     if ctx.wind and ctx.wind.quote:
@@ -58,7 +58,7 @@ def _build_gbrain_content(ctx: "DataContext", report: str) -> str:
 - 股价: {ctx.wind.quote.get('price', 'N/A')}
 - 成交量: {ctx.wind.quote.get('volume', 'N/A')}
 """
-    
+
     if ctx.wind and ctx.wind.valuation:
         key_metrics += f"""
 - PE(TTM): {ctx.wind.valuation.get('pe_ttm', 'N/A')}
@@ -70,7 +70,7 @@ type: investment-analysis
 ticker: {ctx.ticker}
 company: {ctx.company_name}
 market: {ctx.market}
-date: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}
+date: {datetime.now(UTC).strftime('%Y-%m-%d')}
 ---
 
 # {ctx.company_name} ({ctx.ticker}) 投资分析

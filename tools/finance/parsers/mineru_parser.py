@@ -25,17 +25,16 @@ import re
 import time
 import zipfile
 from pathlib import Path
-from typing import Optional
 
 import httpx
 
 from .document_store import (
     DocumentStore,
-    SectionSummary,
-    TableSummary,
-    SectionContent,
-    TableContent,
     SearchHit,
+    SectionContent,
+    SectionSummary,
+    TableContent,
+    TableSummary,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,7 +50,7 @@ DEFAULT_POLL_INTERVAL = 3
 DEFAULT_POLL_TIMEOUT = 600  # 10分钟
 
 
-def _load_token() -> Optional[str]:
+def _load_token() -> str | None:
     """从环境变量或 .env 文件加载 MinerU Token。"""
     token = os.environ.get("MINERU_TOKEN")
     if token:
@@ -88,7 +87,7 @@ class MinerUConfig:
     def __init__(
         self,
         api_mode: str = "precise",
-        token: Optional[str] = None,
+        token: str | None = None,
         timeout: float = DEFAULT_TIMEOUT,
         max_retries: int = DEFAULT_MAX_RETRIES,
         retry_delay: float = DEFAULT_RETRY_DELAY,
@@ -99,7 +98,7 @@ class MinerUConfig:
         enable_formula: bool = True,
         enable_table: bool = True,
         model_version: str = "vlm",
-        page_range: Optional[str] = None,
+        page_range: str | None = None,
     ):
         self.api_mode = api_mode
         self.token = token or _load_token()
@@ -151,7 +150,7 @@ class MinerUParser(DocumentStore):
     def __init__(
         self,
         pdf_path: Path,
-        config: Optional[MinerUConfig] = None,
+        config: MinerUConfig | None = None,
     ):
         if not pdf_path.exists():
             raise FileNotFoundError(f"PDF文件不存在: {pdf_path}")
@@ -715,7 +714,7 @@ class MinerUParser(DocumentStore):
             current_idx += 1
         return []
 
-    def search(self, query: str, within_ref: Optional[str] = None) -> list[SearchHit]:
+    def search(self, query: str, within_ref: str | None = None) -> list[SearchHit]:
         hits = []
         if query.lower() in self._markdown.lower():
             idx = self._markdown.lower().find(query.lower())
@@ -728,7 +727,7 @@ class MinerUParser(DocumentStore):
             ))
         return hits
 
-    def get_section_title(self, ref: str) -> Optional[str]:
+    def get_section_title(self, ref: str) -> str | None:
         section = self._section_map.get(ref)
         return section.title if section else None
 
@@ -743,7 +742,7 @@ class MinerUParser(DocumentStore):
 
 # ============ 工具函数 ============
 
-def check_mineru_api_health(token: Optional[str] = None) -> dict:
+def check_mineru_api_health(token: str | None = None) -> dict:
     """检查 MinerU API 健康状态。"""
     token = token or _load_token()
     result = {"agent_api": False, "precise_api": False, "has_token": bool(token), "error": None}

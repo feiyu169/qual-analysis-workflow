@@ -41,10 +41,10 @@ def write_to_flomo(ctx: "DataContext", report: str) -> bool:
 
 def _build_flomo_content(ctx: "DataContext", report: str) -> str:
     """构建 flomo 笔记内容"""
-    
+
     # 提取关键发现
     key_findings = _extract_key_findings(report)
-    
+
     # 提取投资逻辑
     investment_logic = _extract_investment_logic(report)
 
@@ -69,19 +69,19 @@ def _build_flomo_content(ctx: "DataContext", report: str) -> str:
 def _extract_key_findings(report: str) -> str:
     """从报告中提取关键发现"""
     findings = []
-    
+
     # 查找包含数字的关键句子
     lines = report.split("\n")
     for line in lines:
         line = line.strip()
         if not line:
             continue
-        
+
         # 查找包含百分比或金额的行
         if any(char in line for char in ["%", "亿", "万", "+", "-"]):
             if len(line) < 100:  # 排除过长的行
                 findings.append(f"- {line}")
-    
+
     # 返回前 5 条
     return "\n".join(findings[:5]) if findings else "暂无关键发现"
 
@@ -89,18 +89,18 @@ def _extract_key_findings(report: str) -> str:
 def _extract_investment_logic(report: str) -> str:
     """从报告中提取投资逻辑"""
     logic = []
-    
+
     # 查找包含投资相关关键词的行
     keywords = ["核心", "优势", "风险", "增长", "驱动", "战略", "前景"]
     lines = report.split("\n")
-    
+
     for line in lines:
         line = line.strip()
         if not line:
             continue
-        
+
         if any(keyword in line for keyword in keywords):
             if len(line) < 100:
                 logic.append(f"- {line}")
-    
+
     return "\n".join(logic[:3]) if logic else "暂无投资逻辑"

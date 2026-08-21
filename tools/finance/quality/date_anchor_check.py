@@ -10,10 +10,9 @@
 - I5: 日期锚点混乱
 """
 
-import re
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -34,14 +33,14 @@ class DateAnchorIssue:
 class DateAnchorResult:
     """日期锚点检查结果"""
     passed: bool
-    issues: List[DateAnchorIssue] = field(default_factory=list)
+    issues: list[DateAnchorIssue] = field(default_factory=list)
     score: float = 100.0
-    base_date: Optional[str] = None  # 基准日期
+    base_date: str | None = None  # 基准日期
 
 
 class DateAnchorChecker:
     """日期锚点检查器"""
-    
+
     def __init__(self):
         # 日期格式模式
         self.date_patterns = {
@@ -66,83 +65,83 @@ class DateAnchorChecker:
                 r"(20\d{2})\s*年\s*报",
             ],
         }
-        
+
         # 未来时间引用模式
         self.future_patterns = [
             r"(20\d{2})\s*年\s*(Q[1-4]|[一二三四]季度)",
             r"(20\d{2})\s*年\s*三季报",
             r"(20\d{2})\s*年\s*年报",
         ]
-    
+
     def check(
         self,
-        chapters: Dict[int, str],
-        report_date: Optional[str] = None,
+        chapters: dict[int, str],
+        report_date: str | None = None,
     ) -> DateAnchorResult:
         """
         检查日期锚点一致性
-        
+
         Args:
             chapters: 各章节内容 {chapter_num: content}
             report_date: 报告日期（用于判断未来引用）
-        
+
         Returns:
             DateAnchorResult
         """
         issues = []
-        
+
         # 1. 提取所有日期引用
         all_dates = self._extract_all_dates(chapters)
-        
+
         # 2. 确定基准日期
         base_date = self._determine_base_date(all_dates, report_date)
-        
+
         # 3. 检查日期锚点冲突
         anchor_issues = self._check_anchor_conflicts(chapters, all_dates)
         issues.extend(anchor_issues)
-        
+
         # 4. 检查模糊时间词
         ambiguous_issues = self._check_ambiguous_dates(chapters)
         issues.extend(ambiguous_issues)
-        
+
         # 5. 检查未来时间引用
         future_issues = self._check_future_references(chapters, base_date)
         issues.extend(future_issues)
-        
+
         # 6. 检查数据来源时点
         source_issues = self._check_source_timing(chapters)
         issues.extend(source_issues)
-        
+
         # 计算评分
         fatal_count = sum(1 for i in issues if i.severity == "fatal")
         important_count = sum(1 for i in issues if i.severity == "important")
         suggestion_count = sum(1 for i in issues if i.severity == "suggestion")
-        
+
         score = 100.0
         score -= fatal_count * 40
         score -= important_count * 15
         score -= suggestion_count * 5
         score = max(0.0, min(100.0, score))
-        
+
         passed = fatal_count == 0 and score >= 60.0
-        
+
         if not passed:
             logger.warning(f"日期锚点检查不通过: score={score:.0f}, issues={len(issues)}")
-        
+
         return DateAnchorResult(
             passed=passed,
             issues=issues,
             score=score,
             base_date=base_date,
         )
-    
-    def _extract_all_dates(self, chapters: Dict[int, str]) -> Dict[int, List[str]]:
+
+    def _extract_all_dates(self, chapters: dict[int, str]) -> dict[int, list[str]]:
         """提取所有日期引用"""
         all_dates = {}
-        
+
         for ch_num, content in chapters.items():
             dates = []
-            
+
             # 提取各种格式的日期
             for date_type, patterns in self.date_patterns.items():
                 for pattern in patterns:
@@ -154,20 +153,20 @@ class DateAnchorChecker:
                         else:
                             date_str = match
                         dates.append(date_str)
-            
+
             all_dates[ch_num] = list(set(dates))
-        
+
         return all_dates
-    
+
     def _determine_base_date(
         self,
-        all_dates: Dict[int, List[str]],
-        report_date: Optional[str],
+        all_dates: dict[int, list[str]],
+        report_date: str | None,
     ) -> str:
         """确定基准日期"""
         if report_date:
             return report_date
-        
+
         # 从所有日期中找最频繁的年份
         year_counts = {}
         for ch_num, dates in all_dates.items():
@@ -176,18 +175,18 @@ class DateAnchorChecker:
                 if year_match:
                     year = year_match.group(1)
                     year_counts[year] = year_counts.get(year, 0) + 1
-        
+
         if year_counts:
             # 返回最频繁的年份
             return max(year_counts.items(), key=lambda x: x[1])[0]
-        
+
         return "2024"  # 默认
-    
+
     def _check_anchor_conflicts(
         self,
-        chapters: Dict[int, str],
-        all_dates: Dict[int, List[str]],
-    ) -> List[DateAnchorIssue]:
+        chapters: dict[int, str],
+        all_dates: dict[int, list[str]],
+    ) -> list[DateAnchorIssue]:
         """检查日期锚点冲突（多财年报告兼容）
 
         三财年报告（FY2023/24/25）中不同章节合法聚焦不同财年
@@ -239,18 +238,18 @@ class DateAnchorChecker:
                 ))
 
         return issues
-    
-    def _check_ambiguous_dates(self, chapters: Dict[int, str]) -> List[DateAnchorIssue]:
+
+    def _check_ambiguous_dates(self, chapters: dict[int, str]) -> list[DateAnchorIssue]:
         """检查模糊时间词"""
         issues = []
-        
+
         ambiguous_patterns = [
             (r"当前", "当前"),
             (r"最新", "最新"),
             (r"近期", "近期"),
             (r"目前", "目前"),
         ]
-        
+
         for ch_num, content in chapters.items():
             for pattern, keyword in ambiguous_patterns:
                 matches = list(re.finditer(pattern, content))
@@ -259,10 +258,10 @@ class DateAnchorChecker:
                     start = max(0, match.start() - 50)
                     end = min(len(content), match.end() + 50)
                     context = content[start:end]
-                    
+
                     # 如果上下文没有具体日期，报告问题
                     has_specific_date = bool(re.search(r"20\d{2}\s*年", context))
-                    
+
                     if not has_specific_date:
                         line = content[:match.start()].count("\n") + 1
                         issues.append(DateAnchorIssue(
@@ -274,24 +273,24 @@ class DateAnchorChecker:
                             date1=keyword,
                             date2="未指定",
                         ))
-        
+
         return issues
-    
+
     def _check_future_references(
         self,
-        chapters: Dict[int, str],
+        chapters: dict[int, str],
         base_date: str,
-    ) -> List[DateAnchorIssue]:
+    ) -> list[DateAnchorIssue]:
         """检查未来时间引用"""
         issues = []
-        
+
         # 确定基准年份
         base_year_match = re.search(r"(20\d{2})", base_date)
         if not base_year_match:
             return issues
-        
+
         base_year = int(base_year_match.group(1))
-        
+
         for ch_num, content in chapters.items():
             # 检查是否引用了未来年份的数据
             for pattern in self.future_patterns:
@@ -301,7 +300,7 @@ class DateAnchorChecker:
                         year_str = match[0]
                     else:
                         year_str = match
-                    
+
                     try:
                         year = int(year_str)
                         if year > base_year:
@@ -317,28 +316,28 @@ class DateAnchorChecker:
                             ))
                     except ValueError:
                         continue
-        
+
         return issues
-    
-    def _check_source_timing(self, chapters: Dict[int, str]) -> List[DateAnchorIssue]:
+
+    def _check_source_timing(self, chapters: dict[int, str]) -> list[DateAnchorIssue]:
         """检查数据来源时点"""
         issues = []
-        
+
         # 检查同一章节内数据来源的时点是否一致
         for ch_num, content in chapters.items():
             # 提取数据来源时点
             source_dates = []
-            
+
             # 匹配"来源：XXX年报"、"数据来源：XXX季报"等
             source_pattern = r"(?:来源|数据来源)[：:]\s*.*?(20\d{2})\s*年"
             matches = re.findall(source_pattern, content)
             source_dates.extend(matches)
-            
+
             # 匹配脚注中的日期
             footnote_pattern = r"\[\^?\d+\].*?(20\d{2})\s*年"
             matches = re.findall(footnote_pattern, content)
             source_dates.extend(matches)
-            
+
             # 检查是否有不同时点的数据来源
             if len(set(source_dates)) > 1:
                 line = self._find_source_line(content)
@@ -351,9 +350,9 @@ class DateAnchorChecker:
                     date1=source_dates[0] if source_dates else "",
                     date2=source_dates[1] if len(source_dates) > 1 else "",
                 ))
-        
+
         return issues
-    
+
     def _find_year_line(self, content: str, year: str) -> int:
         """查找年份所在行号"""
         lines = content.split("\n")
@@ -361,7 +360,7 @@ class DateAnchorChecker:
             if year in line:
                 return i + 1
         return 0
-    
+
     def _find_source_line(self, content: str) -> int:
         """查找数据来源所在行号"""
         lines = content.split("\n")
@@ -372,16 +371,16 @@ class DateAnchorChecker:
 
 
 def check_date_anchor(
-    chapters: Dict[int, str],
-    report_date: Optional[str] = None,
+    chapters: dict[int, str],
+    report_date: str | None = None,
 ) -> DateAnchorResult:
     """
     检查日期锚点（入口函数）
-    
+
     Args:
         chapters: 各章节内容 {chapter_num: content}
         report_date: 报告日期
-    
+
     Returns:
         DateAnchorResult
     """

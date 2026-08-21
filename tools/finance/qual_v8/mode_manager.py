@@ -7,10 +7,9 @@ Qual流程整合 - 渐进式激活
 - enforce：阻断
 """
 
-from enum import Enum
-from typing import Dict, Any, Optional
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +25,7 @@ class QualMode(Enum):
 class ModeConfig:
     """模式配置"""
     mode: QualMode
-    
+
     # 各组件的行为
     state_machine_enabled: bool
     audit_logger_enabled: bool
@@ -70,15 +69,15 @@ MODE_CONFIGS = {
 
 class ModeManager:
     """模式管理器"""
-    
+
     def __init__(self, initial_mode: QualMode = QualMode.SHADOW):
         self.current_mode = initial_mode
         self.mode_history = []
-    
+
     def get_config(self) -> ModeConfig:
         """获取当前模式配置"""
         return MODE_CONFIGS[self.current_mode]
-    
+
     def switch_mode(self, new_mode: QualMode):
         """切换模式"""
         old_mode = self.current_mode
@@ -89,19 +88,19 @@ class ModeManager:
             "timestamp": __import__('datetime').datetime.now().isoformat(),
         })
         logger.info(f"[Qual] 模式切换: {old_mode.value} -> {new_mode.value}")
-    
+
     def is_shadow(self) -> bool:
         """是否为shadow模式"""
         return self.current_mode == QualMode.SHADOW
-    
+
     def is_soft(self) -> bool:
         """是否为soft模式"""
         return self.current_mode == QualMode.SOFT
-    
+
     def is_enforce(self) -> bool:
         """是否为enforce模式"""
         return self.current_mode == QualMode.ENFORCE
-    
+
     def should_block(self) -> bool:
         """是否应该阻断"""
         return self.current_mode == QualMode.ENFORCE
@@ -115,7 +114,7 @@ def get_initial_mode() -> QualMode:
     """从环境变量获取初始模式"""
     import os
     mode_str = os.environ.get(QUAL_MODE_ENV_VAR, "shadow").lower()
-    
+
     try:
         return QualMode(mode_str)
     except ValueError:

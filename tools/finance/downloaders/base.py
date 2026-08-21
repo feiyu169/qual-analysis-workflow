@@ -10,7 +10,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class FilingInfo:
     filing_date: str
     filing_url: str
     market: Literal["us", "cn", "hk"] = "us"
-    accession_no: Optional[str] = None
+    accession_no: str | None = None
     description: str = ""
     metadata: dict = field(default_factory=dict)
 
@@ -53,7 +53,7 @@ class BaseDownloader(ABC):
     基类提供文件缓存逻辑。
     """
 
-    def __init__(self, cache_base_dir: Optional[Path] = None):
+    def __init__(self, cache_base_dir: Path | None = None):
         """
         Args:
             cache_base_dir: 缓存基础目录，默认 ~/.hermes/workspace/filings/
@@ -93,7 +93,7 @@ class BaseDownloader(ABC):
     def list_filings(
         self,
         ticker: str,
-        form_types: Optional[list[str]] = None,
+        form_types: list[str] | None = None,
         limit: int = 10,
     ) -> list[FilingInfo]:
         """列出可用的财报文件
@@ -124,7 +124,7 @@ class BaseDownloader(ABC):
     def download_filing(
         self,
         filing: FilingInfo,
-        cache_dir: Optional[Path] = None,
+        cache_dir: Path | None = None,
     ) -> Path:
         """下载财报文件（带缓存）
 

@@ -66,7 +66,7 @@ RISK_DISCLOSURE_CHECKLIST = [
 
 class Gate4AuditRepair(GateBase):
     """Gate 4: 审计修复 + 深度审查"""
-    
+
     def __init__(self):
         spec = GateSpec(
             gate_num=4,
@@ -86,10 +86,10 @@ class Gate4AuditRepair(GateBase):
             ],
         )
         super().__init__(spec)
-        
+
         self.contradiction_patterns = LOGIC_CONTRADICTION_PATTERNS
         self.risk_checklist = RISK_DISCLOSURE_CHECKLIST
-    
+
     def execute(self, context: dict[str, Any]) -> GateResult:
         """执行Gate 4（真实：形式审查 + review_and_repair_loop 实质审查修复循环）"""
         errors = []
@@ -158,7 +158,7 @@ class Gate4AuditRepair(GateBase):
             errors=errors,
             warnings=warnings,
             execution_time=0.0,
-            timestamp=datetime.now().isoformat(),  # noqa: DTZ005
+            timestamp=datetime.now().isoformat(),
         )
 
     def check_criteria(self, context: dict[str, Any]) -> bool:
@@ -306,7 +306,7 @@ class Gate4AuditRepair(GateBase):
         except DeterministicLLMFailure as e:
             logger.error(f"Gate4 实质审查确定性失败: {e}")
             return {"passed": False, "errors": [f"实质审查确定性失败: {e}"], "repaired_chapters": None}
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(f"Gate4 实质审查失败: {e}")
             # v3.1 P0-A-2：fail-closed（原为 passed=True 静默通过）
             return {"passed": False, "errors": [f"实质审查异常（fail-closed）: {e}"], "repaired_chapters": None}
@@ -329,7 +329,7 @@ class Gate4AuditRepair(GateBase):
                     })
                     if getattr(issue, "severity", "") == "critical":
                         critical_count += 1
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"Gate4 逻辑矛盾检测失败（非阻断）: {e}")
 
         if critical_count > 0:

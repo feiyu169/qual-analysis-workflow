@@ -24,7 +24,7 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final, Literal, Optional
+from typing import Final, Literal
 
 # ============ 字面量类型 ============
 
@@ -122,9 +122,9 @@ _TITLE_AMENDED_TOKENS: Final[tuple[str, ...]] = (
 @dataclass(frozen=True)
 class CompanyProfile:
     """公司基础元数据。
-    
+
     对应Dayu的CnCompanyProfile。
-    
+
     Attributes:
         provider: 报告来源provider
         company_id: 公司主体ID
@@ -134,7 +134,7 @@ class CompanyProfile:
         company_name: 公司名称
         ticker: 已归一化的股票代码
     """
-    
+
     provider: SourceProvider
     company_id: str
     company_name: str
@@ -144,9 +144,9 @@ class CompanyProfile:
 @dataclass(frozen=True)
 class ReportQuery:
     """单ticker单次download的查询参数集合。
-    
+
     对应Dayu的CnReportQuery。
-    
+
     Attributes:
         market: 市场标识
         ticker: 已归一化的股票代码
@@ -154,7 +154,7 @@ class ReportQuery:
         end_date: 窗口终点 YYYY-MM-DD（包含）
         target_periods: 期望的财期集合
     """
-    
+
     market: MarketKind
     ticker: str
     start_date: str
@@ -165,9 +165,9 @@ class ReportQuery:
 @dataclass(frozen=True)
 class ReportCandidate:
     """单份候选报告的远端元数据。
-    
+
     对应Dayu的CnReportCandidate。
-    
+
     Attributes:
         provider: 报告来源provider
         source_id: provider内部唯一ID
@@ -182,7 +182,7 @@ class ReportCandidate:
         etag: HEAD返回的ETag
         last_modified: HEAD返回的Last-Modified
     """
-    
+
     provider: SourceProvider
     source_id: str
     source_url: str
@@ -192,17 +192,17 @@ class ReportCandidate:
     fiscal_year: int
     fiscal_period: FiscalPeriod
     amended: bool
-    content_length: Optional[int] = None
-    etag: Optional[str] = None
-    last_modified: Optional[str] = None
+    content_length: int | None = None
+    etag: str | None = None
+    last_modified: str | None = None
 
 
 @dataclass(frozen=True)
 class DownloadedAsset:
     """下载完成后的资产对象。
-    
+
     对应Dayu的DownloadedReportAsset。
-    
+
     Attributes:
         candidate: 对应的远端候选元数据
         pdf_path: PDF本地路径
@@ -210,7 +210,7 @@ class DownloadedAsset:
         content_length: 实际字节数
         downloaded_at: ISO-8601时间戳
     """
-    
+
     candidate: ReportCandidate
     pdf_path: Path
     sha256: str
@@ -221,26 +221,26 @@ class DownloadedAsset:
 @dataclass(frozen=True)
 class HeadMeta:
     """HEAD响应元数据。
-    
+
     对应Dayu的_HeadMeta。
-    
+
     Attributes:
         content_length: Content-Length头
         etag: ETag头
         last_modified: Last-Modified头
     """
-    
-    content_length: Optional[int]
-    etag: Optional[str]
-    last_modified: Optional[str]
+
+    content_length: int | None
+    etag: str | None
+    last_modified: str | None
 
 
 @dataclass(frozen=True)
 class DownloaderEvent:
     """下载器文件级事件。
-    
+
     对应Dayu的DownloaderEvent。
-    
+
     Attributes:
         event_type: 事件类型
         name: 文件名
@@ -253,25 +253,25 @@ class DownloaderEvent:
         reason_message: 失败原因消息
         error: 错误信息
     """
-    
+
     event_type: DownloaderEventType
     name: str
     source_url: str
-    http_etag: Optional[str]
-    http_last_modified: Optional[str]
-    http_status: Optional[int]
-    file_meta: Optional[dict] = None
-    reason_code: Optional[str] = None
-    reason_message: Optional[str] = None
-    error: Optional[str] = None
+    http_etag: str | None
+    http_last_modified: str | None
+    http_status: int | None
+    file_meta: dict | None = None
+    reason_code: str | None = None
+    reason_message: str | None = None
+    error: str | None = None
 
 
 @dataclass(frozen=True)
 class BrowseEdgarFiling:
     """browse-edgar记录。
-    
+
     对应Dayu的BrowseEdgarFiling。
-    
+
     Attributes:
         form_type: 表单类型
         filing_date: 提交日期
@@ -279,7 +279,7 @@ class BrowseEdgarFiling:
         cik: CIK编号
         index_url: index.json URL
     """
-    
+
     form_type: str
     filing_date: str
     accession_number: str
@@ -290,9 +290,9 @@ class BrowseEdgarFiling:
 @dataclass(frozen=True)
 class RemoteFileDescriptor:
     """远端文件描述。
-    
+
     对应Dayu的RemoteFileDescriptor。
-    
+
     Attributes:
         name: 文件名
         source_url: 源URL
@@ -303,54 +303,49 @@ class RemoteFileDescriptor:
         sec_document_type: SEC文档类型
         sec_description: SEC描述
     """
-    
+
     name: str
     source_url: str
-    http_etag: Optional[str]
-    http_last_modified: Optional[str]
-    remote_size: Optional[int]
-    http_status: Optional[int] = None
-    sec_document_type: Optional[str] = None
-    sec_description: Optional[str] = None
+    http_etag: str | None
+    http_last_modified: str | None
+    remote_size: int | None
+    http_status: int | None = None
+    sec_document_type: str | None = None
+    sec_description: str | None = None
 
 
 # ============ 异常类 ============
 
 class DownloaderError(Exception):
     """下载器基础异常。"""
-    pass
 
 
 class CompanyNotFoundError(DownloaderError):
     """公司未找到。"""
-    pass
 
 
 class FilingNotFoundError(DownloaderError):
     """财报未找到。"""
-    pass
 
 
 class DownloadFailedError(DownloaderError):
     """下载失败。"""
-    pass
 
 
 class ValidationError(DownloaderError):
     """数据验证失败。"""
-    pass
 
 
 # ============ 辅助函数 ============
 
-def parse_chinese_digit_year(value: str) -> Optional[int]:
+def parse_chinese_digit_year(value: str) -> int | None:
     """解析中文数字年份（如'二零二五'）。
-    
+
     对应Dayu的_parse_chinese_digit_year。
-    
+
     Args:
         value: 四位中文数字年份
-        
+
     Returns:
         公历年份；格式或范围异常返回None
     """
@@ -368,20 +363,20 @@ def parse_chinese_digit_year(value: str) -> Optional[int]:
     return None
 
 
-def parse_filing_date(raw_date: Optional[str]) -> Optional[str]:
+def parse_filing_date(raw_date: str | None) -> str | None:
     """解析披露日期为YYYY-MM-DD。
-    
+
     对应Dayu的_parse_filing_date。
-    
+
     Args:
         raw_date: 原始日期字符串
-        
+
     Returns:
         规范日期；无法解析返回None
     """
     if raw_date is None:
         return None
-    
+
     # 尝试 YYYY-MM-DD 或 YYYY/MM/DD
     matched = _DATE_PATTERN.search(raw_date)
     if matched is not None:
@@ -389,7 +384,7 @@ def parse_filing_date(raw_date: Optional[str]) -> Optional[str]:
         month = int(matched.group("month"))
         day = int(matched.group("day"))
         return f"{year:04d}-{month:02d}-{day:02d}"
-    
+
     # 尝试 DD/MM/YYYY 格式
     slash_parts = raw_date.strip().split("/")
     if len(slash_parts) >= 3 and all(part.isdigit() for part in slash_parts[:3]):
@@ -398,7 +393,7 @@ def parse_filing_date(raw_date: Optional[str]) -> Optional[str]:
         year = int(slash_parts[2])
         if year >= 1900:
             return f"{year:04d}-{month:02d}-{day:02d}"
-    
+
     # 尝试 DD/MM/YYYY HH:MM 格式
     slash_time_parts = raw_date.strip().split()
     if slash_time_parts:
@@ -409,20 +404,20 @@ def parse_filing_date(raw_date: Optional[str]) -> Optional[str]:
             year = int(slash_parts[2])
             if year >= 1900:
                 return f"{year:04d}-{month:02d}-{day:02d}"
-    
+
     return None
 
 
-def format_announcement_date(raw_time) -> Optional[str]:
+def format_announcement_date(raw_time) -> str | None:
     """把巨潮announcementTime规范为YYYY-MM-DD。
-    
+
     对应Dayu的_format_announcement_date。
-    
+
     兼容毫秒级时间戳整数和YYYY-MM-DD字符串。
-    
+
     Args:
         raw_time: 原始字段
-        
+
     Returns:
         YYYY-MM-DD字符串；无法解析返回None
     """
@@ -433,7 +428,7 @@ def format_announcement_date(raw_time) -> Optional[str]:
             return time.strftime("%Y-%m-%d", local)
         except (OverflowError, OSError, ValueError):
             return None
-    
+
     if isinstance(raw_time, str):
         text = raw_time.strip()
         if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
@@ -445,23 +440,23 @@ def format_announcement_date(raw_time) -> Optional[str]:
                 return time.strftime("%Y-%m-%d", local)
             except (OverflowError, OSError, ValueError):
                 return None
-    
+
     return None
 
 
 def strip_html(raw: str) -> str:
     """清洗HTML标签与多余空白。
-    
+
     对应Dayu的_strip_html。
-    
+
     Args:
         raw: 原始文本
-        
+
     Returns:
         清洗后的文本
     """
     import html as html_module
-    
+
     unescaped = html_module.unescape(raw)
     without_br = _BR_PATTERN.sub(" ", unescaped)
     without_tags = _TAG_PATTERN.sub("", without_br)
@@ -470,12 +465,12 @@ def strip_html(raw: str) -> str:
 
 def clean_cninfo_text(text: str) -> str:
     """清洗巨潮返回的高亮HTML文本。
-    
+
     对应Dayu的_clean_cninfo_text。
-    
+
     Args:
         text: 巨潮文本字段，可能包含<em>高亮标签
-        
+
     Returns:
         去掉HTML标签并压缩首尾空白后的文本
     """
@@ -485,65 +480,65 @@ def clean_cninfo_text(text: str) -> str:
 
 def contains_cjk(text: str) -> bool:
     """判断文本是否包含中日韩统一表意文字。
-    
+
     对应Dayu的_contains_cjk。
-    
+
     Args:
         text: 待检测文本
-        
+
     Returns:
         包含中文/繁中文字符返回True
     """
     return any("\u4e00" <= char <= "\u9fff" for char in text)
 
 
-def normalize_fingerprint_etag(raw_etag: Optional[str]) -> Optional[str]:
+def normalize_fingerprint_etag(raw_etag: str | None) -> str | None:
     """标准化用于指纹的ETag。
-    
+
     对应Dayu的_normalize_fingerprint_etag。
-    
+
     处理：
     - Weak ETag前缀 (W/)
     - 引号包裹
     - Gzip后缀
-    
+
     Args:
         raw_etag: 原始HTTP ETag
-        
+
     Returns:
         标准化ETag；无有效值时返回None
     """
     if raw_etag is None:
         return None
-    
+
     normalized = str(raw_etag).strip()
     if not normalized:
         return None
-    
+
     # 移除Weak前缀
     if normalized.upper().startswith(_ETAG_WEAK_PREFIX):
         normalized = normalized[2:].strip()
-    
+
     # 移除引号
     if normalized.startswith('"') and normalized.endswith('"') and len(normalized) >= 2:
         normalized = normalized[1:-1]
-    
+
     # 移除gzip后缀
     if normalized.lower().endswith(_ETAG_GZIP_SUFFIX):
         normalized = normalized[:-len(_ETAG_GZIP_SUFFIX)]
-    
+
     normalized = normalized.strip().lower()
     return normalized or None
 
 
-def normalize_fingerprint_last_modified(raw_last_modified: Optional[str]) -> Optional[str]:
+def normalize_fingerprint_last_modified(raw_last_modified: str | None) -> str | None:
     """标准化用于指纹的Last-Modified。
-    
+
     对应Dayu的_normalize_fingerprint_last_modified。
-    
+
     Args:
         raw_last_modified: 原始Last-Modified
-        
+
     Returns:
         标准化时间字符串；无有效值时返回None
     """
@@ -555,14 +550,14 @@ def normalize_fingerprint_last_modified(raw_last_modified: Optional[str]) -> Opt
 
 def build_source_fingerprint(descriptors: list[RemoteFileDescriptor]) -> str:
     """构建source_fingerprint。
-    
+
     对应Dayu的build_source_fingerprint。
-    
+
     基于文件名、ETag、Last-Modified计算SHA256指纹。
-    
+
     Args:
         descriptors: 远端文件描述列表
-        
+
     Returns:
         指纹字符串（sha256）
     """
@@ -580,16 +575,16 @@ def build_source_fingerprint(descriptors: list[RemoteFileDescriptor]) -> str:
 
 def handle_conditional_response(
     status_code: int,
-    content: Optional[bytes],
-) -> tuple[int, Optional[bytes]]:
+    content: bytes | None,
+) -> tuple[int, bytes | None]:
     """处理条件下载响应。
-    
+
     对应Dayu的_handle_conditional_download_response。
-    
+
     Args:
         status_code: HTTP状态码
         content: 响应内容
-        
+
     Returns:
         (status_code, payload)；若命中304，则payload为None
     """

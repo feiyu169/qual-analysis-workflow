@@ -99,13 +99,13 @@ class DataAnchor:
             if dp.fiscal_year == fiscal_year:
                 self.anchors[k][i] = DataPoint(
                     key=k, value=value, unit=unit, source=source,
-                    timestamp=datetime.now().isoformat(), fiscal_year=fiscal_year,  # noqa: DTZ005
+                    timestamp=datetime.now().isoformat(), fiscal_year=fiscal_year,
                 )
                 logger.info(f"[DataAnchor] 覆盖锚点: {k} FY{fiscal_year}={value}{unit} ({source})")
                 return
         self.anchors[k].append(DataPoint(
             key=k, value=value, unit=unit, source=source,
-            timestamp=datetime.now().isoformat(), fiscal_year=fiscal_year,  # noqa: DTZ005
+            timestamp=datetime.now().isoformat(), fiscal_year=fiscal_year,
         ))
         logger.info(f"[DataAnchor] 设置锚点: {k} FY{fiscal_year}={value}{unit} ({source})")
 
@@ -465,6 +465,6 @@ def validate_fiscal_references(chapter_num: int, content: str,
         checker._extract_financial_data(content, chapter_num)
         for w in checker.unattributed_historical:
             issues.append(f"第{chapter_num}章 历史财年引用未标注（应带 FY 标注或对比语境）: {w}")
-    except Exception:  # noqa: BLE001, S110 —— 归因失败不阻断生成（非阻断防线）
+    except Exception:
         pass
     return issues

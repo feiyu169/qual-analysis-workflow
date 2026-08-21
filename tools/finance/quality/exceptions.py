@@ -14,12 +14,11 @@ quality/exceptions.py — 异常体系模块
 
 class InferenceError(Exception):
     """推理系统根异常"""
-    pass
 
 
 class BudgetExceededError(InferenceError):
     """预算耗尽异常
-    
+
     当ReasoningBudget的remaining_time/calls/tokens不足时抛出
     """
     def __init__(self, message: str = "推理预算耗尽", budget_info: dict = None):
@@ -29,7 +28,7 @@ class BudgetExceededError(InferenceError):
 
 class CircuitOpenError(InferenceError):
     """熔断触发异常
-    
+
     当CircuitBreaker状态为OPEN时抛出
     """
     def __init__(self, message: str = "熔断器已触发", failure_count: int = 0):
@@ -39,15 +38,14 @@ class CircuitOpenError(InferenceError):
 
 class CalculationError(InferenceError):
     """计算失败异常
-    
+
     通用计算错误，如数值溢出、除零等
     """
-    pass
 
 
 class DataQualityError(InferenceError):
     """数据质量不足异常
-    
+
     当数据完整性、时效性不满足要求时抛出
     """
     def __init__(self, message: str = "数据质量不足", missing_fields: list = None):
@@ -57,7 +55,7 @@ class DataQualityError(InferenceError):
 
 class ModelInferenceError(InferenceError):
     """模型推理失败异常
-    
+
     当LLM调用失败、超时、返回格式错误时抛出
     """
     def __init__(self, message: str = "模型推理失败", model_name: str = None):
@@ -67,7 +65,7 @@ class ModelInferenceError(InferenceError):
 
 class MarketNotSupportedError(InferenceError):
     """市场不支持异常
-    
+
     当请求的市场不在支持列表中时抛出
     """
     def __init__(self, message: str = "市场不支持", market: str = None):

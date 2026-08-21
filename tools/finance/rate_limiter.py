@@ -8,12 +8,11 @@ SEC EDGAR 合规要求:
 使用滑动窗口算法实现线程安全的速率限制。
 """
 
-import time
-import threading
 import logging
+import threading
+import time
 from collections import deque
 from contextlib import contextmanager
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +110,7 @@ CNINFO_RATE_LIMITER = RateLimiter(max_requests=5, time_window=1.0, name="CNInfo"
 HKEX_RATE_LIMITER = RateLimiter(max_requests=5, time_window=1.0, name="HKEX")
 
 
-def get_rate_limiter(source: str) -> Optional[RateLimiter]:
+def get_rate_limiter(source: str) -> RateLimiter | None:
     """根据数据源获取对应的速率限制器
 
     Args:

@@ -9,7 +9,6 @@ gate_evaluator.py — 统一评估标准模块
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +85,7 @@ def evaluate_gate(
     high_count = sum(1 for i in issues if i.severity == "HIGH")
     medium_count = sum(1 for i in issues if i.severity == "MEDIUM")
     low_count = sum(1 for i in issues if i.severity == "LOW")
-    
+
     # 直接放行
     if (score >= THRESHOLDS["pass"]["min_score"]
         and p0_count <= THRESHOLDS["pass"]["max_p0"]
@@ -102,7 +101,7 @@ def evaluate_gate(
             conditions=[],
             issues=issues,
         )
-    
+
     # 条件放行
     if (score >= THRESHOLDS["conditional"]["min_score"]
         and p0_count <= THRESHOLDS["conditional"]["max_p0"]
@@ -121,7 +120,7 @@ def evaluate_gate(
             ],
             issues=issues,
         )
-    
+
     # 不放行
     return GateEvaluation(
         gate_id=gate_id,
@@ -146,26 +145,26 @@ def format_evaluation_report(eval_result: GateEvaluation) -> str:
         "conditional": "条件放行 ⚠️",
         "reject": "不放行 ❌",
     }
-    
+
     lines = [f"## Gate {eval_result.gate_id} 评估报告"]
     lines.append("")
     lines.append(f"**评分**: {eval_result.score}/100")
     lines.append(f"**结论**: {decision_cn.get(eval_result.decision, eval_result.decision)}")
     lines.append("")
-    
+
     lines.append("### 问题统计")
     lines.append(f"- P0 (阻塞级): {eval_result.p0_count}")
     lines.append(f"- HIGH (严重): {eval_result.high_count}")
     lines.append(f"- MEDIUM (中等): {eval_result.medium_count}")
     lines.append(f"- LOW (轻微): {eval_result.low_count}")
     lines.append("")
-    
+
     if eval_result.conditions:
         lines.append("### 放行条件")
         for condition in eval_result.conditions:
             lines.append(f"- {condition}")
         lines.append("")
-    
+
     if eval_result.issues:
         lines.append("### 问题清单")
         for issue in eval_result.issues:
@@ -173,5 +172,5 @@ def format_evaluation_report(eval_result: GateEvaluation) -> str:
             if issue.suggestion:
                 lines.append(f"  建议: {issue.suggestion}")
         lines.append("")
-    
+
     return "\n".join(lines)

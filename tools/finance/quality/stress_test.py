@@ -10,7 +10,6 @@
 """
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +45,7 @@ class StressTestSuite:
     """压力测试套件"""
     scenarios: list[StressScenario] = field(default_factory=list)
     results: list[StressTestResult] = field(default_factory=list)
-    worst_case: Optional[StressTestResult] = None
+    worst_case: StressTestResult | None = None
     summary: str = ""
 
 

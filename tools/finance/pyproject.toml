@@ -4,6 +4,8 @@
 [tool.ruff]
 line-length = 110
 target-version = "py311"
+# 排除备份/归档目录（ruff --fix 不应触碰）
+extend-exclude = ["**/backup_*", "**/_legacy"]
 
 [tool.ruff.lint]
 # 与 workflow/pyproject.toml 保持一致的选择规则集（HGF 门禁口径）
@@ -34,6 +36,8 @@ ignore = [
     "RUF002",   # 同上
     "RUF003",   # 同上
     "S101",     # assert 用于输入校验（fail-fast 设计）——业务代码广泛使用，非测试专用
+    "E402",     # 模块级 import 位置——__init__ re-export 惯例 + 动态导入设计
+    "S310",     # urlopen 安全检查——下载器业务必需（HKEX/巨潮/SEC）
 ]
 
 [tool.ruff.lint.per-file-ignores]

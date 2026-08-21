@@ -8,12 +8,11 @@ CNInfo Downloader - 巨潮资讯网下载器
 import json
 import logging
 from pathlib import Path
-from typing import Optional
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-from urllib.error import URLError, HTTPError
 
-from .base import BaseDownloader, FilingInfo
 from ..rate_limiter import CNINFO_RATE_LIMITER
+from .base import BaseDownloader, FilingInfo
 
 logger = logging.getLogger(__name__)
 
@@ -48,10 +47,10 @@ class CNInfoDownloader(BaseDownloader):
     - 支持年报/半年报/季报
     """
 
-    def __init__(self, cache_base_dir: Optional[Path] = None):
+    def __init__(self, cache_base_dir: Path | None = None):
         super().__init__(cache_base_dir)
 
-    def _make_request(self, url: str, data: Optional[bytes] = None, method: str = "GET") -> bytes:
+    def _make_request(self, url: str, data: bytes | None = None, method: str = "GET") -> bytes:
         """发起巨潮 API 请求（带速率限制）
 
         Args:
@@ -123,7 +122,7 @@ class CNInfoDownloader(BaseDownloader):
     def list_filings(
         self,
         ticker: str,
-        form_types: Optional[list[str]] = None,
+        form_types: list[str] | None = None,
         limit: int = 10,
     ) -> list[FilingInfo]:
         """列出巨潮资讯网上可用的 A 股财报

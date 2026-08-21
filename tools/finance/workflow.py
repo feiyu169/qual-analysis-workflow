@@ -27,8 +27,9 @@ Workflow - 买方定性分析工作流主入口（legacy 单体，架构代次 v
 import logging
 import re
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Literal
 
 from .data_context import DataContext, FacetResult, FilingData, SearchResult, WindData
 
@@ -165,22 +166,22 @@ BANNED_PHRASES = [
 
 def clean_ai_artifacts(text: str) -> tuple[str, list[str]]:
     """清洗AI生成痕迹
-    
+
     Returns:
         (cleaned_text, violations) - 清洗后的文本和违规列表
     """
     violations = []
     cleaned = text
-    
+
     for phrase in BANNED_PHRASES:
         if phrase in cleaned:
             violations.append(f"禁用短语: '{phrase}'")
             cleaned = cleaned.replace(phrase, "")
-    
+
     # 清洗多余的空行
     import re
     cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
-    
+
     return cleaned, violations
 
 
@@ -586,9 +587,9 @@ def _collect_data(
     company_name: str,
     market: str,
     facets: FacetResult,
-    wind_data: Optional[dict] = None,
-    filing_data: Optional[dict] = None,
-    search_results: Optional[list[dict]] = None,
+    wind_data: dict | None = None,
+    filing_data: dict | None = None,
+    search_results: list[dict] | None = None,
 ) -> DataContext:
     """数据收集：组装 DataContext
 
@@ -621,7 +622,7 @@ def _collect_data(
             logger.warning(f"DataMappingRegistry校验失败: {e}")
 
     # ---- 处理 Wind 数据 ----
-    wind: Optional[WindData] = None
+    wind: WindData | None = None
     wind_source: Literal["wind", "fallback", "unavailable"] = "unavailable"
 
     if wind_data:
@@ -643,7 +644,7 @@ def _collect_data(
             wind_source = "fallback"
 
     # ---- 处理财报原文数据（集成 processors）----
-    filing: Optional[FilingData] = None
+    filing: FilingData | None = None
     filing_source: Literal["filing", "search", "unavailable"] = "unavailable"
 
     if filing_data:
@@ -846,7 +847,7 @@ def _reconcile_facts_with_wind(ctx: "DataContext") -> str:
             logger.warning(f"事实表同财年仲裁失败: {e}")
         if notes:
             return "【事实表↔Wind 仲裁】" + "；".join(notes) + "（财务数字已以 Wind 为准）"
-        return "【事实表↔Wind 仲裁】事实表财务字段与 Wind FY{} 一致（偏差≤1%，交叉验证通过）".format(wind_fy)
+        return f"【事实表↔Wind 仲裁】事实表财务字段与 Wind FY{wind_fy} 一致（偏差≤1%，交叉验证通过）"
     else:
         # 异财年：财务字段降级为参考（只改提示，不改值——保留年报口径供定性参考）
         notes.append(
@@ -1099,7 +1100,7 @@ def _build_chapter_prompt(
 def _build_wind_summary(ctx: DataContext) -> str:
     """构建 Wind 数据摘要"""
     parts = []
-    
+
     # 年份标签（P11修复：硬编码传递，禁止LLM推断）
     year_labels = {}
     if ctx.wind and ctx.wind._year_labels:
@@ -1110,7 +1111,7 @@ def _build_wind_summary(ctx: DataContext) -> str:
                 parts.append(f"- {field_name}[{i}] = {label}")
         parts.append("- **禁止自行推断年份，必须使用上述标注**")
         parts.append("")
-    
+
     if ctx.wind:
         if ctx.wind.quote:
             parts.append(f"### 实时行情\n{ctx.wind.quote}")
@@ -1187,7 +1188,7 @@ def _generate_chapter(
     chapter_num: int,
     prompt: str,
     ctx: DataContext,
-    llm_caller: Optional[Callable[[str, str], str]] = None,
+    llm_caller: Callable[[str, str], str] | None = None,
     max_format_retries: int = 3,  # 从2增加到3，提高格式遵从度
     *,
     deadline: float | None = None,  # v3.1 P0-B-1：keyword-only，旧调用零修改兼容
@@ -1208,7 +1209,7 @@ def _generate_chapter(
         章节 Markdown 内容
     """
     from .quality.structural_check import structural_check
-    
+
     chapter_def = CHAPTERS[chapter_num]
     chapter_name = f"第{chapter_num}章: {chapter_def['title']}"
 
@@ -1220,9 +1221,9 @@ def _generate_chapter(
                     logger.info(f"调用 LLM 生成 {chapter_name}")
                 else:
                     logger.info(f"格式验证失败，重试 {attempt}/{max_format_retries}: {chapter_name}")
-                
+
                 content = caller(chapter_name, prompt)  # v3.1：经 deadline guard 的 caller（原 llm_caller）
-                
+
                 # T4: 清洗AI生成痕迹
                 content, violations = clean_ai_artifacts(content)
                 if violations:
@@ -1251,7 +1252,7 @@ def _generate_chapter(
                             )
                         _advc_unresolved = _clean.unresolved
                         _advc_hints = _clean.hints
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     logger.warning(f"ADVC 清洗失败（非阻断）: {e}")
                 if _advc_hints:
                     logger.info(
@@ -1261,7 +1262,7 @@ def _generate_chapter(
 
                 # 格式验证
                 check_result = structural_check(f"ch{chapter_num}", content)
-                
+
                 # 前端闸门1-5（HGF 驱动：数值量级/空章/空壳/财年/币值）
                 gate_issues = []
                 try:
@@ -1273,7 +1274,7 @@ def _generate_chapter(
                     )
                     if not gate_result.passed:
                         gate_issues = [v.message for v in gate_result.violations[:4]]
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     logger.warning(f"前端闸门执行失败（非阻断）: {e}")
 
                 # FiscalSemantics 第 3 层：生成时财年校验（历史引用未标注 → 重试补标注）
@@ -1286,11 +1287,11 @@ def _generate_chapter(
                     )
                     if fiscal_issues:
                         logger.warning(f"{chapter_name} 历史财年引用未标注 {len(fiscal_issues)} 处（FiscalSemantics）")
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     logger.warning(f"财年校验失败（非阻断）: {e}")
 
                 all_issues = list(check_result.issues) + gate_issues + fiscal_issues
-                
+
                 if check_result.passed and not gate_issues and not fiscal_issues:
                     logger.info(f"{chapter_name} 生成完成: {len(content)} 字符, 格式+闸门+财年验证通过")
                     return content
@@ -1322,7 +1323,7 @@ def _generate_chapter(
                         f"gate={gate_issues[:3]}), 已达最大重试次数，返回当前内容"
                     )
                     return content
-                    
+
             except WallClockDeadlineExceeded as e:           # v3.1：deadline 不可重试，立即降级
                 logger.error(f"{chapter_name} 墙钟预算耗尽，不重试: {e}")
                 return _build_insufficient_data_response(chapter_num, ctx, f"墙钟预算耗尽: {e}")
@@ -1334,7 +1335,7 @@ def _generate_chapter(
                 if attempt == max_format_retries:
                     # 降级: 输出数据不足提示
                     return _build_insufficient_data_response(chapter_num, ctx, str(e))
-        
+
         # 不应该到达这里，但作为安全措施
         return _build_insufficient_data_response(chapter_num, ctx, "生成失败")
     else:
@@ -1416,9 +1417,9 @@ def _build_insufficient_data_response(
 
 def _write_chapters(
     ctx: DataContext,
-    llm_caller: Optional[Callable[[str, str], str]] = None,
-    checkpoint: Optional[Any] = None,
-    anch_hypothesis: Optional[dict] = None,
+    llm_caller: Callable[[str, str], str] | None = None,
+    checkpoint: Any | None = None,
+    anch_hypothesis: dict | None = None,
 ) -> dict[int, str]:
     """逐章写作（第1-9章）
 
@@ -1462,12 +1463,12 @@ def _write_chapters(
 
         try:
             prompt = _build_chapter_prompt(chapter_num, ctx, chapters)
-            
+
             # ANCH注入：将投资假设注入到章节prompt中
             if anch_hypothesis:
                 anch_text = _format_anch_for_prompt(anch_hypothesis)
                 prompt += f"\n\n## 投资论点锚定（ANCH）\n{anch_text}\n\n请在分析中引用上述ANCH的key_argument，并在结论中标注验证状态（confirmed/pending/falsified）。"
-            
+
             content = _generate_chapter(chapter_num, prompt, ctx, llm_caller)
             chapters[chapter_num] = content
 
@@ -1502,8 +1503,8 @@ def _write_chapters(
 def _audit_and_fix(
     chapters: dict[int, str],
     ctx: DataContext,
-    llm_caller: Optional[Callable[[str, str], str]] = None,
-    checkpoint: Optional[Any] = None,
+    llm_caller: Callable[[str, str], str] | None = None,
+    checkpoint: Any | None = None,
     max_rounds: int = 1,
     timeout_seconds: int = 300,
 ) -> dict[int, str]:
@@ -1713,30 +1714,30 @@ SYNTHESIS_PROMPT_TEMPLATE = """你是一位资深买方投资分析师。请基�
 def _generate_synthesis_chapter(
     chapters: dict[int, str],
     ctx: DataContext,
-    anch_hypothesis: Optional[dict] = None,
-    llm_caller: Optional[Callable[[str, str], str]] = None,
-) -> Optional[str]:
+    anch_hypothesis: dict | None = None,
+    llm_caller: Callable[[str, str], str] | None = None,
+) -> str | None:
     """生成综合结论章（v4.0新增）
-    
+
     整合各章证据，引用ANCH验证状态，给出统一投资观点。
-    
+
     Args:
         chapters: 前9章内容
         ctx: DataContext
         anch_hypothesis: ANCH投资假设
         llm_caller: LLM调用函数
-    
+
     Returns:
         综合结论章Markdown内容，或None
     """
     if llm_caller is None:
         return None
-    
+
     # 构建ANCH文本
     anch_text = "无ANCH假设"
     if anch_hypothesis:
         anch_text = _format_anch_for_prompt(anch_hypothesis)
-    
+
     # 构建各章摘要
     chapter_summaries = []
     for num in sorted(chapters.keys()):
@@ -1747,7 +1748,7 @@ def _generate_synthesis_chapter(
         summary = content[:500] + "..." if len(content) > 500 else content
         ch_def = CHAPTERS.get(num, {})
         chapter_summaries.append(f"### 第{num}章: {ch_def.get('title', '')}\n{summary}")
-    
+
     prompt = SYNTHESIS_PROMPT_TEMPLATE.format(
         ticker=ctx.ticker,
         company_name=ctx.company_name,
@@ -1755,7 +1756,7 @@ def _generate_synthesis_chapter(
         anch_text=anch_text[:1500],
         chapter_summaries="\n\n".join(chapter_summaries)[:4000],
     )
-    
+
     try:
         content = llm_caller("综合结论", prompt)
         return content
@@ -1767,8 +1768,8 @@ def _generate_synthesis_chapter(
 def _generate_decision_chapter(
     chapters: dict[int, str],
     ctx: DataContext,
-    llm_caller: Optional[Callable[[str, str], str]] = None,
-    checkpoint: Optional[Any] = None,
+    llm_caller: Callable[[str, str], str] | None = None,
+    checkpoint: Any | None = None,
 ) -> str:
     """生成第10章: 是否值得继续深研（决策章）
 
@@ -1897,8 +1898,8 @@ def _build_decision_prompt(chapters: dict[int, str], ctx: DataContext) -> str:
 def _generate_overview_chapter(
     chapters: dict[int, str],
     ctx: DataContext,
-    llm_caller: Optional[Callable[[str, str], str]] = None,
-    checkpoint: Optional[Any] = None,
+    llm_caller: Callable[[str, str], str] | None = None,
+    checkpoint: Any | None = None,
 ) -> str:
     """生成第0章: 投资要点概览
 
@@ -2166,7 +2167,7 @@ def extract_dcf_params(wind_data: dict, shares: float = None) -> dict:
     # --- FCF = 经营活动现金流 - 资本开支 ---
     # 使用"购建固定资产、无形资产和其他长期资产支付的现金"作为资本开支
     cashflow = wind_data.get("cashflow", {})
-    
+
     # 支持多个字段名别名（Wind返回的字段名可能不同）
     def _latest_with_aliases(data: dict, *aliases):
         """按优先级尝试多个字段名，返回第一个有效值"""
@@ -2175,9 +2176,9 @@ def extract_dcf_params(wind_data: dict, shares: float = None) -> dict:
             if val is not None and val != 0:
                 return val
         return 0
-    
-    ocf = _latest_with_aliases(cashflow, 
-        "经营活动现金净流量_TTM", 
+
+    ocf = _latest_with_aliases(cashflow,
+        "经营活动现金净流量_TTM",
         "过去三年每年经营活动之现金流量",
         "经营活动现金流量净额",
         "年经营活动现金流量净额"
@@ -2188,13 +2189,13 @@ def extract_dcf_params(wind_data: dict, shares: float = None) -> dict:
         "投资活动现金流量净额",
         "年投资活动现金流量净额"
     )
-    
+
     if ocf == 0:
         warnings.append("经营活动现金流量净额为 0，FCF 可能不准确")
-    
+
     # FCF = 经营现金流 - 资本开支（资本开支通常为正值）
     fcf_base = ocf - capex
-    
+
     if fcf_base == 0:
         warnings.append("FCF 为 0，估值结果可能无意义")
     elif fcf_base < 0:
@@ -2230,16 +2231,16 @@ def extract_dcf_params(wind_data: dict, shares: float = None) -> dict:
     balance = wind_data.get("balance", {})
     equity_value = _latest(balance, "年所有者权益合计")
     total_debt = _latest(balance, "年负债合计")
-    
+
     # CAPM参数
     rf = 0.023  # 无风险利率（10年期国债）
     beta = 1.2  # Beta系数
     erp = 0.055  # 股权风险溢价
     cost_of_equity = rf + beta * erp  # 0.089 = 8.9%
-    
+
     cost_of_debt = 0.05  # 债务成本
     tax_rate = 0.25  # 税率
-    
+
     total_value = equity_value + total_debt
     if total_value == 0:
         warnings.append("权益+负债为 0，使用默认 WACC 10%")
@@ -2252,7 +2253,7 @@ def extract_dcf_params(wind_data: dict, shares: float = None) -> dict:
     # --- 净负债 ---
     # 使用总负债近似，但对于净现金公司需要调整
     net_debt = total_debt
-    
+
     # 检查是否为净现金公司（权益/负债比 > 3）
     if equity_value > 0 and total_debt > 0 and equity_value / total_debt > 3:
         # 净现金公司，净负债应为负值
@@ -2337,27 +2338,27 @@ ANCH_PROMPT_TEMPLATE = """你是一位资深买方投资分析师。请基于以
 
 def _generate_anch_hypothesis(
     ctx: DataContext,
-    llm_caller: Optional[Callable[[str, str], str]] = None,
-) -> Optional[dict]:
+    llm_caller: Callable[[str, str], str] | None = None,
+) -> dict | None:
     """生成投资论点锚定（ANCH）
-    
+
     Args:
         ctx: 数据上下文
         llm_caller: LLM调用函数
-    
+
     Returns:
         投资假设字典，或None（失败时）
     """
     if llm_caller is None:
         return None
-    
+
     # 构建prompt
     wind_summary = _build_wind_summary(ctx)
     filing_summary = ""
     if ctx.filing and ctx.filing.sections:
         for name, content in list(ctx.filing.sections.items())[:3]:
             filing_summary += f"### {name}\n{content[:500]}\n\n"
-    
+
     prompt = ANCH_PROMPT_TEMPLATE.format(
         ticker=ctx.ticker,
         company_name=ctx.company_name,
@@ -2365,24 +2366,24 @@ def _generate_anch_hypothesis(
         wind_summary=wind_summary[:2000],
         filing_summary=filing_summary[:1500],
     )
-    
+
     # 调用LLM
     try:
         raw_output = llm_caller("ANCH投资论点锚定", prompt)
     except Exception as e:
         logger.error(f"ANCH LLM调用失败: {e}")
         return None
-    
+
     # 解析JSON
     import json
     import re
-    
+
     # 尝试直接解析
     try:
         return json.loads(raw_output)
     except json.JSONDecodeError:
         pass
-    
+
     # 尝试从markdown代码块中提取
     json_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', raw_output, re.DOTALL)
     if json_match:
@@ -2390,7 +2391,7 @@ def _generate_anch_hypothesis(
             return json.loads(json_match.group(1))
         except json.JSONDecodeError:
             pass
-    
+
     # 尝试找到第一个{和最后一个}
     first_brace = raw_output.find('{')
     last_brace = raw_output.rfind('}')
@@ -2399,25 +2400,25 @@ def _generate_anch_hypothesis(
             return json.loads(raw_output[first_brace:last_brace+1])
         except json.JSONDecodeError:
             pass
-    
+
     logger.warning(f"ANCH JSON解析失败，原始输出: {raw_output[:200]}")
     return None
 
 
 def _format_anch_for_prompt(anch: dict) -> str:
     """将ANCH假设格式化为prompt文本
-    
+
     Args:
         anch: ANCH假设字典
-    
+
     Returns:
         格式化的文本
     """
     parts = []
-    
+
     if anch.get("core_thesis"):
         parts.append(f"**核心论点**: {anch['core_thesis']}")
-    
+
     if anch.get("key_arguments"):
         parts.append("\n**核心论点**:")
         for i, arg in enumerate(anch["key_arguments"], 1):
@@ -2428,13 +2429,13 @@ def _format_anch_for_prompt(anch: dict) -> str:
                 parts.append(f"   - 验证: {arg['verification']}")
             if arg.get("falsification"):
                 parts.append(f"   - 证伪: {arg['falsification']}")
-    
+
     if anch.get("bear_case"):
         parts.append(f"\n**最强看空**: {anch['bear_case']}")
-    
+
     if anch.get("catalysts"):
         parts.append(f"\n**催化剂**: {', '.join(anch['catalysts'])}")
-    
+
     return "\n".join(parts)
 
 
@@ -2444,14 +2445,14 @@ def _format_anch_for_prompt(anch: dict) -> str:
 
 def run_analysis(
     ticker: str,
-    company_name: Optional[str] = None,
-    market: Optional[Literal["us", "cn", "hk"]] = None,
-    wind_data: Optional[dict] = None,
-    filing_data: Optional[dict] = None,
-    search_results: Optional[list[dict]] = None,
-    llm_caller: Optional[Callable[[str, str], str]] = None,
-    output_dir: Optional[Path] = None,
-    shares: Optional[float] = None,
+    company_name: str | None = None,
+    market: Literal["us", "cn", "hk"] | None = None,
+    wind_data: dict | None = None,
+    filing_data: dict | None = None,
+    search_results: list[dict] | None = None,
+    llm_caller: Callable[[str, str], str] | None = None,
+    output_dir: Path | None = None,
+    shares: float | None = None,
 ) -> dict:
     """投资分析工作流主入口
 
@@ -2536,7 +2537,6 @@ def run_analysis(
         import os
 
         from .qual_v8.workflow_context import (
-            ComplianceBlockedException,
             QualConfig,
             get_workflow_context,
         )
@@ -2738,19 +2738,19 @@ def run_analysis(
                     if ocf and ocf > 0:
                         dcf_params["fcf_base"] = ocf * 0.8  # 假设FCF=OCF*80%
                         logger.info(f"估值参数校验: 从经营现金流重新计算FCF={dcf_params['fcf_base']:.2f}亿")
-            
+
             # 校验WACC
             wacc = dcf_params.get("wacc", 0)
             if wacc <= 0 or wacc > 0.30:
                 logger.warning(f"估值参数校验: WACC异常={wacc:.1%}，使用默认值8%")
                 dcf_params["wacc"] = 0.08
-            
+
             # 校验永续增长率
             terminal_growth = dcf_params.get("terminal_growth", 0)
             if terminal_growth < 0 or terminal_growth > 0.05:
                 logger.warning(f"估值参数校验: 永续增长率异常={terminal_growth:.1%}，使用默认值2%")
                 dcf_params["terminal_growth"] = 0.02
-            
+
             logger.info("估值参数校验完成")
         except Exception as e:
             logger.warning(f"估值参数校验失败: {e}")
@@ -2774,7 +2774,7 @@ def run_analysis(
     if checkpoint and facts:
         try:
             checkpoint.save_facts(ticker, facts.to_dict())
-            logger.info(f"事实表已持久化到 checkpoint")
+            logger.info("事实表已持久化到 checkpoint")
         except Exception as e:
             logger.warning(f"事实表持久化失败: {e}")
 
@@ -2875,7 +2875,7 @@ def run_analysis(
     # Step 4.5b: v3 组件集成 (T9-T13)
     # ==================================================
     logger.info("Step 4.5b: v3 组件集成")
-    
+
     # T9: FactTable 事实表构建
     if HAS_FACT_TABLE:
         try:
@@ -2963,12 +2963,12 @@ def run_analysis(
             wind_dict = ctx.wind.__dict__ if hasattr(ctx.wind, '__dict__') else {}
             income = wind_dict.get('income', {})
             cashflow = wind_dict.get('cashflow', {})
-            
+
             # 提取最近一年数据
             revenue = income.get('年营业总收入', [0])[-1] if income.get('年营业总收入') else 0
             net_income = income.get('净利润', [0])[-1] if income.get('净利润') else 0
             fcf = cashflow.get('经营活动产生的现金流量净额', [0])[-1] if cashflow.get('经营活动产生的现金流量净额') else 0
-            
+
             if revenue > 0:
                 stress_test_result = run_stress_test(
                     base_revenue=revenue,
@@ -2992,12 +2992,12 @@ def run_analysis(
             GateChecksBlockedError,
             run_gate_checks_in_workflow,
         )
-        
+
         # 提取DCF参数（如果可用）
         dcf_params = None
         if hasattr(ctx, 'dcf_params') and ctx.dcf_params:
             dcf_params = ctx.dcf_params
-        
+
         gate_checks_report = run_gate_checks_in_workflow(
             wind_data=ctx.wind,
             chapters=chapters,
@@ -3025,10 +3025,10 @@ def run_analysis(
     # Step 4.7: 深度审查 + 实质性审查（审查修复循环）
     # ==================================================
     logger.info("Step 4.7: 深度审查 + 实质性审查（审查修复循环）")
-    
+
     try:
         from .quality.v3.review_repair_loop import review_and_repair_loop
-        
+
         # 准备Wind数据
         wind_data_for_check = {}
         if ctx.wind:
@@ -3037,15 +3037,15 @@ def run_analysis(
                 "balance": ctx.wind.balance if hasattr(ctx.wind, 'balance') and isinstance(ctx.wind.balance, dict) else {},
                 "cashflow": ctx.wind.cashflow if hasattr(ctx.wind, 'cashflow') and isinstance(ctx.wind.cashflow, dict) else {},
             }
-        
+
         # 确定行业类型（B4-3：动态映射——复用 v8 adapters.industry_for，替代硬编码"新能源汽车"默认）
         try:
             from .qual_v8.adapters import industry_for as _industry_for
             industry = _industry_for(company_name)
-        except Exception:  # noqa: BLE001
+        except Exception:
             industry = "综合"
         logger.info(f"行业判定: {company_name} → {industry}（B4-3 动态）")
-        
+
         # 执行审查修复循环
         review_result = review_and_repair_loop(
             chapters=chapters,
@@ -3055,15 +3055,15 @@ def run_analysis(
             max_rounds=3,
             industry=industry,
         )
-        
+
         logger.info(f"Step 4.7 审查修复循环完成: passed={review_result.passed}, rounds={review_result.rounds}")
         logger.info(f"  发现问题: {review_result.issues_found}个")
         logger.info(f"  修复问题: {review_result.issues_fixed}个")
-        
+
         if not review_result.passed:
             quality_degraded = True
             degradation_reasons.append(f"审查修复循环未通过: {len(review_result.remaining_issues)}个问题未修复")
-            logger.warning(f"Step 4.7 审查修复循环未通过:")
+            logger.warning("Step 4.7 审查修复循环未通过:")
             for issue in review_result.remaining_issues[:5]:
                 logger.warning(f"  - {issue}")
             if len(review_result.remaining_issues) > 5:
@@ -3076,7 +3076,7 @@ def run_analysis(
     # ==================================================
     # Step 5: 综合结论 + 决策章 + 概览章
     # ==================================================
-    
+
     # 5a: 综合结论章（v4.0新增，引用ANCH）
     synthesis = None
     try:
@@ -3085,7 +3085,7 @@ def run_analysis(
             logger.info("Step 5a 完成: 综合结论章")
     except Exception as e:
         logger.warning(f"Step 5a 综合结论章失败（非阻断）: {e}")
-    
+
     # 5b: 第10章（决策章）
     try:
         decision = _generate_decision_chapter(chapters, ctx, llm_caller, checkpoint)
@@ -3115,7 +3115,7 @@ def run_analysis(
         gate_failures = pre_assembly_gate(chapters, _wind_to_dict(ctx.wind), market=ctx.market)
         if gate_failures:
             logger.warning(f"组装前闸门: {len(gate_failures)} 章未通过 → {list(gate_failures.keys())}")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"组装前闸门执行失败（非阻断）: {e}")
 
     # 组装完整报告
@@ -3176,7 +3176,7 @@ def run_analysis(
                     "severity": "P0",
                     "fix": "使用ContentValidator检测并重新生成"
                 })
-            
+
             # 检测币种混用
             if "港元" in ch_content and "人民币" in ch_content:
                 review_issues.append({
@@ -3185,7 +3185,7 @@ def run_analysis(
                     "severity": "P1",
                     "fix": "使用DataContext统一币种"
                 })
-        
+
         if review_issues:
             logger.info(f"问题转化流程: 发现{len(review_issues)}个可修复问题")
         else:
@@ -3213,7 +3213,7 @@ def run_analysis(
             _g = check_chapter_gates(_ch, _content, _wind_dict, market=ctx.market)
             if not _g.passed:
                 logger.warning(f"B1-3 审计: 第{_ch}章数值闸门未通过: {[v.message for v in _g.violations[:3]]}")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"B1-3 审计 ch0/ch10 失败（非阻断）: {e}")
 
     # ==================================================
@@ -3258,12 +3258,12 @@ def run_analysis(
         try:
             from .quality.v3.metrics import QualMetricsTracker
             tracker = QualMetricsTracker()
-            
+
             # 跟踪核心指标
             tracker.track_metric("gate_checks_execution_rate", value=100.0, unit="%", target=100.0)
             tracker.track_metric("placeholder_rate", value=0.0, unit="%", target=0.0)
             tracker.track_metric("dcf_scenario_difference", value=7.0, unit="%", target=20.0)
-            
+
             # 获取摘要
             summary = tracker.get_summary()
             logger.info(f"QualMetricsTracker: {summary['total_metrics']}个指标已跟踪")

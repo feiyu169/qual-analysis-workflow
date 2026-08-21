@@ -11,10 +11,9 @@
 - F4: 三套估值方法互不收敛
 """
 
-import re
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +33,13 @@ class LogicIssue:
 class LogicResult:
     """逻辑一致性检查结果"""
     passed: bool
-    issues: List[LogicIssue] = field(default_factory=list)
+    issues: list[LogicIssue] = field(default_factory=list)
     score: float = 100.0
 
 
 class LogicConsistencyChecker:
     """逻辑一致性检查器"""
-    
+
     def __init__(self):
         # 估值相关模式
         self.valuation_patterns = {
@@ -64,7 +63,7 @@ class LogicConsistencyChecker:
                 r"收盘.*?(\d+\.?\d*)\s*港元",
             ],
         }
-        
+
         # 投资评级模式
         self.rating_patterns = {
             "评级": [
@@ -84,70 +83,70 @@ class LogicConsistencyChecker:
                 r"安全边际.*?中等",
             ],
         }
-    
-    def check(self, chapters: Dict[int, str]) -> LogicResult:
+
+    def check(self, chapters: dict[int, str]) -> LogicResult:
         """
         检查逻辑一致性
-        
+
         Args:
             chapters: 各章节内容 {chapter_num: content}
-        
+
         Returns:
             LogicResult
         """
         issues = []
-        
+
         # 1. 检查估值逻辑一致性
         valuation_issues = self._check_valuation_consistency(chapters)
         issues.extend(valuation_issues)
-        
+
         # 2. 检查评级逻辑一致性
         rating_issues = self._check_rating_consistency(chapters)
         issues.extend(rating_issues)
-        
+
         # 3. 检查投资逻辑一致性
         logic_issues = self._check_investment_logic(chapters)
         issues.extend(logic_issues)
-        
+
         # 计算评分
         fatal_count = sum(1 for i in issues if i.severity == "fatal")
         important_count = sum(1 for i in issues if i.severity == "important")
         suggestion_count = sum(1 for i in issues if i.severity == "suggestion")
-        
+
         score = 100.0
         score -= fatal_count * 40
         score -= important_count * 15
         score -= suggestion_count * 5
         score = max(0.0, min(100.0, score))
-        
+
         passed = fatal_count == 0 and score >= 60.0
-        
+
         if not passed:
             logger.warning(f"逻辑一致性检查不通过: score={score:.0f}, issues={len(issues)}")
-        
+
         return LogicResult(
             passed=passed,
             issues=issues,
             score=score,
         )
-    
-    def _check_valuation_consistency(self, chapters: Dict[int, str]) -> List[LogicIssue]:
+
+    def _check_valuation_consistency(self, chapters: dict[int, str]) -> list[LogicIssue]:
         """检查估值逻辑一致性"""
         issues = []
-        
+
         # 提取估值相关数据
         valuation_data = self._extract_valuation_data(chapters)
-        
+
         # 检查1：情景分析基准值 vs 上行空间
         if "情景分析" in valuation_data and "上行空间" in valuation_data:
             base_value = valuation_data["情景分析"].get("基准", 0)
             upside = valuation_data["上行空间"].get("上行空间", 0)
             current_price = valuation_data.get("当前股价", {}).get("当前股价", 0)
-            
+
             if base_value > 0 and current_price > 0:
                 # 计算隐含上行空间
                 implied_upside = (base_value / current_price - 1) * 100
-                
+
                 # 如果声称的上行空间与隐含上行空间差距超过50%，报告问题
                 if abs(upside - implied_upside) > 50:
                     # 找到相关章节和行号
@@ -163,17 +162,17 @@ class LogicConsistencyChecker:
                                 content=f"基准值{base_value}元 vs 上行空间{upside}%",
                             ))
                             break
-        
+
         # 检查2：情景分析基准值 vs 估值判断
         if "情景分析" in valuation_data and "估值判断" in valuation_data:
             base_value = valuation_data["情景分析"].get("基准", 0)
             valuation_judgment = valuation_data["估值判断"].get("估值判断", "")
             current_price = valuation_data.get("当前股价", {}).get("当前股价", 0)
-            
+
             if base_value > 0 and current_price > 0:
                 # 判断是否低估/高估
                 ratio = base_value / current_price
-                
+
                 if ratio < 0.8 and "低估" not in valuation_judgment:
                     # 基准值低于现价20%以上，但叙述说"合理"或"低估"
                     for ch_num, content in chapters.items():
@@ -188,12 +187,12 @@ class LogicConsistencyChecker:
                                 content=f"基准值{base_value}元 vs 现价{current_price}港元",
                             ))
                             break
-        
+
         # 检查3：三套估值方法是否收敛
         if "情景分析" in valuation_data and "概率加权" in valuation_data:
             base_value = valuation_data["情景分析"].get("基准", 0)
             weighted_value = valuation_data["概率加权"].get("概率加权", 0)
-            
+
             if base_value > 0 and weighted_value > 0:
                 # 如果基准值和概率加权值差距超过100%，报告问题
                 if abs(weighted_value - base_value) / base_value > 1.0:
@@ -209,21 +208,21 @@ class LogicConsistencyChecker:
                                 content=f"基准值{base_value}元 vs 概率加权值{weighted_value}元",
                             ))
                             break
-        
+
         return issues
-    
-    def _check_rating_consistency(self, chapters: Dict[int, str]) -> List[LogicIssue]:
+
+    def _check_rating_consistency(self, chapters: dict[int, str]) -> list[LogicIssue]:
         """检查评级逻辑一致性"""
         issues = []
-        
+
         # 提取评级相关数据
         rating_data = self._extract_rating_data(chapters)
-        
+
         # 检查1：评级与估值判断是否一致
         if "评级" in rating_data and "估值判断" in rating_data:
             rating = rating_data["评级"]
             judgment = rating_data["估值判断"]
-            
+
             # 买入评级应该对应低估判断
             if rating == "买入" and "高估" in judgment:
                 for ch_num, content in chapters.items():
@@ -238,7 +237,7 @@ class LogicConsistencyChecker:
                             content=f"评级{rating} vs 估值{judgment}",
                         ))
                         break
-            
+
             # 中性评级应该对应合理判断
             if rating == "中性" and ("低估" in judgment or "高估" in judgment):
                 for ch_num, content in chapters.items():
@@ -253,21 +252,21 @@ class LogicConsistencyChecker:
                             content=f"评级{rating} vs 估值{judgment}",
                         ))
                         break
-        
+
         return issues
-    
-    def _check_investment_logic(self, chapters: Dict[int, str]) -> List[LogicIssue]:
+
+    def _check_investment_logic(self, chapters: dict[int, str]) -> list[LogicIssue]:
         """检查投资逻辑一致性"""
         issues = []
-        
+
         # 提取投资逻辑相关数据
         logic_data = self._extract_investment_logic(chapters)
-        
+
         # 检查看多逻辑与看空逻辑是否平衡
         if "看多逻辑" in logic_data and "看空逻辑" in logic_data:
             bullish = logic_data["看多逻辑"]
             bearish = logic_data["看空逻辑"]
-            
+
             # 如果看多逻辑明显强于看空逻辑，但评级是中性，可能有问题
             if len(bullish) > len(bearish) * 2:
                 for ch_num, content in chapters.items():
@@ -282,13 +281,13 @@ class LogicConsistencyChecker:
                             content=f"看多{len(bullish)}条 vs 看空{len(bearish)}条",
                         ))
                         break
-        
+
         return issues
-    
-    def _extract_valuation_data(self, chapters: Dict[int, str]) -> Dict:
+
+    def _extract_valuation_data(self, chapters: dict[int, str]) -> dict:
         """提取估值相关数据"""
         data = {}
-        
+
         for ch_num, content in chapters.items():
             # 提取情景分析
             for pattern in self.valuation_patterns["情景分析"]:
@@ -302,31 +301,31 @@ class LogicConsistencyChecker:
                         data["情景分析"]["乐观"] = float(match.group(1))
                     elif "悲观" in pattern:
                         data["情景分析"]["悲观"] = float(match.group(1))
-            
+
             # 提取概率加权
             for pattern in self.valuation_patterns["概率加权"]:
                 match = re.search(pattern, content)
                 if match:
                     data["概率加权"] = {"概率加权": float(match.group(1))}
-            
+
             # 提取上行空间
             for pattern in self.valuation_patterns["上行空间"]:
                 match = re.search(pattern, content)
                 if match:
                     data["上行空间"] = {"上行空间": float(match.group(1))}
-            
+
             # 提取当前股价
             for pattern in self.valuation_patterns["当前股价"]:
                 match = re.search(pattern, content)
                 if match:
                     data["当前股价"] = {"当前股价": float(match.group(1))}
-        
+
         return data
-    
-    def _extract_rating_data(self, chapters: Dict[int, str]) -> Dict:
+
+    def _extract_rating_data(self, chapters: dict[int, str]) -> dict:
         """提取评级相关数据"""
         data = {}
-        
+
         for ch_num, content in chapters.items():
             # 提取评级
             for pattern in self.rating_patterns["评级"]:
@@ -334,33 +333,33 @@ class LogicConsistencyChecker:
                 if match:
                     data["评级"] = match.group(1)
                     break
-            
+
             # 提取估值判断
             for pattern in self.rating_patterns["估值判断"]:
                 match = re.search(pattern, content)
                 if match:
                     data["估值判断"] = match.group(0)
                     break
-        
+
         return data
-    
-    def _extract_investment_logic(self, chapters: Dict[int, str]) -> Dict:
+
+    def _extract_investment_logic(self, chapters: dict[int, str]) -> dict:
         """提取投资逻辑"""
         data = {}
-        
+
         for ch_num, content in chapters.items():
             # 提取看多逻辑
             if "看多" in content:
                 bullish_points = re.findall(r"看多.*?[。\n]", content)
                 data["看多逻辑"] = bullish_points
-            
+
             # 提取看空逻辑
             if "看空" in content:
                 bearish_points = re.findall(r"看空.*?[。\n]", content)
                 data["看空逻辑"] = bearish_points
-        
+
         return data
-    
+
     def _find_line_number(self, content: str, keyword: str) -> int:
         """查找关键词所在行号"""
         lines = content.split("\n")
@@ -370,13 +369,13 @@ class LogicConsistencyChecker:
         return 0
 
 
-def check_logic_consistency(chapters: Dict[int, str]) -> LogicResult:
+def check_logic_consistency(chapters: dict[int, str]) -> LogicResult:
     """
     检查逻辑一致性（入口函数）
-    
+
     Args:
         chapters: 各章节内容 {chapter_num: content}
-    
+
     Returns:
         LogicResult
     """

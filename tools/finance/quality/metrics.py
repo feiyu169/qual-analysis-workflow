@@ -7,10 +7,9 @@ Qual流程度量追踪器（目的性审计+关联性校准）
 3. 关联性校准
 """
 
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import List, Dict, Optional
 import logging
+from dataclasses import dataclass
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -33,14 +32,14 @@ class QualityMetric:
     unit: str
     timestamp: str
     target: float = None
-    audit: Optional[MetricAudit] = None
+    audit: MetricAudit | None = None
 
 
 class QualMetricsTracker:
     """Qual流程度量追踪器"""
-    
+
     # 核心指标定义
-    METRIC_DEFINITIONS: Dict[str, MetricAudit] = {
+    METRIC_DEFINITIONS: dict[str, MetricAudit] = {
         "gate_checks_execution_rate": MetricAudit(
             metric_name="gate_checks_execution_rate",
             purpose="确保Gate Checks 100%执行",
@@ -112,14 +111,14 @@ class QualMetricsTracker:
             correlation_with_defects=0.5,
         ),
     }
-    
+
     def __init__(self):
-        self.metrics: List[QualityMetric] = []
-    
+        self.metrics: list[QualityMetric] = []
+
     def track_metric(self, metric_name: str, value: float, unit: str, target: float = None):
         """追踪指标"""
         audit = self.METRIC_DEFINITIONS.get(metric_name)
-        
+
         self.metrics.append(QualityMetric(
             metric_name=metric_name,
             value=value,
@@ -128,86 +127,86 @@ class QualMetricsTracker:
             target=target,
             audit=audit,
         ))
-    
-    def get_metric(self, metric_name: str) -> List[QualityMetric]:
+
+    def get_metric(self, metric_name: str) -> list[QualityMetric]:
         """获取指标历史"""
         return [m for m in self.metrics if m.metric_name == metric_name]
-    
+
     def get_latest_metric(self, metric_name: str) -> QualityMetric:
         """获取最新指标"""
         metrics = self.get_metric(metric_name)
         if metrics:
             return metrics[-1]
         return None
-    
-    def calibrate_metrics(self, historical_data: List[Dict]):
+
+    def calibrate_metrics(self, historical_data: list[dict]):
         """校准指标"""
         calibration_record = {
             "timestamp": datetime.now().isoformat(),
             "adjustments": [],
         }
-        
+
         return calibration_record
-    
+
     def validate_correlation(self, metric_name: str, defect_count: int) -> float:
         """验证指标与缺陷的关联性"""
         metrics = self.get_metric(metric_name)
         if len(metrics) < 2:
             return 0
-        
+
         # 简化的关联性计算
         values = [m.value for m in metrics]
         avg_value = sum(values) / len(values)
-        
+
         # 计算与缺陷的关联性
         if defect_count > 0:
             correlation = min(1.0, avg_value / defect_count)
         else:
             correlation = 1.0 if avg_value > 0 else 0
-        
+
         return correlation
-    
+
     def generate_report(self) -> str:
         """生成度量报告"""
         report = "# Qual流程度量报告\n\n"
-        
+
         # 按指标分组
         metric_names = set(m.metric_name for m in self.metrics)
-        
+
         for name in sorted(metric_names):
             metrics = self.get_metric(name)
             latest = metrics[-1]
-            
+
             report += f"## {name}\n"
             report += f"- 当前值: {latest.value} {latest.unit}\n"
-            
+
             if latest.target:
                 report += f"- 目标值: {latest.target} {latest.unit}\n"
-                
+
                 if latest.value >= latest.target:
-                    report += f"- 状态: ✅ 达标\n"
+                    report += "- 状态: ✅ 达标\n"
                 else:
-                    report += f"- 状态: ❌ 未达标\n"
-            
+                    report += "- 状态: ❌ 未达标\n"
+
             # 显示审计信息
             if latest.audit:
                 report += f"- 目的: {latest.audit.purpose}\n"
                 report += f"- 目标值依据: {latest.audit.target_rationale}\n"
                 report += f"- 与缺陷关联性: {latest.audit.correlation_with_defects:.2f}\n"
                 report += f"- 最后校准: {latest.audit.last_calibrated}\n"
-            
+
             report += "\n"
-        
+
         return report
-    
-    def get_summary(self) -> Dict:
+
+    def get_summary(self) -> dict:
         """获取摘要"""
         summary = {
             "total_metrics": len(set(m.metric_name for m in self.metrics)),
             "total_records": len(self.metrics),
             "metrics": {},
         }
-        
+
         for name in set(m.metric_name for m in self.metrics):
             latest = self.get_latest_metric(name)
             if latest:
@@ -216,5 +215,5 @@ class QualMetricsTracker:
                     "target": latest.target,
                     "status": "达标" if latest.target and latest.value >= latest.target else "未达标",
                 }
-        
+
         return summary

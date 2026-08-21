@@ -11,9 +11,8 @@ Gate 4.4: 断点恢复 (Checkpoint Manager)
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ class CheckpointManager:
     def __init__(
         self,
         ticker: str,
-        state_dir: Optional[Path] = None,
+        state_dir: Path | None = None,
     ):
         """初始化
 
@@ -102,13 +101,13 @@ class CheckpointManager:
         steps = self._load_steps()
         steps[step] = {
             "completed": True,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "result": self._serialize_result(result),
         }
         self._save_steps(steps)
         logger.info(f"步骤保存: {self.ticker}/{step}")
 
-    def get_step_result(self, ticker: str, step: str) -> Optional[dict]:
+    def get_step_result(self, ticker: str, step: str) -> dict | None:
         """获取步骤执行结果
 
         Args:
@@ -141,7 +140,7 @@ class CheckpointManager:
         steps = self._load_steps()
         if step in steps:
             steps[step]["completed"] = False
-            steps[step]["reset_at"] = datetime.now(timezone.utc).isoformat()
+            steps[step]["reset_at"] = datetime.now(UTC).isoformat()
             self._save_steps(steps)
             logger.info(f"步骤重置: {self.ticker}/{step}")
 
@@ -180,7 +179,7 @@ class CheckpointManager:
             f"({len(content)} 字符)"
         )
 
-    def get_chapter(self, chapter_id: str) -> Optional[str]:
+    def get_chapter(self, chapter_id: str) -> str | None:
         """获取章节内容
 
         Args:
@@ -212,7 +211,7 @@ class CheckpointManager:
         self,
         ticker: str,
         chapter_id: str,
-        audit_result: Optional[dict] = None,
+        audit_result: dict | None = None,
     ) -> None:
         """标记章节已审计
 
@@ -225,7 +224,7 @@ class CheckpointManager:
         record = {
             "chapter_id": chapter_id,
             "audited": True,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         if audit_result:
             record["audit_result"] = self._serialize_result(audit_result)
@@ -253,7 +252,7 @@ class CheckpointManager:
         repair_file = repair_dir / f"{chapter_id}.json"
         record = {
             "chapter_id": chapter_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "rounds": len(history),
             "history": self._serialize_result(history),
         }
@@ -277,7 +276,7 @@ class CheckpointManager:
         )
         logger.info(f"事实表保存: {self.ticker}")
 
-    def load_facts(self, ticker: str) -> Optional[dict]:
+    def load_facts(self, ticker: str) -> dict | None:
         """从 checkpoint 加载事实表
 
         Args:
@@ -315,7 +314,7 @@ class CheckpointManager:
         except (json.JSONDecodeError, KeyError):
             return False
 
-    def get_audit_result(self, chapter_id: str) -> Optional[dict]:
+    def get_audit_result(self, chapter_id: str) -> dict | None:
         """获取章节审计记录
 
         Args:
@@ -344,7 +343,7 @@ class CheckpointManager:
         """
         data = {
             "ticker": self.ticker,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
             **metadata,
         }
         self._metadata_file.write_text(
@@ -352,7 +351,7 @@ class CheckpointManager:
             encoding="utf-8",
         )
 
-    def get_metadata(self) -> Optional[dict]:
+    def get_metadata(self) -> dict | None:
         """获取分析元数据
 
         Returns:

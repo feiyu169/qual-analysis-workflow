@@ -119,7 +119,7 @@ SUPPLEMENTARY_COMPARABLES = {
 def compute_dcf(
     financials: dict,
     shares: float,
-    wacc: float = None,  # 使用CAPM计算  # noqa: RUF013
+    wacc: float = None,  # 使用CAPM计算
     terminal_growth: float = 0.02,
     projection_years: int = 5,
     revenue_growth_rates: list[float] | None = None,
@@ -150,7 +150,7 @@ def compute_dcf(
         tax_rate = 0.25
         # 假设D/(D+E) = 15%
         wacc = ke * 0.85 + kd * (1 - tax_rate) * 0.15  # 0.081
-    
+
     result = DCFResult(wacc=wacc, terminal_growth=terminal_growth)
 
     # 获取历史财务数据
@@ -426,7 +426,7 @@ def compute_full_valuation(
     financials: dict,
     shares: float,
     current_price: float,
-    wacc: float = None,  # 使用CAPM计算  # noqa: RUF013
+    wacc: float = None,  # 使用CAPM计算
     terminal_growth: float = 0.02,
 ) -> ValuationResult:
     """
@@ -451,7 +451,7 @@ def compute_full_valuation(
             # B2a-3：亏损公司 DCF fail-fast → 降级链
             result.degraded = True
             result.degradation_reason = "亏损公司，DCF 不适用（fail-fast）"
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"DCF估值失败: {e}")
         result.warnings.append(f"DCF失败: {e}")
 
@@ -481,7 +481,7 @@ def compute_full_valuation(
                     result.value_per_share = result.comparable_median_ps * revenue_per_share
                     result.degraded = True
                     result.degradation_reason = "亏损公司，DCF/PE 不适用，使用可比公司PS（市销率）"
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"可比公司分析失败: {e}")
         result.warnings.append(f"可比公司失败: {e}")
 
@@ -503,7 +503,7 @@ def compute_full_valuation(
         result.target_price_bull = targets.get('bull')
         result.target_price_base = targets.get('base')
         result.target_price_bear = targets.get('bear')
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"目标价推导失败: {e}")
         result.warnings.append(f"目标价失败: {e}")
 
@@ -578,10 +578,10 @@ def implied_growth_from_dcf(
     net_debt: float = 0.0,
 ) -> dict:
     """DCF反推隐含FCF增长率
-    
+
     假设当前股价合理，反推隐含的FCF增长率。
     使用二分法搜索。
-    
+
     Args:
         current_price: 当前股价（元）
         shares: 总股本（亿股）
@@ -590,7 +590,7 @@ def implied_growth_from_dcf(
         terminal_growth: 永续增长率（默认3%）
         projection_years: 预测年数（默认5年）
         net_debt: 净负债（亿元）
-    
+
     Returns:
         {
             "implied_growth": 隐含增长率,
@@ -600,24 +600,24 @@ def implied_growth_from_dcf(
     """
     if current_price <= 0 or shares <= 0 or fcf_base <= 0:
         return {"implied_growth": 0, "method": "DCF反推", "error": "输入参数无效"}
-    
+
     # 目标企业价值
     target_ev = current_price * shares + net_debt
-    
+
     # 二分法搜索隐含增长率
     low, high = -0.5, 1.0  # 增长率范围：-50% 到 100%
     tolerance = 0.001
     max_iterations = 100
-    
+
     for _ in range(max_iterations):
         mid = (low + high) / 2
-        
+
         # 计算FCF现值
         fcf_pv = 0
         for i in range(projection_years):
             fcf = fcf_base * (1 + mid) ** (i + 1)
             fcf_pv += fcf / (1 + wacc) ** (i + 1)
-        
+
         # 计算终值
         last_fcf = fcf_base * (1 + mid) ** projection_years
         next_fcf = last_fcf * (1 + terminal_growth)
@@ -626,20 +626,20 @@ def implied_growth_from_dcf(
         else:
             terminal_value = next_fcf / (wacc - terminal_growth)
         terminal_value_pv = terminal_value / (1 + wacc) ** projection_years
-        
+
         # 企业价值
         ev = fcf_pv + terminal_value_pv
-        
+
         if abs(ev - target_ev) < tolerance:
             break
-        
+
         if ev < target_ev:
             low = mid
         else:
             high = mid
-    
+
     implied_growth = (low + high) / 2
-    
+
     return {
         "implied_growth": implied_growth,
         "implied_growth_pct": f"{implied_growth:.1%}",
@@ -660,15 +660,15 @@ def implied_growth_from_pe(
     retention_rate: float = 0.6,
 ) -> dict:
     """PE反推隐含增长率（Gordon Growth Model）
-    
+
     g = k - (1-b)/PE
     但需要已知k（折现率），这里用ROE×b作为基本面可持续增速参考
-    
+
     Args:
         pe: PE倍数
         roe: ROE（%）
         retention_rate: 留存收益比例（默认60%）
-    
+
     Returns:
         {
             "sustainable_growth": 基本面可持续增速,
@@ -678,7 +678,7 @@ def implied_growth_from_pe(
     """
     # 基本面可持续增速 = ROE × 留存率
     sustainable_growth = (roe / 100) * retention_rate
-    
+
     return {
         "sustainable_growth": sustainable_growth,
         "sustainable_growth_pct": f"{sustainable_growth:.1%}",
@@ -704,13 +704,13 @@ def compute_comparable_valuation(
     target_bvps: float = 0.0,
 ) -> dict:
     """可比公司估值计算
-    
+
     Args:
         target_ticker: 目标公司代码
         comparable_companies: 可比公司列表 [{"name": str, "pe": float, "pb": float, "ps": float}]
         target_eps: 目标公司每股收益
         target_bvps: 目标公司每股净资产
-    
+
     Returns:
         {
             "pe_median": PE中位数,
@@ -723,27 +723,27 @@ def compute_comparable_valuation(
     pe_values = [c["pe"] for c in comparable_companies if c.get("pe") and c["pe"] > 0]
     pb_values = [c["pb"] for c in comparable_companies if c.get("pb") and c["pb"] > 0]
     ps_values = [c["ps"] for c in comparable_companies if c.get("ps") and c["ps"] > 0]  # noqa: F841
-    
+
     result = {"method": "可比公司法", "companies_count": len(comparable_companies)}
-    
+
     if pe_values:
         pe_sorted = sorted(pe_values)
         pe_median = pe_sorted[len(pe_sorted) // 2]
         pe_q1 = pe_sorted[len(pe_sorted) // 4]
         pe_q3 = pe_sorted[3 * len(pe_sorted) // 4]
-        
+
         result["pe_median"] = pe_median
         result["pe_range"] = (pe_q1, pe_q3)
         if target_eps > 0:
             result["implied_value_pe"] = pe_median * target_eps
-    
+
     if pb_values:
         pb_sorted = sorted(pb_values)
         pb_median = pb_sorted[len(pb_sorted) // 2]
         result["pb_median"] = pb_median
         if target_bvps > 0:
             result["implied_value_pb"] = pb_median * target_bvps
-    
+
     # 估值摘要
     summary_parts = []
     if "implied_value_pe" in result:
@@ -751,5 +751,5 @@ def compute_comparable_valuation(
     if "implied_value_pb" in result:
         summary_parts.append(f"PB法: {result['implied_value_pb']:.1f}元")
     result["summary"] = "可比公司估值: " + ", ".join(summary_parts) if summary_parts else "无可比数据"
-    
+
     return result

@@ -10,7 +10,6 @@ quality/falsification.py — 证伪指标模块（T14修复）
 """
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -89,19 +88,19 @@ SF_EXPRESS_METRICS = [
 
 
 def create_falsification_metrics(
-    custom_metrics: Optional[list[dict]] = None,
+    custom_metrics: list[dict] | None = None,
 ) -> list[FalsificationMetric]:
     """创建证伪指标列表
-    
+
     Args:
         custom_metrics: 自定义指标列表，格式同SF_EXPRESS_METRICS
-    
+
     Returns:
         证伪指标列表
     """
     metrics_data = custom_metrics or SF_EXPRESS_METRICS
     metrics = []
-    
+
     for m in metrics_data:
         metrics.append(FalsificationMetric(
             name=m["name"],
@@ -112,20 +111,20 @@ def create_falsification_metrics(
             disclosure_frequency=m["disclosure_frequency"],
             impact_if_falsified=m["impact_if_falsified"],
         ))
-    
+
     return metrics
 
 
 def evaluate_falsification(
     metrics: list[FalsificationMetric],
-    current_data: Optional[dict] = None,
+    current_data: dict | None = None,
 ) -> FalsificationResult:
     """评估证伪状态
-    
+
     Args:
         metrics: 证伪指标列表
         current_data: 当前数据 {"指标名": 值}
-    
+
     Returns:
         证伪分析结果
     """
@@ -133,21 +132,21 @@ def evaluate_falsification(
         for metric in metrics:
             if metric.name in current_data:
                 metric.current_value = current_data[metric.name]
-    
+
     falsified_count = 0
     pending_count = 0
-    
+
     for metric in metrics:
         if metric.direction == "below":
             metric.is_falsified = metric.current_value < metric.falsification_threshold
         elif metric.direction == "above":
             metric.is_falsified = metric.current_value > metric.falsification_threshold
-        
+
         if metric.is_falsified:
             falsified_count += 1
         else:
             pending_count += 1
-    
+
     # 整体状态
     if falsified_count == 0:
         overall_status = "valid"
@@ -158,7 +157,7 @@ def evaluate_falsification(
     else:
         overall_status = "partially_falsified"
         summary = f"部分证伪指标触发（{falsified_count}/{len(metrics)}），需重新评估"
-    
+
     return FalsificationResult(
         metrics=metrics,
         falsified_count=falsified_count,
@@ -170,10 +169,10 @@ def evaluate_falsification(
 
 def format_falsification_report(result: FalsificationResult) -> str:
     """格式化证伪分析报告
-    
+
     Args:
         result: 证伪分析结果
-    
+
     Returns:
         Markdown格式报告
     """
@@ -182,10 +181,10 @@ def format_falsification_report(result: FalsificationResult) -> str:
     lines.append("")
     lines.append(f"**整体状态**: {result.summary}")
     lines.append("")
-    
+
     lines.append("| 指标 | 当前值 | 证伪阈值 | 状态 | 数据来源 | 披露频率 | 证伪影响 |")
     lines.append("|------|--------|----------|------|----------|----------|----------|")
-    
+
     for m in result.metrics:
         status = "❌ 已证伪" if m.is_falsified else "✅ 有效"
         threshold = f"{'<' if m.direction == 'below' else '>'}{m.falsification_threshold}"
@@ -193,6 +192,6 @@ def format_falsification_report(result: FalsificationResult) -> str:
             f"| {m.name} | {m.current_value} | {threshold} | {status} "
             f"| {m.data_source} | {m.disclosure_frequency} | {m.impact_if_falsified[:20]}... |"
         )
-    
+
     lines.append("")
     return "\n".join(lines)

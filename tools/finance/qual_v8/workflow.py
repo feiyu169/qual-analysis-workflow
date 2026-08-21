@@ -194,11 +194,11 @@ _FLOW_DEFINITION: dict[str, Any] = {
 
 class QualWorkflow:
     """Qual工作流引擎"""
-    
+
     def __init__(self, config: WorkflowConfig | None = None):
         self.config = config or WorkflowConfig()
         self.run_id = str(uuid.uuid4())
-        
+
         # 初始化组件
         self.state_machine = StateMachine()
         self.gate_engine = GateEngine()
@@ -211,14 +211,14 @@ class QualWorkflow:
             n: CircuitBreaker(name=f"gate_{n}", failure_threshold=2, reset_timeout=60)
             for n in range(9)
         }
-        
+
         # 注册Gate
         self._register_gates()
-    
+
     def _get_flow_definition(self) -> dict[str, Any]:
         """获取流程定义（gate_0~8 全量，供第三方监督）"""
         return _FLOW_DEFINITION
-    
+
     def _register_gates(self):
         """注册所有Gate"""
         gates = [
@@ -232,13 +232,13 @@ class QualWorkflow:
             Gate7ProblemTransformation(),
             Gate8FinalValidation(),
         ]
-        
+
         for gate in gates:
             self.gate_engine.register_gate(gate)
-        
+
         # 初始化状态机
         self.state_machine.initialize_gates(list(range(9)))  # Gate 0-8
-    
+
     def execute(self, context: dict[str, Any]) -> dict[str, Any]:
         """执行工作流
 
@@ -328,31 +328,31 @@ class QualWorkflow:
                         gate_num=gate_num, passed=False, score=0.0,
                         details={"error": "熔断器打开"},
                         errors=["熔断器打开，跳过执行"], warnings=[],
-                        execution_time=0.0, timestamp=datetime.now().isoformat(),  # noqa: DTZ005
+                        execution_time=0.0, timestamp=datetime.now().isoformat(),
                     )
                     break
                 if attempts > 0:
                     context["gate_retry_errors"] = result.errors if result else []
                     logger.info(f"Gate {gate_num} 第{attempts}次重试 (上次errors={context['gate_retry_errors'][:2]})")
 
-                start_time = datetime.now()  # noqa: DTZ005
+                start_time = datetime.now()
                 try:
                     result = self.gate_engine.execute_gate(gate_num, context)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     logger.error(f"Gate {gate_num} 执行异常: {e}")
                     result = GateResult(
                         gate_num=gate_num, passed=False, score=0.0,
                         details={"error": str(e)}, errors=[f"执行异常: {e}"],
                         warnings=[], execution_time=0.0,
-                        timestamp=datetime.now().isoformat(),  # noqa: DTZ005
+                        timestamp=datetime.now().isoformat(),
                     )
-                end_time = datetime.now()  # noqa: DTZ005
+                end_time = datetime.now()
                 result.execution_time = (end_time - start_time).total_seconds()
 
                 # 追加 check_criteria 结果（真实校验，不再空转）
                 try:
                     criteria_passed = gate.check_criteria(context)
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     logger.warning(f"Gate {gate_num} check_criteria 异常: {e}")
                     criteria_passed = False
                 result.details["check_criteria_passed"] = criteria_passed
@@ -437,7 +437,7 @@ class QualWorkflow:
                 for num in sorted(k for k in chs.keys() if isinstance(k, int)):  # noqa: SIM118
                     parts.append(f"# 第{num}章\n{chs[num]}")
                 context["report"] = "\n".join(parts)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"quick 报告组装失败: {e}")
 
         # v3.1 P0-B-3d：失败报告打"未修复"标记（shadow 语义：显式标注而非静默产出）
@@ -477,7 +477,7 @@ class QualWorkflow:
             "state_history": self.state_machine.get_state_history(),
             "audit_log": self.audit_logger.get_entries(self.run_id),
         }
-    
+
     def get_status(self) -> dict[str, Any]:
         """获取工作流状态"""
         return {

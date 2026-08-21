@@ -8,10 +8,9 @@ depth_enhancer.py — Layer 4: 深度优化模块
 4. 洞察深度审计：每章至少1条可执行判断
 """
 
-import re
 import logging
+import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +28,7 @@ class ScenarioResult:
     wacc: float                        # WACC假设
     terminal_growth: float             # 永续增长率假设
     value_per_share: float = 0.0       # 每股价值
-    probability: Optional[float] = None  # 概率权重
+    probability: float | None = None  # 概率权重
 
 
 @dataclass
@@ -124,7 +123,7 @@ def run_scenario_analysis(
         # FCF计算（与主DCF一致，使用5年预测）
         # 使用与DCF相同的营收增速假设（递减增速）
         revenue_growth = (rev - base_revenue) / base_revenue if base_revenue > 0 else 0
-        
+
         # 5年FCF预测（使用递减增速，与DCF一致）
         total_pv_fcf = 0
         current_revenue = base_revenue
@@ -136,7 +135,7 @@ def run_scenario_analysis(
             else:
                 # 递减增速：每年减少20%的增速
                 growth = revenue_growth * (0.8 ** (year - 1))
-            
+
             current_revenue = current_revenue * (1 + growth)
             ebit = current_revenue * margin
             nopat = ebit * (1 - 0.25)  # 税率25%
@@ -144,19 +143,19 @@ def run_scenario_analysis(
             capex = current_revenue * 0.04  # 资本开支率4%
             wc_change = current_revenue * growth * 0.02  # 营运资金变动
             fcf = nopat + da - capex - wc_change
-            
+
             # 折现
             discount_factor = 1 / (1 + wacc) ** year
             total_pv_fcf += fcf * discount_factor
-        
+
         # 终值（基于第5年FCF）
         last_fcf = fcf
         terminal_value = last_fcf * (1 + tg) / (wacc - tg)
         pv_terminal = terminal_value / (1 + wacc) ** 5
-        
+
         # 企业价值
         ev = total_pv_fcf + pv_terminal
-        
+
         equity = ev - net_debt
         per_share = equity / shares if shares > 0 else 0
 
@@ -186,23 +185,23 @@ def compute_flip_thresholds(
     计算结论翻转阈值。
 
     找出当投资结论从"看多"变为"看空"（或反之）时，各变量的临界值。
-    
+
     根据HeavySkill审查要求：
     - 增加迭代次数（100次）
     - 增加收敛检查
     - 未收敛时返回区间估值并标注"未收敛，仅供参考"
     """
     thresholds = []
-    
+
     # 收敛参数
     MAX_ITERATIONS = 100  # 从50增加到100
     CONVERGENCE_TOLERANCE = 1e-6  # 收敛容差
 
     # 使用二分法找到翻转点
-    
+
     # 目标企业价值 = 当前股价 × 股本（假设净负债为0简化计算）
     target_equity_value = current_price * shares
-    
+
     # 营收翻转点（使用二分法）
     # 固定其他变量，找到使equity_value = target_equity_value的营收
     low_rev, high_rev = base_revenue * 0.3, base_revenue * 3.0
@@ -220,17 +219,17 @@ def compute_flip_thresholds(
         pv_factor = sum(1 / (1 + base_wacc) ** i for i in range(1, 6))
         ev = fcf * pv_factor + tv / (1 + base_wacc) ** 5
         equity = ev  # 简化：不考虑净负债
-        
+
         # 检查收敛
         if abs(high_rev - low_rev) < CONVERGENCE_TOLERANCE * base_revenue:
             converged_rev = True
             break
-            
+
         if equity > target_equity_value:
             high_rev = mid_rev
         else:
             low_rev = mid_rev
-    
+
     flip_rev = (low_rev + high_rev) / 2
     if abs(flip_rev - base_revenue) > 1:
         if converged_rev:
@@ -270,17 +269,17 @@ def compute_flip_thresholds(
         tv = fcf * (1 + base_terminal_growth) / (base_wacc - base_terminal_growth)
         pv_factor = sum(1 / (1 + base_wacc) ** i for i in range(1, 6))
         ev = fcf * pv_factor + tv / (1 + base_wacc) ** 5
-        
+
         # 检查收敛
         if abs(high_m - low_m) < CONVERGENCE_TOLERANCE:
             converged_margin = True
             break
-            
+
         if ev > target_equity_value:
             high_m = mid_m
         else:
             low_m = mid_m
-    
+
     flip_margin = (low_m + high_m) / 2
     if converged_margin:
         thresholds.append(FlipThreshold(
@@ -320,17 +319,17 @@ def compute_flip_thresholds(
         tv = fcf * (1 + base_terminal_growth) / (mid_w - base_terminal_growth)
         pv_factor = sum(1 / (1 + mid_w) ** i for i in range(1, 6))
         ev = fcf * pv_factor + tv / (1 + mid_w) ** 5
-        
+
         # 检查收敛
         if abs(high_w - low_w) < CONVERGENCE_TOLERANCE:
             converged_wacc = True
             break
-            
+
         if ev > target_equity_value:
             low_w = mid_w  # WACC太低，估值太高
         else:
             high_w = mid_w  # WACC太高，估值太低
-    
+
     flip_wacc = (low_w + high_w) / 2
     # WACC翻转点应该高于当前WACC（WACC上升→估值下降）
     if converged_wacc:
@@ -510,7 +509,7 @@ def run_depth_enhancement(
     np_list = income.get('年净利润', [])
 
     base_revenue = rev_list[-1] if rev_list else 1427.76
-    
+
     # 使用营业利润计算EBIT利润率（而非净利润）
     if op_list and base_revenue:
         base_ebit_margin = op_list[-1] / base_revenue

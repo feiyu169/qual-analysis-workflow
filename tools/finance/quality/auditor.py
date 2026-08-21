@@ -14,7 +14,7 @@ Gate 4.2: 审计子代理 (Semantic Auditor)
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from .structural_check import AuditResult
 
@@ -69,7 +69,7 @@ def semantic_audit(
     content: str,
     contract: dict,
     *,
-    llm_caller: Optional[Any] = None,
+    llm_caller: Any | None = None,
 ) -> AuditResult:
     """语义审计：使用 LLM-as-Judge 检查章节质量
 

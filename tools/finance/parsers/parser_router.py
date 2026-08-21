@@ -31,20 +31,17 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
-
-import httpx
 
 from .document_store import (
     DocumentStore,
-    SectionSummary,
-    TableSummary,
-    SectionContent,
-    TableContent,
     SearchHit,
+    SectionContent,
+    SectionSummary,
+    TableContent,
+    TableSummary,
 )
-from .mineru_parser import MinerUParser, MinerUConfig
 from .fallback_parser import FallbackParser
+from .mineru_parser import MinerUConfig, MinerUParser
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +53,7 @@ FINANCE_VENV_PYTHON = FINANCE_VENV / "bin" / "python3"
 # ============ 辅助函数 ============
 
 
-def _get_venv_python() -> Optional[Path]:
+def _get_venv_python() -> Path | None:
     """获取 venv Python 路径。"""
     if FINANCE_VENV_PYTHON.exists():
         return FINANCE_VENV_PYTHON
@@ -80,7 +77,7 @@ def _can_import_docling() -> bool:
         return False
 
 
-def _create_docling_via_subprocess(pdf_path: Path) -> Optional[DocumentStore]:
+def _create_docling_via_subprocess(pdf_path: Path) -> DocumentStore | None:
     """通过 venv 子进程创建 DoclingParser。
 
     在 venv Python 中运行一个脚本，解析 PDF 并返回 JSON 格式的结果。
@@ -293,7 +290,7 @@ class SubprocessDoclingStore(DocumentStore):
             ))
         return hits
 
-    def get_section_title(self, ref: str) -> Optional[str]:
+    def get_section_title(self, ref: str) -> str | None:
         for s in self._sections_data:
             if s["ref"] == ref:
                 return s["title"]
@@ -311,7 +308,7 @@ class SubprocessDoclingStore(DocumentStore):
 # ============ MinerU 健康检查 ============
 
 
-def check_mineru_health(config: Optional[MinerUConfig] = None) -> dict:
+def check_mineru_health(config: MinerUConfig | None = None) -> dict:
     """检查MinerU API健康状态。
 
     Returns:
@@ -326,7 +323,7 @@ def check_mineru_health(config: Optional[MinerUConfig] = None) -> dict:
 
 def create_parser(
     pdf_path: Path,
-    config: Optional[MinerUConfig] = None,
+    config: MinerUConfig | None = None,
 ) -> DocumentStore:
     """创建解析器（自动路由）。
 

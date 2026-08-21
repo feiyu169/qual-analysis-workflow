@@ -9,7 +9,6 @@ SOTP (Sum-of-the-Parts) 分部估值模块
 """
 import logging
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 

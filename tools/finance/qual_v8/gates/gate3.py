@@ -23,7 +23,7 @@ class ChapterConfig:
 
 class Gate3ChapterWriting(GateBase):
     """Gate 3: 逐章写作"""
-    
+
     def __init__(self):
         spec = GateSpec(
             gate_num=3,
@@ -40,14 +40,14 @@ class Gate3ChapterWriting(GateBase):
             ],
         )
         super().__init__(spec)
-        
+
         self.config = ChapterConfig(
             total_chapters=11,  # 第0-10章
             min_word_count=500,
             required_sections=["目录", "正文", "图表", "风险提示"],
             placeholder_patterns=["[Placeholder]", "XX亿元", "待填写", "TBD"],
         )
-    
+
     def execute(self, context: dict[str, Any]) -> GateResult:
         """执行Gate 3（真实：11章 LLM 生成 + 完整性/占位符/一致性检查）"""
         errors = []
@@ -118,7 +118,7 @@ class Gate3ChapterWriting(GateBase):
             errors=errors,
             warnings=warnings,
             execution_time=0.0,
-            timestamp=datetime.now().isoformat(),  # noqa: DTZ005
+            timestamp=datetime.now().isoformat(),
         )
 
     def check_criteria(self, context: dict[str, Any]) -> bool:
@@ -142,7 +142,7 @@ class Gate3ChapterWriting(GateBase):
                     outline[num] = f"第{num}章: {ch_def['title']}"
             if outline:
                 return outline
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"Gate3 大纲生成降级: {e}")
         return {i: f"第{i}章大纲" for i in range(self.config.total_chapters)}
 
@@ -206,7 +206,7 @@ class Gate3ChapterWriting(GateBase):
             chapters[0] = overview
             logger.info(f"Gate3 第0章完成（概览）: {len(overview)}字符")
             return chapters
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(f"Gate3 章节生成失败: {e}")
             return {}
 
@@ -223,7 +223,7 @@ class Gate3ChapterWriting(GateBase):
             if not result.passed:
                 for issue in result.issues:
                     errors.append(f"第{issue.chapter1}章 vs 第{issue.chapter2}章: {issue.description}")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"Gate3 一致性检查失败（非阻断）: {e}")
 
         return {

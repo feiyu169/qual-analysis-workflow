@@ -7,8 +7,8 @@ Qual v8 适配层（2026-08-18 新增）
 - 惰性导入避免循环依赖
 """
 
-from typing import Dict, Any, Optional, List, Tuple
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ REQUIRED_WIND_FIELDS = [
 WIND_SECTIONS = ["income", "balance", "cashflow"]
 
 
-def canonical_aliases() -> Dict[str, str]:
+def canonical_aliases() -> dict[str, str]:
     """canonical 键别名表（与 data_anchor 共用，避免重复定义）"""
     from .data_anchor import CANONICAL_ALIASES
     return dict(CANONICAL_ALIASES)
@@ -32,9 +32,9 @@ def build_data_context(
     ticker: str,
     company_name: str,
     market: str,
-    wind_data: Optional[Dict[str, Any]] = None,
-    filing_data: Optional[Dict[str, Any]] = None,
-    search_results: Optional[List[dict]] = None,
+    wind_data: dict[str, Any] | None = None,
+    filing_data: dict[str, Any] | None = None,
+    search_results: list[dict] | None = None,
 ) -> Any:
     """构造 DataContext（复用 finance.workflow._collect_data）"""
     from ..workflow import _collect_data, infer_facets
@@ -50,7 +50,7 @@ def build_data_context(
     )
 
 
-def wind_coverage(wind_data: Optional[Dict[str, Any]]) -> Tuple[float, List[str]]:
+def wind_coverage(wind_data: dict[str, Any] | None) -> tuple[float, list[str]]:
     """Wind 数据 canonical 键覆盖率（0-1）+ 缺失字段列表"""
     if not wind_data:
         return 0.0, REQUIRED_WIND_FIELDS
@@ -77,7 +77,7 @@ def wind_coverage(wind_data: Optional[Dict[str, Any]]) -> Tuple[float, List[str]
     return present / len(REQUIRED_WIND_FIELDS), missing
 
 
-def has_3y_range(wind_data: Optional[Dict[str, Any]]) -> bool:
+def has_3y_range(wind_data: dict[str, Any] | None) -> bool:
     """检查 Wind 数据是否覆盖 3 年（_year_labels 或任一系列长度≥3）"""
     if not wind_data:
         return False
@@ -92,7 +92,7 @@ def has_3y_range(wind_data: Optional[Dict[str, Any]]) -> bool:
     return False
 
 
-def get_latest_wind_value(wind_data: Optional[Dict[str, Any]], canonical: str) -> Optional[float]:
+def get_latest_wind_value(wind_data: dict[str, Any] | None, canonical: str) -> float | None:
     """获取某 canonical 指标的最新财年值"""
     if not wind_data:
         return None
@@ -128,7 +128,7 @@ def industry_for(company_name: str) -> str:
     return "综合"
 
 
-def extract_rating_from_chapters(chapters: Dict[int, str]) -> str:
+def extract_rating_from_chapters(chapters: dict[int, str]) -> str:
     """从章节中提取投资评级（买入/增持/中性/减持/卖出/推荐/回避）"""
     import re
     for ch_num, content in chapters.items():

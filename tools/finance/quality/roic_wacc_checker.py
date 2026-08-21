@@ -12,8 +12,7 @@ ROICWACCChecker模块
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +39,7 @@ class IncrementalROICResult:
 
 class ROICWACCChecker:
     """ROIC-WACC一致性检查器
-    
+
     四象限分析:
     ┌─────────────────────────────────────────────────────────────┐
     │ 象限    │ ROIC vs WACC │ 趋势      │ 允许的声称            │
@@ -51,7 +50,7 @@ class ROICWACCChecker:
     │ Q4      │ ROIC < WACC  │ 稳定/恶化 │ "价值毁损持续"        │
     └─────────────────────────────────────────────────────────────┘
     """
-    
+
     # 象限定义
     QUADRANTS = {
         "Q1": {
@@ -83,7 +82,7 @@ class ROICWACCChecker:
             "blocked_claims": ["拐点临近", "价值创造确立"],
         },
     }
-    
+
     def check(
         self,
         roic_current: float,
@@ -94,20 +93,20 @@ class ROICWACCChecker:
         """检查ROIC-WACC一致性"""
         spread = roic_current - wacc
         is_creating_value = spread > 0
-        
+
         # 确定象限
         quadrant = self._determine_quadrant(is_creating_value, roic_trend)
         quadrant_config = self.QUADRANTS[quadrant]
-        
+
         # 检查声称是否合理
         claim_allowed = self._check_claim(claim, quadrant_config)
-        
+
         # 生成消息
         if claim_allowed:
             message = f"{quadrant_config['name']}: 声称'{claim}'合理"
         else:
             message = f"{quadrant_config['name']}: 声称'{claim}'与数据矛盾，允许的声称: {quadrant_config['allowed_claims']}"
-        
+
         return ROICResult(
             roic=roic_current,
             wacc=wacc,
@@ -116,7 +115,7 @@ class ROICWACCChecker:
             quadrant=quadrant,
             message=message,
         )
-    
+
     def _determine_quadrant(self, is_creating_value: bool, trend: str) -> str:
         """确定象限"""
         if is_creating_value:
@@ -129,25 +128,25 @@ class ROICWACCChecker:
                 return "Q3"
             else:
                 return "Q4"
-    
-    def _check_claim(self, claim: str, quadrant_config: Dict) -> bool:
+
+    def _check_claim(self, claim: str, quadrant_config: dict) -> bool:
         """检查声称是否合理"""
         if not claim:
             return True
-        
+
         # 检查是否在阻止列表中
         for blocked in quadrant_config["blocked_claims"]:
             if blocked in claim:
                 return False
-        
+
         # 检查是否在允许列表中
         for allowed in quadrant_config["allowed_claims"]:
             if allowed in claim:
                 return True
-        
+
         # 默认允许（不在任何列表中）
         return True
-    
+
     def calculate_incremental_roic(
         self,
         delta_nopat: float,
@@ -155,30 +154,30 @@ class ROICWACCChecker:
     ) -> IncrementalROICResult:
         """计算增量ROIC"""
         incremental_roic = delta_nopat / delta_ic if delta_ic != 0 else 0
-        
+
         return IncrementalROICResult(
             delta_nopat=delta_nopat,
             delta_ic=delta_ic,
             incremental_roic=incremental_roic,
             is_value_creating=incremental_roic > 0,
         )
-    
+
     def get_correct_claim(self, result: ROICResult) -> str:
         """获取正确的声称"""
         quadrant_config = self.QUADRANTS[result.quadrant]
-        
+
         if result.is_creating_value:
             return f"公司已跨越价值创造门槛(ROIC {result.roic:.1%} > WACC {result.wacc:.1%})"
         else:
             return f"公司尚未跨越价值创造门槛(ROIC {result.roic:.1%} < WACC {result.wacc:.1%}), 但差距正在{result.spread:.1%}"
-    
+
     def generate_report(self, result: ROICResult) -> str:
         """生成ROIC-WACC报告"""
         lines = [
             "## ROIC-WACC分析报告",
             "",
-            f"| 指标 | 值 |",
-            f"|------|-----|",
+            "| 指标 | 值 |",
+            "|------|-----|",
             f"| ROIC | {result.roic:.1%} |",
             f"| WACC | {result.wacc:.1%} |",
             f"| Spread | {result.spread:.1%} |",
@@ -187,5 +186,5 @@ class ROICWACCChecker:
             "",
             f"**判断**: {result.message}",
         ]
-        
+
         return "\n".join(lines)

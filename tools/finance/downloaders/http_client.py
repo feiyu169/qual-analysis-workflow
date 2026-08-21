@@ -20,7 +20,8 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 import httpx
 
@@ -40,9 +41,9 @@ RETRY_BACKOFF_BASE: float = 0.8
 
 class HttpClient:
     """封装HTTP请求，提供重试、限流、错误处理。
-    
+
     对应Dayu的httpx.Client封装。
-    
+
     Attributes:
         _client: httpx.Client实例
         _max_retries: 最大重试次数
@@ -50,19 +51,19 @@ class HttpClient:
         _last_request_at: 上次请求时间（monotonic clock）
         _sleep_func: 可注入的sleep函数（测试用）
     """
-    
+
     def __init__(
         self,
         *,
-        client: Optional[httpx.Client] = None,
+        client: httpx.Client | None = None,
         user_agent: str = DEFAULT_USER_AGENT,
         timeout: float = DEFAULT_REQUEST_TIMEOUT,
         max_retries: int = DEFAULT_MAX_RETRIES,
         sleep_seconds: float = DEFAULT_SLEEP_SECONDS,
-        sleep_func: Optional[Callable[[float], None]] = None,
+        sleep_func: Callable[[float], None] | None = None,
     ) -> None:
         """初始化HTTP客户端。
-        
+
         Args:
             client: 可注入的httpx.Client（测试用）
             user_agent: User-Agent
@@ -70,7 +71,7 @@ class HttpClient:
             max_retries: 最大重试次数
             sleep_seconds: 请求间隔（秒）
             sleep_func: 可注入的sleep函数（测试用，可传lambda _: None跳过等待）
-            
+
         Raises:
             ValueError: max_retries <= 0 或 sleep_seconds < 0
         """
@@ -78,7 +79,7 @@ class HttpClient:
             raise ValueError("max_retries 必须大于 0")
         if sleep_seconds < 0:
             raise ValueError("sleep_seconds 不能为负数")
-        
+
         self._owns_client = client is None
         self._client = client or httpx.Client(
             timeout=timeout,
@@ -86,38 +87,38 @@ class HttpClient:
         )
         self._max_retries = max_retries
         self._sleep_seconds = sleep_seconds
-        self._last_request_at: Optional[float] = None
+        self._last_request_at: float | None = None
         self._sleep_func: Callable[[float], None] = (
             sleep_func if sleep_func is not None else time.sleep
         )
-    
+
     def close(self) -> None:
         """关闭底层HTTP客户端。"""
         if self._owns_client:
             self._client.close()
-    
+
     def get_json(
         self,
         url: str,
         *,
-        params: Optional[dict[str, str]] = None,
+        params: dict[str, str] | None = None,
     ) -> Any:
         """GET请求并解析JSON响应。
-        
+
         对应Dayu的_http_get_json。
-        
+
         Args:
             url: 请求URL
             params: 查询参数
-            
+
         Returns:
             解析后的JSON对象
-            
+
         Raises:
             DownloaderError: 重试后仍失败
         """
-        last_exc: Optional[Exception] = None
-        
+        last_exc: Exception | None = None
+
         for attempt in range(self._max_retries):
             try:
                 self._throttle()
@@ -131,9 +132,9 @@ class HttpClient:
                 last_exc = exc
                 logger.warning(f"请求失败 (attempt {attempt + 1}): {url} -> {exc}")
                 self._backoff(attempt)
-        
+
         raise DownloaderError(f"GET JSON失败: url={url} error={last_exc}")
-    
+
     def get_bytes(
         self,
         url: str,
@@ -141,21 +142,21 @@ class HttpClient:
         follow_redirects: bool = True,
     ) -> bytes:
         """GET请求并返回字节内容。
-        
+
         对应Dayu的_http_download_bytes。
-        
+
         Args:
             url: 请求URL
             follow_redirects: 是否跟随重定向
-            
+
         Returns:
             响应字节
-            
+
         Raises:
             DownloaderError: 重试后仍失败
         """
-        last_exc: Optional[Exception] = None
-        
+        last_exc: Exception | None = None
+
         for attempt in range(self._max_retries):
             try:
                 self._throttle()
@@ -169,32 +170,32 @@ class HttpClient:
                 last_exc = exc
                 logger.warning(f"下载失败 (attempt {attempt + 1}): {url} -> {exc}")
                 self._backoff(attempt)
-        
+
         raise DownloaderError(f"下载失败: url={url} error={last_exc}")
-    
+
     def get_bytes_conditional(
         self,
         url: str,
         *,
-        etag: Optional[str] = None,
-        last_modified: Optional[str] = None,
+        etag: str | None = None,
+        last_modified: str | None = None,
         follow_redirects: bool = True,
-    ) -> tuple[int, Optional[bytes]]:
+    ) -> tuple[int, bytes | None]:
         """条件GET请求，支持304 Not Modified。
-        
+
         对应Dayu的条件下载逻辑。
-        
+
         Args:
             url: 请求URL
             etag: If-None-Match头
             last_modified: If-Modified-Since头
             follow_redirects: 是否跟随重定向
-            
+
         Returns:
             (status_code, content)
             - 200: (200, bytes)
             - 304: (304, None)
-            
+
         Raises:
             DownloaderError: 重试后仍失败（非304/200）
         """
@@ -203,9 +204,9 @@ class HttpClient:
             headers["If-None-Match"] = etag
         if last_modified:
             headers["If-Modified-Since"] = last_modified
-        
-        last_exc: Optional[Exception] = None
-        
+
+        last_exc: Exception | None = None
+
         for attempt in range(self._max_retries):
             try:
                 self._throttle()
@@ -215,11 +216,11 @@ class HttpClient:
                         headers=headers,
                         follow_redirects=follow_redirects,
                     )
-                    
+
                     # 304 Not Modified
                     if response.status_code == 304:
                         return 304, None
-                    
+
                     response.raise_for_status()
                     return response.status_code, response.content
                 finally:
@@ -228,23 +229,23 @@ class HttpClient:
                 last_exc = exc
                 logger.warning(f"条件下载失败 (attempt {attempt + 1}): {url} -> {exc}")
                 self._backoff(attempt)
-        
+
         raise DownloaderError(f"条件下载失败: url={url} error={last_exc}")
-    
+
     def head(
         self,
         url: str,
         *,
         follow_redirects: bool = True,
-    ) -> dict[str, Optional[str]]:
+    ) -> dict[str, str | None]:
         """HEAD请求获取元数据。
-        
+
         对应Dayu的_http_head_meta。
-        
+
         Args:
             url: 请求URL
             follow_redirects: 是否跟随重定向
-            
+
         Returns:
             包含content_length, etag, last_modified的字典
         """
@@ -262,19 +263,19 @@ class HttpClient:
                 "etag": None,
                 "last_modified": None,
             }
-        
+
         raw_length = response.headers.get("Content-Length")
         try:
             content_length = str(int(raw_length)) if raw_length is not None else None
         except (TypeError, ValueError):
             content_length = None
-        
+
         return {
             "content_length": content_length,
             "etag": response.headers.get("ETag"),
             "last_modified": response.headers.get("Last-Modified"),
         }
-    
+
     def post_form(
         self,
         url: str,
@@ -282,21 +283,21 @@ class HttpClient:
         data: dict[str, str],
     ) -> Any:
         """POST表单请求并解析JSON响应。
-        
+
         对应Dayu的_http_post_form。
-        
+
         Args:
             url: 请求URL
             data: 表单数据
-            
+
         Returns:
             解析后的JSON对象
-            
+
         Raises:
             DownloaderError: 重试后仍失败
         """
-        last_exc: Optional[Exception] = None
-        
+        last_exc: Exception | None = None
+
         for attempt in range(self._max_retries):
             try:
                 self._throttle()
@@ -310,12 +311,12 @@ class HttpClient:
                 last_exc = exc
                 logger.warning(f"POST失败 (attempt {attempt + 1}): {url} -> {exc}")
                 self._backoff(attempt)
-        
+
         raise DownloaderError(f"POST失败: url={url} error={last_exc}")
-    
+
     def _throttle(self) -> None:
         """请求限流，确保请求间隔。
-        
+
         对应Dayu的_throttle_before_request。
         """
         now = time.monotonic()
@@ -324,25 +325,25 @@ class HttpClient:
             remaining = self._sleep_seconds - elapsed
             if remaining > 0:
                 self._sleep_func(remaining)
-    
+
     def _mark_request_finished(self) -> None:
         """记录请求完成时间。
-        
+
         对应Dayu的_mark_request_finished。
         """
         self._last_request_at = time.monotonic()
-    
+
     def _backoff(self, attempt: int) -> None:
         """指数退避。
-        
+
         对应Dayu的_retry_backoff。
-        
+
         Args:
             attempt: 当前重试序号（0-based）
         """
         if attempt >= self._max_retries - 1:
             return
-        
+
         delay = RETRY_BACKOFF_BASE * (2 ** attempt)
         logger.debug(f"退避 {delay:.1f}s (attempt {attempt + 1})")
         self._sleep_func(delay)

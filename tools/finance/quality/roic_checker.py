@@ -12,9 +12,8 @@ ROIC<WACC强制回应模块
 - 设置分析师复核节点
 """
 
-from dataclasses import dataclass
-from typing import List, Optional
 import logging
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -30,28 +29,28 @@ class ROICAnalysis:
 
 class ROICChecker:
     """ROIC检查器"""
-    
+
     @staticmethod
     def analyze(roic: float, wacc: float) -> ROICAnalysis:
         """分析ROIC与WACC关系"""
         is_value_destruction = roic < wacc
         gap = wacc - roic
-        
+
         return ROICAnalysis(
             roic=roic,
             wacc=wacc,
             is_value_destruction=is_value_destruction,
             gap=gap,
         )
-    
+
     @staticmethod
     def generate_prompt_injection(roic: float, wacc: float) -> str:
         """生成prompt注入（根据HeavySkill审查要求增强）"""
         analysis = ROICChecker.analyze(roic, wacc)
-        
+
         if not analysis.is_value_destruction:
             return ""
-        
+
         injection = f"""
 ⚠️ 重要提示：ROIC({roic:.1%}) < WACC({wacc:.1%})，存在价值毁灭信号。
 
@@ -83,65 +82,65 @@ class ROICChecker:
 ⚠️ 分析师复核节点：本分析需要人工复核确认ROIC改善路径的可行性。
 """
         return injection
-    
+
     @staticmethod
-    def validate_response(response: str, roic: float, wacc: float) -> List[str]:
+    def validate_response(response: str, roic: float, wacc: float) -> list[str]:
         """验证回应是否完整（根据HeavySkill审查要求增强）"""
         errors = []
-        
+
         analysis = ROICChecker.analyze(roic, wacc)
-        
+
         if not analysis.is_value_destruction:
             return errors
-        
+
         # 检查是否回应了关键问题
         if "ROIC" not in response and "资本回报率" not in response:
             errors.append("未提及ROIC")
-        
+
         if "WACC" not in response and "资本成本" not in response:
             errors.append("未提及WACC")
-        
+
         # 检查是否有定量分析
         quantitative_keywords = ["提升", "下降", "改善", "百分点", "%", "倍"]
         has_quantitative = any(keyword in response for keyword in quantitative_keywords)
         if not has_quantitative:
             errors.append("缺少定量敏感性分析")
-        
+
         # 检查是否有改善路径
         path_keywords = ["路径", "措施", "方案", "策略", "计划"]
         has_path = any(keyword in response for keyword in path_keywords)
         if not has_path:
             errors.append("缺少ROIC改善路径")
-        
+
         # 检查是否有行业对比
         comparison_keywords = ["行业", "可比", "同行", "对比", "比较"]
         has_comparison = any(keyword in response for keyword in comparison_keywords)
         if not has_comparison:
             errors.append("缺少行业对比分析")
-        
+
         # 检查是否有风险提示
         risk_keywords = ["风险", "毁灭", "下调", "调整", "警告"]
         has_risk = any(keyword in response for keyword in risk_keywords)
         if not has_risk:
             errors.append("缺少风险提示")
-        
+
         # 检查是否有看多理由
         bullish_keywords = ["看多", "增长", "改善", "提升", "优化"]
         has_bullish_reason = any(keyword in response for keyword in bullish_keywords)
-        
+
         if not has_bullish_reason:
             errors.append("未提供看多理由")
-        
+
         return errors
-    
+
     @staticmethod
     def generate_default_response(roic: float, wacc: float) -> str:
         """生成默认回应（根据HeavySkill审查要求增强）"""
         analysis = ROICChecker.analyze(roic, wacc)
-        
+
         if not analysis.is_value_destruction:
             return ""
-        
+
         response = f"""
 **ROIC<WACC回应**（根据HeavySkill审查要求增强）：
 

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +26,12 @@ class ArbitrationResult:
     difference_pct: float
     reasoning: str
     confidence: str  # high | medium | low
-    warnings: List[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 class TerminalValueArbitrator:
     """终值仲裁器
-    
+
     仲裁规则:
     ┌─────────────────────────────────────────────────────────────┐
     │ 场景                          │ 规则                        │
@@ -45,36 +44,36 @@ class TerminalValueArbitrator:
     │ g ≥ WACC (永续增长法)         │ 阻断, 参数错误              │
     └─────────────────────────────────────────────────────────────┘
     """
-    
+
     # 差异阈值
     THRESHOLD_CLOSE = 0.10      # < 10%: 取均值
     THRESHOLD_MODERATE = 0.25   # 10-25%: 取保守
     THRESHOLD_LARGE = 0.50      # 25-50%: 取保守+敏感性
     # ≥ 50%: 阻断
-    
+
     def arbitrate(
         self,
         tv_perpetuity: float,
         tv_exit_multiple: float,
-        ev_estimate: Optional[float] = None,
+        ev_estimate: float | None = None,
     ) -> ArbitrationResult:
         """仲裁两种终值方法的结果"""
         warnings = []
-        
+
         # 计算差异
         diff = abs(tv_perpetuity - tv_exit_multiple)
         avg_tv = (tv_perpetuity + tv_exit_multiple) / 2
         diff_pct = diff / avg_tv if avg_tv > 0 else 0
-        
+
         # 检查TV/EV比例
         if ev_estimate and ev_estimate > 0:
             tv_ev_ratio_perp = tv_perpetuity / ev_estimate
             tv_ev_ratio_exit = tv_exit_multiple / ev_estimate
             max_tv_ev = max(tv_ev_ratio_perp, tv_ev_ratio_exit)
-            
+
             if max_tv_ev > 0.75:
                 warnings.append(f"终值占比{max_tv_ev:.1%}超过75%，需强制敏感性分析")
-        
+
         # 仲裁逻辑
         if diff_pct < self.THRESHOLD_CLOSE:
             # 差异<10%: 取均值
@@ -87,7 +86,7 @@ class TerminalValueArbitrator:
                 confidence="high",
                 warnings=warnings,
             )
-        
+
         elif diff_pct < self.THRESHOLD_MODERATE:
             # 10-25%: 取保守(较低值)
             conservative_tv = min(tv_perpetuity, tv_exit_multiple)
@@ -100,7 +99,7 @@ class TerminalValueArbitrator:
                 confidence="medium",
                 warnings=warnings,
             )
-        
+
         elif diff_pct < self.THRESHOLD_LARGE:
             # 25-50%: 取保守+强制敏感性分析
             conservative_tv = min(tv_perpetuity, tv_exit_multiple)
@@ -114,7 +113,7 @@ class TerminalValueArbitrator:
                 confidence="low",
                 warnings=warnings,
             )
-        
+
         else:
             # ≥50%: 阻断
             raise ValueError(
@@ -122,16 +121,16 @@ class TerminalValueArbitrator:
                 f"永续增长法={tv_perpetuity:.0f}, 退出倍数法={tv_exit_multiple:.0f}, "
                 f"需人工审查假设"
             )
-    
+
     def validate_tv_ev_ratio(
         self,
         tv: float,
         ev: float,
         max_ratio: float = 0.75,
-    ) -> Dict:
+    ) -> dict:
         """验证TV/EV比例"""
         ratio = tv / ev if ev > 0 else 0
-        
+
         return {
             "tv": tv,
             "ev": ev,
@@ -139,14 +138,14 @@ class TerminalValueArbitrator:
             "passed": ratio <= max_ratio,
             "warning": f"终值占比{ratio:.1%}超过{max_ratio:.0%}上限" if ratio > max_ratio else None,
         }
-    
+
     def generate_arbitration_report(self, result: ArbitrationResult) -> str:
         """生成仲裁报告"""
         lines = [
             "## 终值仲裁报告",
             "",
-            f"| 项目 | 值 |",
-            f"|------|-----|",
+            "| 项目 | 值 |",
+            "|------|-----|",
             f"| 选定方法 | {result.chosen_method} |",
             f"| 选定终值 | {result.chosen_tv:.0f}亿 |",
             f"| 备选终值 | {result.alternative_tv:.0f}亿 |",
@@ -154,7 +153,7 @@ class TerminalValueArbitrator:
             f"| 置信度 | {result.confidence} |",
             f"| 理由 | {result.reasoning} |",
         ]
-        
+
         if result.warnings:
             lines.extend([
                 "",
@@ -163,5 +162,5 @@ class TerminalValueArbitrator:
             ])
             for warning in result.warnings:
                 lines.append(f"- {warning}")
-        
+
         return "\n".join(lines)

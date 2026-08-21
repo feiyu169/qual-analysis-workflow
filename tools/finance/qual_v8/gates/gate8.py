@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class Gate8FinalValidation(GateBase):
     """Gate 8: 最终验证"""
-    
+
     def __init__(self):
         spec = GateSpec(
             gate_num=8,
@@ -31,7 +31,7 @@ class Gate8FinalValidation(GateBase):
             ],
         )
         super().__init__(spec)
-    
+
     def execute(self, context: dict[str, Any]) -> GateResult:
         """执行Gate 8"""
         errors = []
@@ -46,7 +46,7 @@ class Gate8FinalValidation(GateBase):
                 for num in sorted(k for k in chs.keys() if isinstance(k, int)):  # noqa: SIM118
                     parts.append(f"# 第{num}章\n{chs[num]}")
                 context["report"] = "\n".join(parts)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"Gate8 报告组装失败: {e}")
 
         # 0.5 ADVC 组装闸门救援 sweep（P1：最终闸门前最后一次确定性数值清洗——
@@ -61,41 +61,41 @@ class Gate8FinalValidation(GateBase):
                 for num in sorted(k for k in chs.keys() if isinstance(k, int)):  # noqa: SIM118
                     parts.append(f"# 第{num}章\n{chs[num]}")
                 context["report"] = "\n".join(parts)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"Gate8 救援后报告重组失败: {e}")
 
         # 1. 检查所有Gate是否通过
         all_gates_result = self._check_all_gates(context)
         details["all_gates"] = all_gates_result
-        
+
         if not all_gates_result["passed"]:
             errors.extend(all_gates_result["errors"])
-        
+
         # 2. 检查Critical问题
         critical_result = self._check_critical_issues(context)
         details["critical_issues"] = critical_result
-        
+
         if not critical_result["passed"]:
             errors.extend(critical_result["errors"])
-        
+
         # 3. 人工确认
         human_result = self._request_human_confirmation(context)
         details["human_confirmation"] = human_result
-        
+
         if not human_result["passed"]:
             errors.extend(human_result["errors"])
-        
+
         # 4. 检查报告格式
         format_result = self._check_report_format(context)
         details["report_format"] = format_result
-        
+
         if not format_result["passed"]:
             errors.extend(format_result["errors"])
-        
+
         # 5. 检查报告大小
         size_result = self._check_report_size(context)
         details["report_size"] = size_result
-        
+
         if not size_result["passed"]:
             errors.extend(size_result["errors"])
 
@@ -106,15 +106,15 @@ class Gate8FinalValidation(GateBase):
         if not redteam_result["passed"]:
             errors.extend(redteam_result["errors"])
         warnings.extend(redteam_result.get("warnings", []))
-        
+
         # 6. 计算得分
         score = 100.0
         if errors:
             score -= len(errors) * 20
         score = max(0.0, min(100.0, score))
-        
+
         passed = len(errors) == 0
-        
+
         return GateResult(
             gate_num=8,
             passed=passed,
@@ -123,9 +123,9 @@ class Gate8FinalValidation(GateBase):
             errors=errors,
             warnings=warnings,
             execution_time=0.0,
-            timestamp=datetime.now().isoformat(),  # noqa: DTZ005
+            timestamp=datetime.now().isoformat(),
         )
-    
+
     def check_criteria(self, context: dict[str, Any]) -> bool:
         """检查通过标准"""
         # 检查所有Gate是否通过
@@ -133,7 +133,7 @@ class Gate8FinalValidation(GateBase):
         for gate_num in range(8):  # Gate 0-7
             if gate_num not in gate_results or not gate_results[gate_num].passed:
                 return False
-        
+
         # 检查人工确认
         human_confirmed = context.get("human_confirmed", False)
         return bool(human_confirmed)
@@ -184,10 +184,10 @@ class Gate8FinalValidation(GateBase):
                 "hint_count": len(_hints),
                 "skipped": False,
             }
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning(f"Gate8 ADVC 救援 sweep 失败（非阻断）: {e}")
             return {"fixed_count": 0, "skipped": True, "reason": str(e)}
-    
+
     def _check_all_gates(self, context: dict[str, Any]) -> dict[str, Any]:
         """检查所有Gate是否通过"""
         errors = []
@@ -216,7 +216,7 @@ class Gate8FinalValidation(GateBase):
             "errors": errors,
             "failed_gates": failed_gates,
         }
-    
+
     def _check_critical_issues(self, context: dict[str, Any]) -> dict[str, Any]:
         """检查Critical问题（真实：数字校验器 + 模板指纹 + 结构校验）"""
         errors = []
@@ -236,7 +236,7 @@ class Gate8FinalValidation(GateBase):
                 if not validation["passed"]:
                     for e in validation["errors"][:10]:
                         critical_found.append(f"数字不一致: {e}")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"Gate8 数字校验异常: {e}")
 
         # 2. 模板泄漏指纹（R5 ch8/ch9 实锤：组合构建/沪深300/买入评级）
@@ -324,7 +324,7 @@ class Gate8FinalValidation(GateBase):
             "passed": len(errors) == 0,
             "errors": errors,
         }
-    
+
     def _check_report_size(self, context: dict[str, Any]) -> dict[str, Any]:
         """检查报告大小"""
         errors = []
@@ -420,7 +420,7 @@ class Gate8FinalValidation(GateBase):
                     if _cp_root:
                         checkpoint_dir = _Path(_cp_root) / "redteam_checkpoints"
                         checkpoint_dir.mkdir(parents=True, exist_ok=True)
-                except Exception:  # noqa: BLE001
+                except Exception:
                     checkpoint_dir = None
 
                 logger.info(f"Gate8: 报告 {len(report)} 字符 > 12000，review_chunker 分批红队补审")
@@ -439,7 +439,7 @@ class Gate8FinalValidation(GateBase):
                                 warnings_redteam.extend(_cp.get("important", []))
                                 logger.info(f"Gate8 片段 {seg_id} 从 checkpoint 恢复")
                                 continue
-                        except Exception:  # noqa: BLE001, S110
+                        except Exception:
                             pass
                     try:
                         r = integrator.review_report_text(
@@ -456,9 +456,9 @@ class Gate8FinalValidation(GateBase):
                             try:
                                 with open(cp_path, "w", encoding="utf-8") as _f:
                                     _json.dump({"fatal": fatal, "important": important}, _f, ensure_ascii=False)
-                            except Exception:  # noqa: BLE001, S110
+                            except Exception:
                                 pass
-                    except Exception as e:  # noqa: BLE001
+                    except Exception as e:
                         logger.warning(f"Gate8 片段 {seg_id} 红队补审失败: {e}")
                         unreviewed.append(seg_id)
 
@@ -508,6 +508,6 @@ class Gate8FinalValidation(GateBase):
                 "important": important_count,
                 "suggestion": suggestion_count,
             }
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.error(f"Gate8 红队审查失败（非阻断）: {e}")
             return {"passed": True, "errors": [], "warnings": [f"红队审查失败: {e}"]}

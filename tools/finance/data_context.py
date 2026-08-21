@@ -6,9 +6,9 @@ DataContext - 层间传递的数据契约
 "内部名 → Wind MCP 原始名"的历史对照，仅作文档/调试；运行时归一一律走 canonical.canonicalize）。
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Literal, Optional
 import logging
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -164,14 +164,14 @@ SOURCE_TRUTH_ORDER = ("filing", "wind", "search")  # 一手 > 二手 > 三手
 class WindData:
     """Wind MCP 结构化数据"""
 
-    quote: Optional[dict] = None          # 实时行情
-    valuation: Optional[dict] = None      # 估值指标
-    income: Optional[dict] = None         # 利润表
-    balance: Optional[dict] = None        # 资产负债表
-    cashflow: Optional[dict] = None       # 现金流量表
-    news: Optional[list] = None           # 财经新闻
-    industry: Optional[dict] = None       # 行业数据
-    _year_labels: Optional[dict] = None   # 年份标签映射 {field: [FY2023, FY2024, FY2025]}
+    quote: dict | None = None          # 实时行情
+    valuation: dict | None = None      # 估值指标
+    income: dict | None = None         # 利润表
+    balance: dict | None = None        # 资产负债表
+    cashflow: dict | None = None       # 现金流量表
+    news: list | None = None           # 财经新闻
+    industry: dict | None = None       # 行业数据
+    _year_labels: dict | None = None   # 年份标签映射 {field: [FY2023, FY2024, FY2025]}
 
 
 @dataclass
@@ -221,19 +221,19 @@ class DataContext:
     market: Literal["us", "cn", "hk"]
 
     # 财报原文层
-    filing: Optional[FilingData] = None
+    filing: FilingData | None = None
 
     # 结构化数字层
-    wind: Optional[WindData] = None
+    wind: WindData | None = None
 
     # 搜索补充
     search_results: list[SearchResult] = field(default_factory=list)
 
     # 类型推断
-    facets: Optional[FacetResult] = None
+    facets: FacetResult | None = None
 
     # 结构化事实表 (fact_extractor 提取)
-    facts: Optional[Any] = None  # ExtractedFacts, 用 Any 避免循环导入
+    facts: Any | None = None  # ExtractedFacts, 用 Any 避免循环导入
 
     # 数据质量标记
     filing_source: Literal["filing", "search", "unavailable"] = "unavailable"

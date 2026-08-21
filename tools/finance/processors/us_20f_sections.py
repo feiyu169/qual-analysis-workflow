@@ -7,7 +7,6 @@ US 20-F Sections - 美股 20-F 章节映射
 
 import logging
 import re
-from typing import Optional
 
 from .base import BaseProcessor
 

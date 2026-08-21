@@ -496,10 +496,10 @@ def repair_report(
                         fixed_chapters[ch_num] = fixed_content
                     chapters = fixed_chapters
                     logger.info(f"PE自动修复完成：→约{pe_report.wind_pe:.1f}倍")
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     logger.warning(f"PE修复失败，保留原始值: {e}")
 
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.error(f"PE校验异常: {e}")
         result.warnings.append(f"PE校验异常: {e}")
 
@@ -512,12 +512,12 @@ def repair_report(
                 fixed_content, fixes = fix_source_annotations(content, fiscal_year)
                 total_source_fixes += fixes
                 fixed_chapters[ch_num] = fixed_content
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"第{ch_num}章来源标注修复失败: {e}")
                 fixed_chapters[ch_num] = content
         chapters = fixed_chapters
         result.source_fixes = total_source_fixes
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.error(f"来源标注修复异常: {e}")
         result.warnings.append(f"来源标注修复异常: {e}")
 
@@ -530,7 +530,7 @@ def repair_report(
             correct_values = _build_correct_values(wind_financials)
             if correct_values:
                 chapters = fix_consistency_issues(chapters, consistency_issues, correct_values)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.error(f"一致性审计异常: {e}")
         result.warnings.append(f"一致性审计异常: {e}")
 
@@ -543,12 +543,12 @@ def repair_report(
                 cleaned, fixes = clean_ai_traces(content)
                 total_ai_fixes += fixes
                 fixed_chapters[ch_num] = cleaned
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"第{ch_num}章AI痕迹清洗失败: {e}")
                 fixed_chapters[ch_num] = content
         chapters = fixed_chapters
         result.ai_trace_fixes = total_ai_fixes
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.error(f"AI痕迹清洗异常: {e}")
         result.warnings.append(f"AI痕迹清洗异常: {e}")
 

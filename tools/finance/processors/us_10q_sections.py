@@ -19,7 +19,6 @@ US 10-Q Sections - 美股 10-Q 季报章节映射
 
 import logging
 import re
-from typing import Optional
 
 from .base import BaseProcessor
 

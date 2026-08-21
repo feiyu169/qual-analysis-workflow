@@ -14,7 +14,7 @@ Gate 4.1: 结构化预检 (Structural Check)
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class AuditResult:
     """审计结果"""
     passed: bool                          # 是否通过
     issues: list[str] = field(default_factory=list)  # 问题列表
-    score: Optional[float] = None         # 评分（可选）
+    score: float | None = None         # 评分（可选）
     details: dict[str, Any] = field(default_factory=dict)  # 详细信息
 
 
@@ -187,7 +187,7 @@ _MIN_CONTENT_LENGTH = 200
 def structural_check(
     chapter_id: str,
     content: str,
-    contract: Optional[dict] = None,
+    contract: dict | None = None,
 ) -> AuditResult:
     """结构化预检
 
@@ -339,13 +339,13 @@ def structural_check(
                         f"[medium] 条件项未满足: {rule.get('name', 'unknown')} "
                         f"(关键词: {', '.join(keywords[:3])})"
                     )
-    
+
     # ---- 检查 7: must_answer逐条对照（T6增强） ----
     if contract and contract.get("must_answer"):
         must_answer_items = contract["must_answer"]
         answered_items = []
         unanswered_items = []
-        
+
         for item in must_answer_items:
             # 提取关键词（取前20个字符作为匹配）
             keywords = item[:20].strip()
@@ -353,14 +353,14 @@ def structural_check(
                 answered_items.append(item[:50])
             else:
                 unanswered_items.append(item[:50])
-        
+
         details["checks"]["must_answer"] = {
             "total": len(must_answer_items),
             "answered": len(answered_items),
             "unanswered": len(unanswered_items),
             "unanswered_items": unanswered_items[:3],  # 最多显示3个
         }
-        
+
         if unanswered_items:
             severity = "major" if len(unanswered_items) >= 2 else "medium"
             issues.append(

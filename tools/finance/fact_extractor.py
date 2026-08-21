@@ -43,24 +43,24 @@ class OperationalFacts:
     arpu: float | None = None
     arppu: float | None = None
     creators: float | None = None
-    
+
     # 新增：留存指标
     retention_rate_d1: float | None = None   # 次日留存率
     retention_rate_d7: float | None = None   # 7日留存率
     retention_rate_d30: float | None = None  # 30日留存率
-    
+
     # 新增：单位经济
     ltv: float | None = None                 # 用户生命周期价值
     cac: float | None = None                 # 获客成本
     ltv_cac_ratio: float | None = None       # LTV/CAC
     payback_period: float | None = None      # 回收期（月）
     user_lifetime: float | None = None       # 用户生命周期（月）
-    
+
     # 新增：费用数据
     marketing_expense: float | None = None   # 营销费用（亿人民币）
     new_users: float | None = None           # 新增用户（亿）
     gross_margin: float | None = None        # 毛利率
-    
+
     sources: dict = field(default_factory=dict)
 
 
@@ -627,7 +627,7 @@ def _calculate_unit_economics(facts: 'ExtractedFacts') -> list[str]:
     """自动计算单位经济指标，返回假设列表"""
     assumptions = []
     op = facts.operational
-    
+
     # 毛利率：优先财报（Wind 派生）数据；**无源时不填充默认值**（B4-2：删 50% 启发式）
     # LTV/回收期等派生指标在毛利率缺失时跳过，标注"数据不足"而非用假值
     if op.gross_margin is None:
@@ -635,7 +635,7 @@ def _calculate_unit_economics(facts: 'ExtractedFacts') -> list[str]:
             op.gross_margin = facts.financial.gross_margin
         else:
             assumptions.append("毛利率未披露（Wind 无源），单位经济指标跳过计算（宁缺毋滥）")
-    
+
     # LTV = 月ARPU x 毛利率 x 用户生命周期（毛利率缺失时跳过——B4-2 不用默认值）
     if op.arpu and op.user_lifetime and op.gross_margin is not None:
         monthly_arpu = op.arpu / 12
@@ -644,24 +644,24 @@ def _calculate_unit_economics(facts: 'ExtractedFacts') -> list[str]:
             f"LTV = {monthly_arpu:.1f}元/月 x {op.gross_margin:.0%} x "
             f"{op.user_lifetime:.0f}月 = {op.ltv:.0f}元"
         )
-    
+
     # CAC = 营销费用 / 新增用户
     if op.marketing_expense and op.new_users and op.new_users > 0:
         op.cac = (op.marketing_expense * 1e8) / (op.new_users * 1e8)
         assumptions.append(
             f"CAC = {op.marketing_expense:.1f}亿 / {op.new_users:.1f}亿 = {op.cac:.0f}元"
         )
-    
+
     # LTV/CAC
     if op.ltv and op.cac and op.cac > 0:
         op.ltv_cac_ratio = op.ltv / op.cac
-    
+
     # 回收期 = CAC / (月ARPU x 毛利率)（毛利率缺失时跳过）
     if op.cac and op.arpu and op.gross_margin is not None:
         monthly_contribution = (op.arpu / 12) * op.gross_margin
         if monthly_contribution > 0:
             op.payback_period = op.cac / monthly_contribution
-    
+
     return assumptions
 
 def extract_facts(
@@ -753,7 +753,7 @@ def extract_facts(
                         logger.warning(f"批次 {i+1}/{len(chunks)} 提取为空，重试 {attempt+1}/{max_retries}")
                     else:
                         logger.warning(f"批次 {i+1}/{len(chunks)} 提取失败 (已重试{max_retries}次): {warnings}")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 all_warnings.append(f"批次 {i+1} LLM 调用异常 (attempt {attempt+1}): {e}")
                 logger.error(f"批次 {i+1} LLM 调用异常: {e}")
                 if attempt >= max_retries:

@@ -4,8 +4,8 @@
 """
 
 import logging
-from typing import Optional
-from .data_context import safe_get, latest_value
+
+from .data_context import latest_value, safe_get
 
 logger = logging.getLogger(__name__)
 

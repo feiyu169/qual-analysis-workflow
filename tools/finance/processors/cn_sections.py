@@ -6,7 +6,6 @@ CN Sections - A 股章节映射
 
 import logging
 import re
-from typing import Optional
 
 from .base import BaseProcessor
 
@@ -111,7 +110,7 @@ class CNSectionsProcessor(BaseProcessor):
         self,
         text: str,
         patterns: list[str],
-    ) -> Optional[str]:
+    ) -> str | None:
         """查找章节内容
 
         Args:
@@ -203,7 +202,7 @@ class CNSectionsProcessor(BaseProcessor):
         logger.info(f"A 股表格提取: {len(tables)} 个")
         return tables
 
-    def _extract_table_region(self, text: str, start_pos: int, max_chars: int = 20000) -> Optional[str]:
+    def _extract_table_region(self, text: str, start_pos: int, max_chars: int = 20000) -> str | None:
         """提取表格区域
 
         Args:

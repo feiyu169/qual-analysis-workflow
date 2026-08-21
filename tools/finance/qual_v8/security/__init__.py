@@ -2,12 +2,12 @@
 Qual流程v8.4 - 安全模块
 """
 
-from .auth import RBACManager, DataMasker, KeyManager, Permission, PERMISSION_MATRIX
+from .auth import PERMISSION_MATRIX, DataMasker, KeyManager, Permission, RBACManager
 
 __all__ = [
-    "RBACManager",
+    "PERMISSION_MATRIX",
     "DataMasker",
     "KeyManager",
     "Permission",
-    "PERMISSION_MATRIX",
+    "RBACManager",
 ]

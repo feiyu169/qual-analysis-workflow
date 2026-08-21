@@ -202,7 +202,7 @@ def repair_chapter_values(
     # 第三遍：自证——替换后整章必须通过 validate_chapter_any_fy
     try:
         remaining_errors = anchor.validate_chapter_any_fy(chapter_num, new_content)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning(f"ADVC 自证异常（回滚，不修复）: {e}")
         return result  # 自证失败 → 整体回滚（宁可不修不误修）
 

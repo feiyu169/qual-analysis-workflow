@@ -13,15 +13,14 @@ Filing Downloader — 统一财报获取入口
 import logging
 import re
 from pathlib import Path
-from typing import Optional
 
 from .downloaders.http_client import HttpClient
-from .downloaders.models import ReportQuery, DownloadedAsset
+from .downloaders.models import ReportQuery
 
 logger = logging.getLogger(__name__)
 
 # 全局实例缓存
-_http_client: Optional[HttpClient] = None
+_http_client: HttpClient | None = None
 
 
 def _get_http_client() -> HttpClient:
@@ -126,7 +125,7 @@ def _parse_pdf(pdf_path: Path) -> dict:
 
     for _attempt in range(2):  # 最多尝试 2 次（第 2 次仅针对瞬时网络错误）
         try:
-            from .parsers.mineru_parser import MinerUParser, MinerUConfig, _load_token
+            from .parsers.mineru_parser import MinerUConfig, MinerUParser, _load_token
             if not _load_token():
                 raise RuntimeError("MinerU 解析失败（工作流中断）：MINERU_TOKEN 未配置，无法调用 MinerU 精准 API")
 
@@ -213,13 +212,46 @@ def _parse_pdf(pdf_path: Path) -> dict:
     raise RuntimeError("MinerU 解析失败（工作流中断）：瞬时网络错误重试后仍失败")
 
 
+def list_filings(
+    ticker: str,
+    market: str,
+    form_types: list[str] | None = None,
+    limit: int = 10,
+) -> list:
+    """列出可用财报文件（HGF 遗留项①修复：filing_service 引用的模块级接口）。
+
+    包装 _create_downloader + 下载器实例 list_filings 方法。
+
+    Args:
+        ticker: 股票代码
+        market: 市场 (us/cn/hk)
+        form_types: 过滤的表单类型列表
+        limit: 最大返回数量
+
+    Returns:
+        FilingInfo 列表
+    """
+    try:
+        downloader = _create_downloader(market)
+    except Exception as e:
+        logger.error(f"创建下载器失败（list_filings）: {e}")
+        return []
+    try:
+        return downloader.list_filings(
+            ticker=ticker, form_types=form_types, limit=max(limit, 5),
+        )
+    except Exception as e:
+        logger.error(f"列出财报失败（list_filings）: {e}")
+        return []
+
+
 def fetch_filing(
     ticker: str,
     market: str,
-    fiscal_years: Optional[list[int]] = None,
-    fiscal_periods: Optional[list[str]] = None,
+    fiscal_years: list[int] | None = None,
+    fiscal_periods: list[str] | None = None,
     limit: int = 1,
-) -> Optional[dict]:
+) -> dict | None:
     """获取财报数据（下载 + 解析）
 
     Args:

@@ -2,11 +2,11 @@
 决策模块
 """
 
-from .aggregator import DecisionAggregator, ChapterJudgment, AggregationRule, BacktestResult
+from .aggregator import AggregationRule, BacktestResult, ChapterJudgment, DecisionAggregator
 
 __all__ = [
-    'DecisionAggregator',
-    'ChapterJudgment',
     'AggregationRule',
     'BacktestResult',
+    'ChapterJudgment',
+    'DecisionAggregator',
 ]

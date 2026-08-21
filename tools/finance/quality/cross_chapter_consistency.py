@@ -42,7 +42,7 @@ class ConsistencyResult:
 
 class CrossChapterConsistencyChecker:
     """跨章节一致性检查器"""
-    
+
     def __init__(self, wind_data: dict | None = None):
         # 财年语义单源：DataAnchor 归因（FiscalSemantics——未标注数字引用按锚点值归因财年，
         # 不再一律视为"最新财年"，架构级消除历史引用误报）
@@ -51,7 +51,7 @@ class CrossChapterConsistencyChecker:
             try:
                 from ..qual_v8.data_anchor import get_data_anchor
                 self._anchor = get_data_anchor(wind_data)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 self._anchor = None
         # 未标注历史引用警告收集
         self.unattributed_historical: list[str] = []
@@ -80,7 +80,7 @@ class CrossChapterConsistencyChecker:
                 r"毛利率.*?(\d+\.?\d*)\s*个百分点",
             ],
         }
-        
+
         # 关键结论正则模式
         self.conclusion_patterns = {
             "现金流状态": [
@@ -95,53 +95,53 @@ class CrossChapterConsistencyChecker:
                 r"亏损收窄",
             ],
         }
-    
+
     def check(self, chapters: dict[int, str]) -> ConsistencyResult:
         """
         检查跨章节一致性
-        
+
         Args:
             chapters: 各章节内容 {chapter_num: content}
-        
+
         Returns:
             ConsistencyResult
         """
         issues = []
-        
+
         # 1. 检查财务数据一致性
         financial_issues = self._check_financial_consistency(chapters)
         issues.extend(financial_issues)
-        
+
         # 2. 检查结论一致性
         conclusion_issues = self._check_conclusion_consistency(chapters)
         issues.extend(conclusion_issues)
-        
+
         # 3. 检查时间点一致性
         time_issues = self._check_time_consistency(chapters)
         issues.extend(time_issues)
-        
+
         # 计算评分
         fatal_count = sum(1 for i in issues if i.severity == "fatal")
         important_count = sum(1 for i in issues if i.severity == "important")
         suggestion_count = sum(1 for i in issues if i.severity == "suggestion")
-        
+
         score = 100.0
         score -= fatal_count * 40
         score -= important_count * 15
         score -= suggestion_count * 5
         score = max(0.0, min(100.0, score))
-        
+
         passed = fatal_count == 0 and score >= 60.0
-        
+
         if not passed:
             logger.warning(f"跨章节一致性检查不通过: score={score:.0f}, issues={len(issues)}")
-        
+
         return ConsistencyResult(
             passed=passed,
             issues=issues,
             score=score,
         )
-    
+
     def _extract_financial_data(self, content: str, ch_num: int) -> dict[str, list]:
         """从章节内容中提取财务数据（多财年感知：按财年分组）
 
@@ -180,7 +180,7 @@ class CrossChapterConsistencyChecker:
                     )
                     return attr["fiscal_year"]
                 return attr["fiscal_year"]
-            except Exception:  # noqa: BLE001
+            except Exception:
                 return None
 
         for indicator, patterns in self.financial_patterns.items():
@@ -200,7 +200,7 @@ class CrossChapterConsistencyChecker:
                         if indicator not in data:
                             data[indicator] = []
                         data[indicator].append((fy, value))
-                except Exception:  # noqa: BLE001, S112 —— 单值解析失败跳过（正则边界）
+                except Exception:  # noqa: S112 —— 单值解析失败跳过（正则边界）
                     continue
                 # 一个 indicator 取全量匹配后不再重复模式（同 indicator 多模式仅兜底）
                 if data.get(indicator):
@@ -280,7 +280,7 @@ class CrossChapterConsistencyChecker:
                         ))
 
         return issues
-    
+
     def _check_conclusion_consistency(self, chapters: dict[int, str]) -> list[ConsistencyIssue]:
         """检查结论一致性（多财年感知：仅比较同财年的结论）
 
@@ -333,16 +333,16 @@ class CrossChapterConsistencyChecker:
                             ))
 
         return issues
-    
+
     def _check_time_consistency(self, chapters: dict[int, str]) -> list[ConsistencyIssue]:
         """检查时间点一致性"""
         issues = []
-        
+
         # 提取各章节中的时间点
         chapter_times = {}
         for ch_num, content in chapters.items():
             chapter_times[ch_num] = self._extract_time_points(content, ch_num)
-        
+
         # 比对相同时间点在不同章节中的引用
         time_references = {}
         for ch_num, times in chapter_times.items():
@@ -350,7 +350,7 @@ class CrossChapterConsistencyChecker:
                 if time_ref not in time_references:
                     time_references[time_ref] = []
                 time_references[time_ref].append(ch_num)
-        
+
         # 检查同一时间点在不同章节中的数据是否一致
         for time_ref, chapters_using in time_references.items():
             if len(chapters_using) >= 2:
@@ -361,7 +361,7 @@ class CrossChapterConsistencyChecker:
                     data = self._extract_data_for_time(content, time_ref)
                     if data:
                         time_data[ch_num] = data
-                
+
                 # 比对数据
                 if len(time_data) >= 2:
                     for indicator in ["总资产", "净利润", "营业收入"]:
@@ -369,7 +369,7 @@ class CrossChapterConsistencyChecker:
                         for ch_num, data in time_data.items():
                             if indicator in data:
                                 values[ch_num] = data[indicator]
-                        
+
                         if len(values) >= 2:
                             ch_list = list(values.keys())
                             for i in range(len(ch_list)):
@@ -390,9 +390,9 @@ class CrossChapterConsistencyChecker:
                                         line2=0,
                                         content2=f"{indicator}={val2}亿",
                                     ))
-        
+
         return issues
-    
+
     def _extract_conclusions(self, content: str, ch_num: int) -> dict[str, list]:
         """从章节内容中提取结论（按财年分组）{topic: [(fy, conclusion), ...]}"""
         conclusions: dict[str, list] = {}
@@ -411,23 +411,23 @@ class CrossChapterConsistencyChecker:
                         conclusions[topic] = []
                     conclusions[topic].append((fy, m.group(0)))
         return conclusions
-    
+
     def _extract_time_points(self, content: str, ch_num: int) -> list[str]:
         """从章节内容中提取时间点"""
         time_points = []
-        
+
         # 匹配年份
         year_pattern = r"(20\d{2})\s*年"
         years = re.findall(year_pattern, content)
         time_points.extend([f"{y}年" for y in years])
-        
+
         # 匹配季度
         quarter_pattern = r"(20\d{2})\s*年?\s*(Q[1-4]|[上下]半年|[一二三四]季度)"
         quarters = re.findall(quarter_pattern, content)
         time_points.extend([f"{y}{q}" for y, q in quarters])
-        
+
         return list(set(time_points))
-    
+
     def _extract_data_for_time(self, content: str, time_ref: str) -> dict[str, float]:
         """提取特定时间点附近各指标的数据 {indicator: value}
 
@@ -459,20 +459,20 @@ class CrossChapterConsistencyChecker:
                     except (ValueError, IndexError):
                         continue
         return data
-    
+
     def _is_conclusion_conflict(self, conc1: str, conc2: str) -> bool:
         """判断两个结论是否冲突"""
         # 正面关键词
         positive_keywords = ["转正", "改善", "增长", "上升", "提升"]
         # 负面关键词
         negative_keywords = ["为负", "下降", "恶化", "亏损", "减少"]
-        
+
         conc1_positive = any(kw in conc1 for kw in positive_keywords)
         conc1_negative = any(kw in conc1 for kw in negative_keywords)
-        
+
         conc2_positive = any(kw in conc2 for kw in positive_keywords)
         conc2_negative = any(kw in conc2 for kw in negative_keywords)
-        
+
         # 一个正面一个负面则冲突
         return (conc1_positive and conc2_negative) or (conc1_negative and conc2_positive)
 

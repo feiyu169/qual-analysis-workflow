@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +21,12 @@ logger = logging.getLogger(__name__)
 class FCFConfig:
     """FCF配置"""
     definition: str = "FCFF"  # FCFF | FCFE | LFCF
-    
+
     # FCFF配置
     fcff_formula: str = "EBIT×(1-T) + D&A - CapEx - ΔWC"
     tax_type: str = "effective"  # effective | marginal | normalized
     capex_type: str = "total"  # maintenance_only | total
-    
+
     # 一致性检查阈值
     fcf_ni_ratio_range: tuple = (0.3, 3.0)
     fcf_ocf_ratio_min: float = 0.5
@@ -74,19 +73,19 @@ class LFCFResult:
 @dataclass
 class FCFConsistencyCheck:
     """FCF一致性检查结果"""
-    fcf_ni_ratio: Optional[float] = None
-    fcf_ocf_ratio: Optional[float] = None
+    fcf_ni_ratio: float | None = None
+    fcf_ocf_ratio: float | None = None
     negative_fcf_years: int = 0
-    warnings: List[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     passed: bool = True
 
 
 class FCFCalculator:
     """FCF计算器"""
-    
-    def __init__(self, config: Optional[FCFConfig] = None):
+
+    def __init__(self, config: FCFConfig | None = None):
         self.config = config or FCFConfig()
-    
+
     def calculate_fcff(
         self,
         ebit: float,
@@ -98,17 +97,17 @@ class FCFCalculator:
         """企业自由现金流（对全资本提供者）"""
         # NOPAT = EBIT × (1 - T)
         nopat = ebit * (1 - tax_rate)
-        
+
         # FCFF = NOPAT + D&A - CapEx - ΔWC
         fcf = nopat + depreciation - capex - working_capital_change
-        
+
         formula = (
             f"FCFF = EBIT×(1-T) + D&A - CapEx - ΔWC\n"
             f"     = {ebit:.1f}×(1-{tax_rate:.2%}) + {depreciation:.1f} - {capex:.1f} - {working_capital_change:.1f}\n"
             f"     = {nopat:.1f} + {depreciation:.1f} - {capex:.1f} - {working_capital_change:.1f}\n"
             f"     = {fcf:.1f}"
         )
-        
+
         return FCFFResult(
             method="FCFF",
             ebit=ebit,
@@ -120,7 +119,7 @@ class FCFCalculator:
             fcf=fcf,
             formula=formula,
         )
-    
+
     def calculate_fcfe(
         self,
         net_income: float,
@@ -132,13 +131,13 @@ class FCFCalculator:
         """股权自由现金流"""
         # FCFE = Net Income + D&A - CapEx - ΔWC + Net Borrowing
         fcf = net_income + depreciation - capex - working_capital_change + net_borrowing
-        
+
         formula = (
             f"FCFE = Net Income + D&A - CapEx - ΔWC + Net Borrowing\n"
             f"     = {net_income:.1f} + {depreciation:.1f} - {capex:.1f} - {working_capital_change:.1f} + {net_borrowing:.1f}\n"
             f"     = {fcf:.1f}"
         )
-        
+
         return FCFEResult(
             method="FCFE",
             net_income=net_income,
@@ -149,7 +148,7 @@ class FCFCalculator:
             fcf=fcf,
             formula=formula,
         )
-    
+
     def calculate_lfcf(
         self,
         operating_cashflow: float,
@@ -158,13 +157,13 @@ class FCFCalculator:
         """简化自由现金流"""
         # LFCF = Operating CF - CapEx
         fcf = operating_cashflow - capex
-        
+
         formula = (
             f"LFCF = Operating CF - CapEx\n"
             f"     = {operating_cashflow:.1f} - {capex:.1f}\n"
             f"     = {fcf:.1f}"
         )
-        
+
         return LFCFResult(
             method="LFCF",
             operating_cashflow=operating_cashflow,
@@ -172,15 +171,15 @@ class FCFCalculator:
             fcf=fcf,
             formula=formula,
         )
-    
+
     def calculate(
         self,
-        method: Optional[str] = None,
+        method: str | None = None,
         **kwargs,
     ) -> dict:
         """主计算入口"""
         method = method or self.config.definition
-        
+
         if method == "FCFF":
             result = self.calculate_fcff(
                 ebit=kwargs.get('ebit', 0),
@@ -204,14 +203,14 @@ class FCFCalculator:
             )
         else:
             raise ValueError(f"未知FCF方法: {method}")
-        
+
         return {
             "method": method,
             "fcf": result.fcf,
             "formula": result.formula,
             "details": result,
         }
-    
+
     def check_consistency(
         self,
         fcf: float,
@@ -221,7 +220,7 @@ class FCFCalculator:
     ) -> FCFConsistencyCheck:
         """FCF一致性检查"""
         result = FCFConsistencyCheck()
-        
+
         # FCF/NI比值
         if net_income != 0:
             result.fcf_ni_ratio = fcf / net_income
@@ -231,7 +230,7 @@ class FCFCalculator:
                     f"FCF/NI比值 {result.fcf_ni_ratio:.2f} 超出合理区间 [{min_ratio}, {max_ratio}]"
                 )
                 result.passed = False
-        
+
         # FCF/OCF比值
         if operating_cashflow != 0:
             result.fcf_ocf_ratio = fcf / operating_cashflow
@@ -240,7 +239,7 @@ class FCFCalculator:
                     f"FCF/OCF比值 {result.fcf_ocf_ratio:.2f} 低于最小值 {self.config.fcf_ocf_ratio_min}"
                 )
                 result.passed = False
-        
+
         # 连续负FCF年数
         result.negative_fcf_years = negative_fcf_years
         if negative_fcf_years > self.config.negative_fcf_years_max:
@@ -248,9 +247,9 @@ class FCFCalculator:
                 f"连续负FCF年数 {negative_fcf_years} 超过上限 {self.config.negative_fcf_years_max}"
             )
             result.passed = False
-        
+
         return result
-    
+
     def annotate_fcf(self, fcf_value: float, method: str) -> str:
         """FCF标注"""
         return f"FCF({method}) = {fcf_value:.1f}亿"

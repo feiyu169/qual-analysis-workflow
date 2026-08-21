@@ -2,12 +2,11 @@
 Gate 6: 综合结论 + 决策章 + 概览章
 """
 
-from typing import Dict, Any, List
-from dataclasses import dataclass
-from datetime import datetime
 import logging
+from datetime import datetime
+from typing import Any
 
-from ..core.gate_engine import GateBase, GateSpec, GateResult
+from ..core.gate_engine import GateBase, GateResult, GateSpec
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +23,7 @@ RATING_VALUATION_MAPPING = {
 
 class Gate6Conclusion(GateBase):
     """Gate 6: 综合结论 + 决策章 + 概览章"""
-    
+
     def __init__(self):
         spec = GateSpec(
             gate_num=6,
@@ -44,11 +43,11 @@ class Gate6Conclusion(GateBase):
             ],
         )
         super().__init__(spec)
-        
+
         self.allowed_ratings = ["买入", "增持", "中性", "减持", "卖出"]
         self.rating_mapping = RATING_VALUATION_MAPPING
-    
-    def execute(self, context: Dict[str, Any]) -> GateResult:
+
+    def execute(self, context: dict[str, Any]) -> GateResult:
         """执行Gate 6（真实：生成决策章+概览章，然后检查评级一致性）"""
         errors = []
         warnings = []
@@ -119,7 +118,7 @@ class Gate6Conclusion(GateBase):
             timestamp=datetime.now().isoformat(),
         )
 
-    def _generate_decision_overview(self, context: Dict[str, Any], chapters: Dict[int, str]) -> Dict[str, Any]:
+    def _generate_decision_overview(self, context: dict[str, Any], chapters: dict[int, str]) -> dict[str, Any]:
         """生成决策章(10)与概览章(0)（真实：workflow._generate_decision_chapter/_generate_overview_chapter）"""
         errors = []
         llm_caller = context.get("llm_caller")
@@ -129,7 +128,8 @@ class Gate6Conclusion(GateBase):
 
         try:
             from ...workflow import (
-                _generate_decision_chapter, _generate_overview_chapter,
+                _generate_decision_chapter,
+                _generate_overview_chapter,
                 _generate_synthesis_chapter,
             )
             from ..adapters import build_data_context
@@ -168,46 +168,46 @@ class Gate6Conclusion(GateBase):
         except Exception as e:
             logger.error(f"Gate6 决策/概览章生成失败: {e}")
             return {"passed": False, "errors": [f"决策/概览章生成失败: {e}"], "chapters": chapters}
-    
-    def check_criteria(self, context: Dict[str, Any]) -> bool:
+
+    def check_criteria(self, context: dict[str, Any]) -> bool:
         """检查通过标准"""
         chapters = context.get("chapters", {})
-        
+
         # 检查决策章
         decision_chapter = chapters.get(10, "")
         if len(decision_chapter) < 1000:
             return False
-        
+
         # 检查概览章（quick 预填无第0章时放行）
         overview_chapter = chapters.get(0, "")
         if overview_chapter and len(overview_chapter) < 500:
             return False
-        
+
         # 检查投资评级
         rating = self._extract_rating(chapters)
         if rating not in self.allowed_ratings:
             return False
-        
+
         return True
-    
-    def _check_decision_chapter(self, chapters: Dict[int, str]) -> Dict[str, Any]:
+
+    def _check_decision_chapter(self, chapters: dict[int, str]) -> dict[str, Any]:
         """检查决策章"""
         errors = []
-        
+
         decision_chapter = chapters.get(10, "")
-        
+
         if not decision_chapter:
             errors.append("决策章不存在")
         elif len(decision_chapter) < 1000:
             errors.append(f"决策章字数不足: {len(decision_chapter)}/1000")
-        
+
         return {
             "passed": len(errors) == 0,
             "errors": errors,
             "word_count": len(decision_chapter),
         }
-    
-    def _check_overview_chapter(self, chapters: Dict[int, str]) -> Dict[str, Any]:
+
+    def _check_overview_chapter(self, chapters: dict[int, str]) -> dict[str, Any]:
         """检查概览章（第0章；quick 预填报告头部无编号时，检查报告头部存在即可）"""
         errors = []
 
@@ -226,67 +226,67 @@ class Gate6Conclusion(GateBase):
             "errors": errors,
             "word_count": len(overview_chapter),
         }
-    
-    def _check_rating(self, chapters: Dict[int, str]) -> Dict[str, Any]:
+
+    def _check_rating(self, chapters: dict[int, str]) -> dict[str, Any]:
         """检查投资评级"""
         errors = []
-        
+
         rating = self._extract_rating(chapters)
-        
+
         if not rating:
             errors.append("未找到投资评级")
         elif rating not in self.allowed_ratings:
             errors.append(f"投资评级无效: {rating}")
-        
+
         return {
             "passed": len(errors) == 0,
             "errors": errors,
             "rating": rating,
         }
-    
-    def _check_rating_valuation_consistency(self, chapters: Dict[int, str], context: Dict[str, Any]) -> Dict[str, Any]:
+
+    def _check_rating_valuation_consistency(self, chapters: dict[int, str], context: dict[str, Any]) -> dict[str, Any]:
         """检查评级与估值一致性"""
         errors = []
-        
+
         rating = self._extract_rating(chapters)
         valuation = context.get("valuation")
         current_price = context.get("current_price", 0)
-        
+
         if rating and valuation and current_price > 0:
             # 计算估值偏差
             dcf_value = valuation.dcf_value if hasattr(valuation, 'dcf_value') else 0
             if dcf_value > 0:
                 deviation = (dcf_value - current_price) / current_price
-                
+
                 # 检查评级与估值是否一致
                 rating_config = self.rating_mapping.get(rating, {})
-                
+
                 if "undervaluation" in rating_config:
                     if deviation < rating_config["undervaluation"]:
                         errors.append(f"评级'{rating}'要求低估≥{rating_config['undervaluation']:.0%}，实际偏差{deviation:.2%}")
                 elif "overvaluation" in rating_config:
                     if deviation > rating_config["overvaluation"]:
                         errors.append(f"评级'{rating}'要求高估≥{rating_config['overvaluation']:.0%}，实际偏差{deviation:.2%}")
-        
+
         return {
             "passed": len(errors) == 0,
             "errors": errors,
         }
-    
-    def _extract_rating(self, chapters: Dict[int, str]) -> str:
+
+    def _extract_rating(self, chapters: dict[int, str]) -> str:
         """提取投资评级"""
         import re
-        
+
         # 在所有章节中查找评级
         for ch_num, content in chapters.items():
             patterns = [
                 r"评级[：:]\s*(买入|增持|中性|减持|卖出)",
                 r"(买入|增持|中性|减持|卖出)\s*评级",
             ]
-            
+
             for pattern in patterns:
                 match = re.search(pattern, content)
                 if match:
                     return match.group(1)
-        
+
         return ""

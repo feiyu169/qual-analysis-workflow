@@ -2,12 +2,12 @@
 Gate 7: 问题转化 + 记忆存储
 """
 
-from typing import Dict, Any, List
+import logging
 from dataclasses import dataclass
 from datetime import datetime
-import logging
+from typing import Any
 
-from ..core.gate_engine import GateBase, GateSpec, GateResult
+from ..core.gate_engine import GateBase, GateResult, GateSpec
 
 logger = logging.getLogger(__name__)
 
@@ -29,14 +29,14 @@ class AnalysisMemory:
     ticker: str
     company_name: str
     analysis_date: str
-    key_findings: List[str]
-    review_issues: List[ReviewIssue]
-    lessons_learned: List[str]
+    key_findings: list[str]
+    review_issues: list[ReviewIssue]
+    lessons_learned: list[str]
 
 
 class Gate7ProblemTransformation(GateBase):
     """Gate 7: 问题转化 + 记忆存储"""
-    
+
     def __init__(self):
         spec = GateSpec(
             gate_num=7,
@@ -52,39 +52,39 @@ class Gate7ProblemTransformation(GateBase):
             ],
         )
         super().__init__(spec)
-    
-    def execute(self, context: Dict[str, Any]) -> GateResult:
+
+    def execute(self, context: dict[str, Any]) -> GateResult:
         """执行Gate 7"""
         errors = []
         warnings = []
         details = {}
-        
+
         # 1. 收集审查问题
         review_issues = self._collect_review_issues(context)
         details["review_issues"] = len(review_issues)
-        
+
         # 2. 转化为结构化问题
         transformation_result = self._transform_issues(review_issues)
         details["transformation"] = transformation_result
-        
+
         if not transformation_result["passed"]:
             errors.extend(transformation_result["errors"])
-        
+
         # 3. 存储记忆
         memory_result = self._store_memory(context, transformation_result["issues"])
         details["memory"] = memory_result
-        
+
         if not memory_result["passed"]:
             errors.extend(memory_result["errors"])
-        
+
         # 4. 计算得分
         score = 100.0
         if errors:
             score -= len(errors) * 30
         score = max(0.0, min(100.0, score))
-        
+
         passed = len(errors) == 0
-        
+
         return GateResult(
             gate_num=7,
             passed=passed,
@@ -95,22 +95,22 @@ class Gate7ProblemTransformation(GateBase):
             execution_time=0.0,
             timestamp=datetime.now().isoformat(),
         )
-    
-    def check_criteria(self, context: Dict[str, Any]) -> bool:
+
+    def check_criteria(self, context: dict[str, Any]) -> bool:
         """检查通过标准"""
         # 检查问题转化
         transformation = context.get("transformation")
         if not transformation or not transformation.get("passed"):
             return False
-        
+
         # 检查记忆存储
         memory = context.get("memory")
         if not memory or not memory.get("passed"):
             return False
-        
+
         return True
-    
-    def _collect_review_issues(self, context: Dict[str, Any]) -> List[Dict[str, Any]]:
+
+    def _collect_review_issues(self, context: dict[str, Any]) -> list[dict[str, Any]]:
         """收集审查问题"""
         issues = []
 
@@ -134,12 +134,12 @@ class Gate7ProblemTransformation(GateBase):
                            for i in formal_issues])
 
         return issues
-    
-    def _transform_issues(self, issues: List[Dict[str, Any]]) -> Dict[str, Any]:
+
+    def _transform_issues(self, issues: list[dict[str, Any]]) -> dict[str, Any]:
         """转化问题为结构化格式"""
         errors = []
         transformed_issues = []
-        
+
         for issue in issues:
             try:
                 transformed = ReviewIssue(
@@ -152,15 +152,15 @@ class Gate7ProblemTransformation(GateBase):
                 )
                 transformed_issues.append(transformed)
             except Exception as e:
-                errors.append(f"问题转化失败: {str(e)}")
-        
+                errors.append(f"问题转化失败: {e!s}")
+
         return {
             "passed": len(errors) == 0,
             "errors": errors,
             "issues": transformed_issues,
         }
-    
-    def _store_memory(self, context: Dict[str, Any], issues: List[ReviewIssue]) -> Dict[str, Any]:
+
+    def _store_memory(self, context: dict[str, Any], issues: list[ReviewIssue]) -> dict[str, Any]:
         """存储记忆（真实：finance.workflow._store_memory 生成 MCP 指令）"""
         errors = []
 
@@ -190,5 +190,5 @@ class Gate7ProblemTransformation(GateBase):
         except Exception as e:
             return {
                 "passed": False,
-                "errors": [f"记忆存储失败: {str(e)}"],
+                "errors": [f"记忆存储失败: {e!s}"],
             }

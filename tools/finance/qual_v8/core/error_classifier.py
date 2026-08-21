@@ -4,10 +4,9 @@
 实现错误分类和处理策略
 """
 
-from enum import Enum
-from typing import Dict, Any, Optional
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
@@ -39,25 +38,25 @@ ERROR_CODE_MAPPING = {
     "HTTP_502": {"type": "transient", "retry": True, "max_retries": 3, "backoff": True},
     "HTTP_503": {"type": "transient", "retry": True, "max_retries": 3, "backoff": True},
     "HTTP_504": {"type": "transient", "retry": True, "max_retries": 3, "backoff": True},
-    
+
     # 认证错误（永久性）
     "HTTP_401": {"type": "permanent", "retry": False, "escalate": True},
     "HTTP_403": {"type": "permanent", "retry": False, "escalate": True},
     "AUTH_FAILED": {"type": "permanent", "retry": False, "escalate": True},
     "TOKEN_EXPIRED": {"type": "permanent", "retry": False, "escalate": True},
-    
+
     # 数据错误（永久性）
     "HTTP_404": {"type": "permanent", "retry": False, "escalate": True},
     "DATA_NOT_FOUND": {"type": "permanent", "retry": False, "escalate": True},
     "DATA_FORMAT_ERROR": {"type": "permanent", "retry": False, "escalate": True},
     "DATA_PARSE_ERROR": {"type": "permanent", "retry": False, "escalate": True},
-    
+
     # 业务错误
     "COVERAGE_BELOW_THRESHOLD": {"type": "business", "retry": True, "max_retries": 1},
     "PARAMETER_OUT_OF_RANGE": {"type": "business", "retry": False, "escalate": True},
     "LOGIC_CONTRADICTION": {"type": "business", "retry": False, "escalate": True},
     "VALIDATION_FAILED": {"type": "business", "retry": True, "max_retries": 1},
-    
+
     # 系统错误（临时性）
     "DATABASE_CONNECTION_ERROR": {"type": "transient", "retry": True, "max_retries": 3},
     "DATABASE_TIMEOUT": {"type": "transient", "retry": True, "max_retries": 3},
@@ -69,10 +68,10 @@ ERROR_CODE_MAPPING = {
 
 class ErrorClassifier:
     """错误分类器"""
-    
+
     def __init__(self):
         self.error_mapping = ERROR_CODE_MAPPING
-    
+
     def classify(self, error_code: str, error_message: str = "") -> ErrorClassification:
         """分类错误"""
         if error_code in self.error_mapping:
@@ -85,7 +84,7 @@ class ErrorClassifier:
                 backoff=config.get("backoff", False),
                 description=f"{error_code}: {error_message}",
             )
-        
+
         # 默认分类为临时性错误
         return ErrorClassification(
             error_type=ErrorType.TRANSIENT,
@@ -95,12 +94,12 @@ class ErrorClassifier:
             backoff=True,
             description=f"未知错误: {error_code} - {error_message}",
         )
-    
+
     def classify_from_exception(self, exception: Exception) -> ErrorClassification:
         """从异常分类错误"""
         error_type = type(exception).__name__
         error_message = str(exception)
-        
+
         # 根据异常类型分类
         if isinstance(exception, (ConnectionError, TimeoutError)):
             return self.classify("NETWORK_TIMEOUT", error_message)

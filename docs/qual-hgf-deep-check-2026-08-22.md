@@ -217,3 +217,33 @@ python -m detect_secrets scan tools/finance/...
 - 53 未接线模块中 39 个纯死代码（catalyst_calendar/margin_of_safety 等）——建议后续归档 `_legacy`（不破坏 shim）
 - filing_service 引用不存在的 get_downloader/get_parser（ruff 曾误删——已回退保留，待接线决策）
 - 全库 910 处既有 lint（W293/E501/PERF 等历史债务）——建议分批清理
+
+---
+
+## 八、遗留项处理记录（2026-08-22 同日追加）
+
+### 遗留① filing_service 断裂修复（已完成）
+
+**修复**：
+- `filing_downloader.py` 新增模块级 `list_filings()`（包装 `_create_downloader` + 下载器实例方法）——filing_service 的 `list_available_filings` 依赖它
+- `filing_service.py` 移除死导入 `get_downloader`（从未被调用）
+- `filing_service.py` 的 `download_with_cache` 重写：改用真实下载器 `download_filing` + 缓存优先（原引用不存在的 `_download_with_cache`）
+
+**验证**：filing_service 可导入、FilingService 可实例化。
+
+### 遗留② 死代码归档（已完成）
+
+全工作区引用扫描精确分类后，**10 个候选中有 4 个被引用不可归档**（peer_comparison 被 test_b4_operational_chain 真实 import；catalyst_calendar/margin_of_safety/risk_quantification 被 feature_flags 枚举字符串引用），**6 个纯死代码归档 `quality/_legacy/`**：
+`data_mapping, gate0_reviewer, gate_dependency, gate_regression, management_incentive, params_checker`
+
+附 `_legacy/README.md`（复活条件 + 归档纪律）。归档后全量测试零回归（406 + 248）。
+
+### 遗留③ lint 债务清理（已完成大部分）
+
+**修复**：
+- `ruff --fix` 自动修复 **4192 处**（UP typing 现代化/F401 未用导入/I001 排序/RUF100 noqa 清理）
+- 脚本清理全部 **W293/W291 尾随空白**（52 文件，保留 CRLF）
+- pyproject 增加设计性 ignore（E402 模块级导入惯例、S310 urlopen 业务必需）
+- 业务模块 28 个 import 冒烟零失败（F401 无关键误删）；全量测试零回归
+
+**结果**：lint 从 **4993 → 435**（清掉 91%）。剩余 435 为需手动审改的历史债务（E501 行长 158、PERF 性能 80、B007 未用循环 30、FBT bool 参数 36、F841 未用变量 18）——HGF 纪律：**不为 lint 完美牺牲正确性**，保留并在报告中标注，建议分批人工处理（F841/B007 可能掩盖逻辑 bug，改动需带测试）。
