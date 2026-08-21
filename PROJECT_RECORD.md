@@ -1,7 +1,7 @@
 # HGF 项目记录（会话持久化存档）
 
 > 本文件是 HGF（Hermes Gate Flow）在 DSH 中全部工作的持久化记录，供下次会话恢复上下文。
-> 最后更新：2026-08-21（3 项待办完成 + 16/16 gate 全流程端到端跑通）
+> 最后更新：2026-08-21（HGF V3.3.1 已推送至 GitHub feiyu169/hermes-gate-flow + SSH 私钥配置完成）
 
 ---
 
@@ -10,10 +10,12 @@
 HGF 是门禁驱动开发工作流，部署于 DSH（Cordis 插件宿主）。代码在：
 `D:\OneDrive\文档\deepseek harness workspace\workflow\`
 
-**版本**：`workflow/__init__.py` = **3.3.0**（V3.3.0 架构重构：原子写入 + 统一检查器 + lifecycle 拆分 + 矩阵解耦）
+**版本**：`workflow/__init__.py` = **3.3.2**（V3.3.1 + 自审查收敛修复 S1/S2/S3 + M1/M2/M4 + L1/L2/L3）
 
-**git 仓库**：仅 `workflow/` 目录是 git 仓库（`D:\OneDrive\文档\deepseek harness workspace\workflow\.git`）。
-工作区根目录**不是** git 仓库。pre-push hook 已安装（core.hooksPath=workflow/git_hooks）。
+**git 仓库**：`workflow/` **无独立 .git**，是工作区根仓库
+`D:\OneDrive\文档\deepseek harness workspace`（remote: `git@github.com:feiyu169/qual-analysis-workflow.git`）的子目录。
+`git log -- workflow/` 仅 4 个提交（c616aaf 基线导入/fcbf7ca/2498634/99a2445，早期历史被压扁）。
+**HGF 专属远程仓库**：`git@github.com:feiyu169/hermes-gate-flow.git`（master = 99a2445，V3.3.1 完整内容 90 文件，2026-08-21 force push 替换旧存档 794bfaa）。
 
 ---
 
@@ -34,7 +36,8 @@ HGF 是门禁驱动开发工作流，部署于 DSH（Cordis 插件宿主）。�
 | V3.2.11 待办 | 版本号 3.2.11 + 集成测试套件 + 狗粮化修复(shell参数数组/零依赖直通) + user_acceptance 人工通道 | `db2a548`/`024d1f5`/`72d361f` |
 | **V3.3.0** | **架构重构（架构专家评审 6.8/10 的 R1-R4）**：原子写入(state_io) + 统一检查器(tool_runner) + lifecycle 拆分(dag/checkers/metrics) + 矩阵-生命周期解耦(注入回调) | `3dc9c3c` |
 | **V3.3.1** | **架构复审修复（复审共识 7.6/10 的建议 1-4）**：_run_command 委托 tool_runner + mcp_server.check_security 改走 tool_runner + 删 gate_results 死表 + atomic_append_jsonl 诚实化(fsync) + re-export 收敛(__all__) + reopen 异常改 warning | `00faa14` |
-| **V3.3.1 狗粮化** | **3 项待办完成 + 16/16 gate 全流程端到端跑通**：heavyskill 模式2 恢复（.env 已有 key + K=1 冒烟通过）+ .github 已同步 + checkov 无 IaC 直通增强 | `(未提交，见下)` |
+| **V3.3.1 狗粮化** | **3 项待办完成 + 16/16 gate 全流程端到端跑通**：heavyskill 模式2 恢复（.env 已有 key + K=1 冒烟通过）+ .github 已同步 + checkov 无 IaC 直通增强 | `99a2445`（hermes-gate-flow master） |
+| **V3.3.2** | **HGF 自审查收敛修复**（报告 output/hgf-self-audit-report.md）：S1 failure_log 失败雪崩自锁（自身失败不入日志 + `--failures --archive` 归档 201 条历史脏数据）+ S2 baseline.json 损坏容错（load 返回 None + canary 自动重建）+ S3 requirements-hgf.txt 改真 pip 文件 + M1 README 补语义条目 + M2 版本收敛 3.3.2 + M4 dependency_scan 注释诚实化 + L1/L2/L3 状态补全（STATE.md/lifecycle.json/reviews.jsonl） | `(待推送)` |
 
 ### V3.3.0 架构重构明细（2026-08-18，架构专家 8 轨迹评审后实施）
 
@@ -45,7 +48,26 @@ HGF 是门禁驱动开发工作流，部署于 DSH（Cordis 插件宿主）。�
 | R3 拆分 lifecycle | lifecycle_dag(176行)+lifecycle_checkers(634行)+lifecycle_metrics(189行)+lifecycle re-export 壳 | 970 行上帝模块 → 单一职责 |
 | R4 矩阵解耦 | gate_executor 加 matrix_evidence_callback 注入（默认 None）；CLI/bridge/mcp 注入回调 | 消除执行层↔生命周期双向耦合 |
 
-**验证**：185 tests / 86% cov / ruff 全绿 / 净减 786 行 / 狗粮化状态完好（gate_3_1 done）
+**验证**：188 tests / 86% cov / ruff 全绿 / 净减 786 行 / 狗粮化状态完好（gate_3_1 done）
+
+---
+
+## 二·五、GitHub 远程仓库状态（2026-08-21）
+
+| 仓库 | remote | 状态 |
+|------|--------|------|
+| **hermes-gate-flow**（HGF 专属） | `git@github.com:feiyu169/hermes-gate-flow.git` | master=`99a2445`（V3.3.1 完整内容，90 文件）；**force push 替换旧存档 794bfaa**；浅克隆验证关键模块（lifecycle_dag/checkers/metrics、tool_runner、state_io、config/gates.yaml、plugin/hgf-tools.js）全部存在，workflow.yaml version="3.3.1" |
+| qual-analysis-workflow（工作区根） | `git@github.com:feiyu169/qual-analysis-workflow.git` | 根仓库 remote，workflow/ 无独立 .git |
+
+**SSH 配置**（2026-08-21 完成，免 -i 直接可用）：
+- `~/.ssh/id_ed25519`（复制自工作区根 `id_ed25519`，411B）+ `~/.ssh/id_ed25519.pub`（生成）
+- `~/.ssh/config`：`Host github.com` → `IdentityFile ~/.ssh/id_ed25519` + `IdentitiesOnly yes`
+- 验证：`ssh -T git@github.com` → "Hi feiyu169! You've successfully authenticated"；`git ls-remote` 免 -i 成功
+
+**推送命令备忘**（本地 hgf-export 分支 = workflow/ 的 subtree split，4 提交）：
+```powershell
+git push git@github.com:feiyu169/hermes-gate-flow.git hgf-export:master --force
+```
 
 ---
 
@@ -98,7 +120,7 @@ HGF 是门禁驱动开发工作流，部署于 DSH（Cordis 插件宿主）。�
 - pip 镜像：https://pypi.tuna.tsinghua.edu.cn/simple
 - Git Bash：`C:\Program Files\Git\bin\bash.exe`（bash 脚本用）
 - 会话权限：danger-full-access（不请求沙箱升级）
-- 测试基线：**161 passed / 覆盖率 85% / ruff+format 全绿**
+- 测试基线：**195 passed / 覆盖率 87% / ruff+format 全绿**（2026-08-21 V3.3.2 自审查修复后）
 
 ---
 
@@ -133,6 +155,7 @@ HGF 是门禁驱动开发工作流，部署于 DSH（Cordis 插件宿主）。�
 5. ✅ user_acceptance 人工通道（_check_review 含人工验收证据，狗粮化 gate_3_3 实际通过）
 6. ✅ **heavyskill 模式2 恢复**（2026-08-21：httpx 0.28.1 已装于系统 Python；DEEPSEEK_API_KEY 在 config/.env 长度 35；K=1 冒烟 20.5s/1047 tokens 通过。**用法**：从 .env 读 key → `python skills/heavyskill/scripts/run_heavyskill.py --query "..." --reason_k 8 --summary_k 4 --api_key $key`）
 7. ✅ **HGF 狗粮化验收**（2026-08-21：**16/16 gate 全部 done，Phase 0-5 端到端真实跑通**）
+8. ✅ **HGF 推送 GitHub + SSH 配置**（2026-08-21：SSH 私钥配置到 ~/.ssh 免 -i 验证通过；workflow V3.3.1 以 hgf-export 子树 force push 至 hermes-gate-flow master=`99a2445`，浅克隆验证 90 文件完整）
 
 ### 狗粮化 16 gate 全流程里程碑（2026-08-21）
 - `.hgf-dogfood/`（gitignore）demo 项目从 gate_0_1 推进至 gate_5_2 **全部 done**
@@ -205,6 +228,6 @@ cd "D:\OneDrive\文档\deepseek harness workspace\workflow"
 - 测试：无证据拒绝 / 有证据通过
 
 ### 遗留（下次会话可选）
-- dogfood 继续推进 Phase 3.2-5（gate_3_2 安全测试需 DAST 外部报告）
-- `.github/workflows/hgf-gates.yml` 更新在工作区文件系统（工作区根非 git 仓库）
+- ~~dogfood 继续推进 Phase 3.2-5~~ ✅ 已完成（16/16 gate，见第七节）
+- ~~把狗粮化推进过程沉淀为 hgf 技能的教学示例~~ ✅ 已完成（SKILL.md「教学实例」段，commit f757802）
 
