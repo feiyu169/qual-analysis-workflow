@@ -13,14 +13,14 @@ import logging
 
 # v3 新组件: UnifiedValuation (统一估值)
 try:
-    from .valuation.unified import UnifiedValuation
-    from .valuation.assumptions import create_default_assumptions
+    from .valuation.assumptions import create_default_assumptions  # noqa: F401
+    from .valuation.unified import UnifiedValuation  # noqa: F401
     HAS_UNIFIED_VALUATION = True
 except ImportError:
     HAS_UNIFIED_VALUATION = False
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +29,11 @@ logger = logging.getLogger(__name__)
 class QualityEnhancementResult:
     """质量增强结果"""
     # 各阶段结果
-    repair_result: Optional[dict] = None
-    base_valuation: Optional[dict] = None
+    repair_result: dict | None = None
+    base_valuation: dict | None = None
     debate_results: dict = field(default_factory=dict)
-    valuation_result: Optional[dict] = None
-    depth_result: Optional[dict] = None
+    valuation_result: dict | None = None
+    depth_result: dict | None = None
 
     # 汇总
     chapters_enhanced: int = 0
@@ -45,13 +45,14 @@ class QualityEnhancementResult:
 def enhance_report_quality(
     chapters: dict[int, str],
     financials: dict,
-    wind_valuation: Optional[dict] = None,
+    wind_valuation: dict | None = None,
     company_name: str = "",
     ticker: str = "",
     shares: float = 0.0,
-    current_price: Optional[float] = None,  # B2a-1：不再内置快手默认值 41.6
+    current_price: float | None = None,  # B2a-1：不再内置快手默认值 41.6
     fiscal_year: int = 2025,
-    llm_caller: Optional[Callable] = None,
+    market: str = "hk",  # B2a-2：币种断言（hk→港元，估值链统一币种）
+    llm_caller: Callable | None = None,
     enable_debate: bool = True,
     enable_valuation: bool = True,
     enable_depth: bool = True,
@@ -96,7 +97,7 @@ def enhance_report_quality(
             'warnings': repair_result.warnings,
         }
         result.total_fixes += repair_result.source_fixes + repair_result.ai_trace_fixes
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error(f"Stage 1 失败: {e}")
         result.warnings.append(f"数据修复失败: {e}")
 
@@ -119,15 +120,15 @@ def enhance_report_quality(
             'pe_history_avg': base_val.pe_history_avg,
         }
         valuation_summary = base_val.summary()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.error(f"Stage 2 失败: {e}")
         result.warnings.append(f"基础估值失败: {e}")
-        valuation_summary = ""
+        valuation_summary = ""  # noqa: F841 —— 保留统一命名（Stage 2 结果占位，后续扩展审计用）
 
     # === Stage 3: 辩论机制（统一 DebateService：锚点 + 超时 240s + 部分成功降级） ===
     if enable_debate and llm_caller:
         logger.info("[Quality] Stage 3: 辩论机制（DebateService）")
-        from .quality.debate_service import DebateService, ENHANCE_DEBATE_CHAPTERS
+        from .quality.debate_service import ENHANCE_DEBATE_CHAPTERS, DebateService
 
         # 锚点：从 financials 重建 wind_data 形态（income/balance/cashflow）
         wind_data = financials if isinstance(financials, dict) else {}
@@ -156,7 +157,7 @@ def enhance_report_quality(
                         logger.info(f"[Debate] 第{ch_num}章增强完成")
                     else:
                         logger.warning(f"[Debate] 第{ch_num}章增强无效（辩论降级或失败），保留原文")
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.warning(f"第{ch_num}章辩论失败: {e}")
 
     # === Stage 4: 完整估值 ===
@@ -166,16 +167,21 @@ def enhance_report_quality(
             # v3: 优先使用UnifiedValuation
             if HAS_UNIFIED_VALUATION:
                 from .valuation.unified import UnifiedValuation
-                from .valuation.assumptions import create_default_assumptions
-                
-                # 从financials提取关键数据
-                revenue = financials.get('revenue', 0)
-                operating_profit = financials.get('operating_profit', 0)
+
+                # 从financials提取关键数据（兼容嵌套 {income:...} 与扁平 {revenue:...} 两种结构）
+                _income = financials.get('income') if isinstance(financials.get('income'), dict) else {}
+                _rev_list = _income.get('年营业总收入') or _income.get('营业收入') or []
+                _op_list = _income.get('年营业利润') or _income.get('营业利润') or []
+                revenue = _rev_list[-1] if _rev_list else financials.get('revenue', 0)
+                operating_profit = _op_list[-1] if _op_list else financials.get('operating_profit', 0)
                 ebit_margin = operating_profit / revenue if revenue > 0 else 0.05
                 
                 # 修复：create_default_assumptions不支持base_ebit_margin参数
                 # 使用自定义方式创建assumptions
-                from .valuation.assumptions import ValuationAssumptions, AssumptionSource
+                from .valuation.assumptions import (
+                    AssumptionSource,
+                    ValuationAssumptions,
+                )
                 
                 assumptions = ValuationAssumptions(
                     base_revenue=revenue,
@@ -210,7 +216,9 @@ def enhance_report_quality(
                 logger.info(f"[Quality] UnifiedValuation DCF: {dcf_value:.2f}")
             else:
                 # 降级到valuation_engine
-                from .valuation_engine import compute_full_valuation, format_valuation_for_report
+                from .valuation_engine import (
+                    compute_full_valuation,
+                )
                 val_result = compute_full_valuation(
                     ticker=ticker,
                     company_name=company_name,
@@ -226,16 +234,17 @@ def enhance_report_quality(
                     'upside': val_result.upside,
                 }
 
-            # 注入估值结果到第7章
+            # 注入估值结果到第7章（B2a-2：币种统一——hk 市场用"港元"，避免与财务人民币混用）
             if result.valuation_result and result.valuation_result.get('dcf_value'):
-                val_text = f"\n\n## 估值分析\n\n- DCF每股价值: {result.valuation_result['dcf_value']:.2f}元\n"
-                val_text += f"- 目标价区间: {result.valuation_result.get('target_bear', 0):.2f} - {result.valuation_result.get('target_bull', 0):.2f}元\n"
+                _ccy = "港元" if market == "hk" else "元"
+                val_text = f"\n\n## 估值分析\n\n- DCF每股价值: {result.valuation_result['dcf_value']:.2f}{_ccy}\n"
+                val_text += f"- 目标价区间: {result.valuation_result.get('target_bear', 0):.2f} - {result.valuation_result.get('target_bull', 0):.2f}{_ccy}\n"
                 val_text += f"- 上行空间: {result.valuation_result.get('upside', 0):.1%}\n"
                 if 7 in chapters:
                     chapters[7] = chapters[7] + val_text
                     logger.info("[Quality] 估值结果已注入第7章")
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Stage 4 失败: {e}")
             result.warnings.append(f"估值失败: {e}")
 
@@ -243,7 +252,7 @@ def enhance_report_quality(
     if enable_depth:
         logger.info("[Quality] Stage 5: 深度优化")
         try:
-            from .depth_enhancer import run_depth_enhancement, format_depth_for_report
+            from .depth_enhancer import format_depth_for_report, run_depth_enhancement
             
             # 计算WACC（使用CAPM）
             rf = 0.023  # 无风险利率
@@ -276,7 +285,7 @@ def enhance_report_quality(
                 chapters[7] = chapters[7] + "\n\n" + depth_report
                 logger.info("[Quality] 深度优化结果已注入第7章")
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Stage 5 失败: {e}")
             result.warnings.append(f"深度优化失败: {e}")
 

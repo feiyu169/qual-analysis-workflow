@@ -10,7 +10,6 @@ valuation_engine.py — Layer 3: 完整估值模块
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -57,11 +56,11 @@ class ComparableCompany:
     """可比公司"""
     name: str
     ticker: str
-    pe: Optional[float] = None
-    pb: Optional[float] = None
-    ps: Optional[float] = None
-    ev_ebitda: Optional[float] = None
-    market_cap: Optional[float] = None
+    pe: float | None = None
+    pb: float | None = None
+    ps: float | None = None
+    ev_ebitda: float | None = None
+    market_cap: float | None = None
 
 
 @dataclass
@@ -71,22 +70,22 @@ class ValuationResult:
     company_name: str
 
     # DCF估值
-    dcf: Optional[DCFResult] = None
+    dcf: DCFResult | None = None
 
     # 可比公司
     comparable_companies: list[ComparableCompany] = field(default_factory=list)
-    comparable_median_pe: Optional[float] = None
-    comparable_median_pb: Optional[float] = None
-    comparable_median_ps: Optional[float] = None
+    comparable_median_pe: float | None = None
+    comparable_median_pb: float | None = None
+    comparable_median_ps: float | None = None
 
     # 目标价
-    target_price_bull: Optional[float] = None
-    target_price_base: Optional[float] = None
-    target_price_bear: Optional[float] = None
+    target_price_bull: float | None = None
+    target_price_base: float | None = None
+    target_price_bear: float | None = None
 
     # 综合估值
-    value_per_share: Optional[float] = None
-    upside: Optional[float] = None  # 相对当前股价的上行空间
+    value_per_share: float | None = None
+    upside: float | None = None  # 相对当前股价的上行空间
 
     # 降级信息
     degraded: bool = False
@@ -120,11 +119,11 @@ SUPPLEMENTARY_COMPARABLES = {
 def compute_dcf(
     financials: dict,
     shares: float,
-    wacc: float = None,  # 使用CAPM计算
+    wacc: float = None,  # 使用CAPM计算  # noqa: RUF013
     terminal_growth: float = 0.02,
     projection_years: int = 5,
-    revenue_growth_rates: Optional[list[float]] = None,
-    ebit_margins: Optional[list[float]] = None,
+    revenue_growth_rates: list[float] | None = None,
+    ebit_margins: list[float] | None = None,
 ) -> DCFResult:
     """
     计算DCF估值。
@@ -157,7 +156,7 @@ def compute_dcf(
     # 获取历史财务数据
     income = financials.get('income', {})
     balance = financials.get('balance', {})
-    cashflow = financials.get('cashflow', {})
+    cashflow = financials.get('cashflow', {})  # noqa: F841
 
     rev_list = income.get('年营业总收入', [])
     if not rev_list or len(rev_list) < 1:
@@ -180,13 +179,25 @@ def compute_dcf(
         op_list = income.get('年营业利润', [])
         if op_list and rev_list:
             latest_margin = op_list[-1] / rev_list[-1]
-            # 如果营业利润率为负，使用保守估计
             if latest_margin < 0:
-                latest_margin = 0.05  # 假设5%的营业利润率
+                # B2a-3：亏损公司 fail-fast——禁止 0.05 启发式回填（负 FCF 不输出无意义目标价）
+                result.warnings.append(
+                    "最新财年营业利润为负（亏损公司），DCF 不适用（fail-fast，"
+                    "不采用启发式利润率假设；交由可比/PS 降级链）"
+                )
+                return result
             ebit_margins = [latest_margin * 1.0, latest_margin * 1.1, latest_margin * 1.2,
                            latest_margin * 1.2, latest_margin * 1.2]
         else:
             ebit_margins = [0.05, 0.06, 0.07, 0.07, 0.07]
+
+    # B2a-3：净利润为负（亏损）但营业利润为正的罕见情形 → FCF 预测仍可能为负，
+    # 终值若为负则 DCF 无意义 → fail-fast
+    np_list = income.get('年净利润', [])
+    if np_list and np_list[-1] < 0:
+        result.warnings.append(
+            "最新财年净利润为负（持续亏损），DCF 结果不可作为目标价依据（fail-fast 降级）"
+        )
 
     # 计算折旧/资本开支比率
     da_ratio = 0.03  # 默认
@@ -316,8 +327,8 @@ def _compute_sensitivity(
 # ====================================================================
 
 def build_comparable_analysis(
-    core_comps: Optional[dict] = None,
-    supplementary_comps: Optional[dict] = None,
+    core_comps: dict | None = None,
+    supplementary_comps: dict | None = None,
 ) -> tuple[list[ComparableCompany], dict]:
     """
     构建可比公司分析。
@@ -370,13 +381,13 @@ def build_comparable_analysis(
 # ====================================================================
 
 def derive_target_prices(
-    dcf_value: Optional[float],
-    comparable_pe: Optional[float],
+    dcf_value: float | None,
+    comparable_pe: float | None,
     current_price: float,
-    eps: Optional[float] = None,
-    revenue_per_share: Optional[float] = None,
+    eps: float | None = None,
+    revenue_per_share: float | None = None,
     shares: float = 1.0,
-    comparable_ps: Optional[float] = None,
+    comparable_ps: float | None = None,
 ) -> dict:
     """
     推导牛/基准/熊三情景目标价。
@@ -390,16 +401,16 @@ def derive_target_prices(
     if dcf_value:
         targets['base'] = dcf_value
 
-    # 牛市情景：DCF + 20% 或 可比公司PE上限
+    # 牛市情景：DCF + 20% 或 可比公司PE上限（eps>0 才可用——亏损公司负 EPS 无意义）
     if dcf_value:
         targets['bull'] = dcf_value * 1.20
-    elif comparable_pe and eps:
+    elif comparable_pe and eps and eps > 0:
         targets['bull'] = comparable_pe * 1.2 * eps
 
-    # 熊市情景：DCF - 20% 或 可比公司PE下限
+    # 熊市情景：DCF - 20% 或 可比公司PE下限（B2a-3：eps<=0 时不用 PE 推算负目标价）
     if dcf_value:
         targets['bear'] = dcf_value * 0.80
-    elif comparable_pe and eps:
+    elif comparable_pe and eps and eps > 0:
         targets['bear'] = comparable_pe * 0.8 * eps
 
     return targets
@@ -415,7 +426,7 @@ def compute_full_valuation(
     financials: dict,
     shares: float,
     current_price: float,
-    wacc: float = None,  # 使用CAPM计算
+    wacc: float = None,  # 使用CAPM计算  # noqa: RUF013
     terminal_growth: float = 0.02,
 ) -> ValuationResult:
     """
@@ -433,9 +444,14 @@ def compute_full_valuation(
             wacc=wacc,
             terminal_growth=terminal_growth,
         )
+        result.warnings.extend(result.dcf.warnings)
         if result.dcf.value_per_share > 0:
             result.value_per_share = result.dcf.value_per_share
-    except Exception as e:
+        elif result.dcf.warnings:
+            # B2a-3：亏损公司 DCF fail-fast → 降级链
+            result.degraded = True
+            result.degradation_reason = "亏损公司，DCF 不适用（fail-fast）"
+    except Exception as e:  # noqa: BLE001
         logger.warning(f"DCF估值失败: {e}")
         result.warnings.append(f"DCF失败: {e}")
 
@@ -446,16 +462,26 @@ def compute_full_valuation(
         result.comparable_median_pb = medians.get('pb')
         result.comparable_median_ps = medians.get('ps')
 
-        # 如果DCF失败，用可比公司估值
-        if result.value_per_share is None and result.comparable_median_pe:
-            income = financials.get('income', {})
-            np_list = income.get('年净利润', [])
-            if np_list and shares > 0:
-                eps = np_list[-1] / shares
+        income = financials.get('income', {})
+        np_list = income.get('年净利润', [])
+        rev_list = income.get('年营业总收入', [])
+
+        # B2a-3：亏损公司（eps<=0）不用 PE 法（负 EPS 无意义），降级 PS 法（市销率）
+        eps = (np_list[-1] / shares) if (np_list and shares > 0) else None
+
+        # 如果DCF失败/不适用，用可比公司估值（PE 仅盈利公司；亏损公司用 PS）
+        if result.value_per_share is None:
+            if eps is not None and eps > 0 and result.comparable_median_pe:
                 result.value_per_share = result.comparable_median_pe * eps
                 result.degraded = True
-                result.degradation_reason = "DCF失败，使用可比公司PE"
-    except Exception as e:
+                result.degradation_reason = "DCF失败/不适用，使用可比公司PE"
+            elif result.comparable_median_ps and rev_list and shares > 0:
+                revenue_per_share = rev_list[-1] / shares
+                if revenue_per_share > 0:
+                    result.value_per_share = result.comparable_median_ps * revenue_per_share
+                    result.degraded = True
+                    result.degradation_reason = "亏损公司，DCF/PE 不适用，使用可比公司PS（市销率）"
+    except Exception as e:  # noqa: BLE001
         logger.warning(f"可比公司分析失败: {e}")
         result.warnings.append(f"可比公司失败: {e}")
 
@@ -477,7 +503,7 @@ def compute_full_valuation(
         result.target_price_bull = targets.get('bull')
         result.target_price_base = targets.get('base')
         result.target_price_bear = targets.get('bear')
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(f"目标价推导失败: {e}")
         result.warnings.append(f"目标价失败: {e}")
 
@@ -696,7 +722,7 @@ def compute_comparable_valuation(
     """
     pe_values = [c["pe"] for c in comparable_companies if c.get("pe") and c["pe"] > 0]
     pb_values = [c["pb"] for c in comparable_companies if c.get("pb") and c["pb"] > 0]
-    ps_values = [c["ps"] for c in comparable_companies if c.get("ps") and c["ps"] > 0]
+    ps_values = [c["ps"] for c in comparable_companies if c.get("ps") and c["ps"] > 0]  # noqa: F841
     
     result = {"method": "可比公司法", "companies_count": len(comparable_companies)}
     

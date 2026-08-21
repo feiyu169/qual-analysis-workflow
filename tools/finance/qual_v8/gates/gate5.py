@@ -198,6 +198,7 @@ class Gate5QualityEnhancement(GateBase):
                 shares=shares if shares is not None else 0,
                 current_price=current_price if current_price is not None else 0,
                 fiscal_year=fiscal_year if fiscal_year is not None else 2025,
+                market=context.get("market", "hk"),  # B2a-2：币种断言
                 llm_caller=llm_caller,
                 enable_debate=False,
                 enable_valuation=True,

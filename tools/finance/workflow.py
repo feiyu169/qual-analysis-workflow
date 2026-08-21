@@ -2801,6 +2801,7 @@ def run_analysis(
             # B2a-1：current_price 从 Wind quote 动态取（删 quality_enhancer 内置 41.6 默认）
             current_price=(ctx.wind.quote.get("最新价") if ctx.wind and hasattr(ctx.wind, "quote") and isinstance(ctx.wind.quote, dict) else None),
             fiscal_year=2025,
+            market=market,  # B2a-2：币种断言（hk→港元）
             llm_caller=llm_caller,
             enable_debate=False,  # 辩论机制已禁用（会导致进程卡死）
             enable_valuation=True,

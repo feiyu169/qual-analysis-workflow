@@ -122,6 +122,46 @@ def test_integration():
     assert result.depth_result is not None, "应有深度结果"
     assert 7 in enhanced, "第7章应存在"
     assert "DCF" in enhanced[7] or "估值" in enhanced[7], "第7章应包含估值内容"
+
+
+def test_valuation_currency_hkd():
+    """B2a-2：港股估值注入统一港元（无人民币混用）"""
+    chapters = {7: "### 第7章\n估值分析。", 5: "### 第5章\n盈利稳定。"}
+    financials = {
+        "income": {"年营业总收入": [100.0, 120.0, 150.0], "年净利润": [15.0, 18.0, 22.0], "年营业利润": [20.0, 25.0, 30.0]},
+        "balance": {"年负债合计": [50.0, 55.0, 60.0], "年流动资产合计": [80.0, 90.0, 100.0]},
+        "cashflow": {"经营活动现金流量净额": [10.0, 12.0, 15.0]},
+    }
+
+    enhanced, result = enhance_report_quality(
+        chapters=dict(chapters),
+        financials=financials,
+        company_name="港股公司",
+        ticker="1234.HK",
+        shares=10.0,
+        current_price=12.0,
+        market="hk",  # B2a-2
+        enable_debate=False,
+        enable_valuation=True,
+        enable_depth=False,
+    )
+    assert "港元" in enhanced[7], "港股估值应标注港元"
+    assert "元\n" not in enhanced[7].replace("港元", ""), "不应有未标注的裸'元'"
+
+    # A 股：仍用元
+    enhanced_cn, _ = enhance_report_quality(
+        chapters=dict(chapters),
+        financials=financials,
+        company_name="A股公司",
+        ticker="600000.SH",
+        shares=10.0,
+        current_price=12.0,
+        market="cn",
+        enable_debate=False,
+        enable_valuation=True,
+        enable_depth=False,
+    )
+    assert "元\n" in enhanced_cn[7], "A 股估值用元"
     print(f"✅ 集成测试: 修复={result.total_fixes}处, 估值=DCF{result.valuation_result['dcf_value']:.1f}元")
 
 
