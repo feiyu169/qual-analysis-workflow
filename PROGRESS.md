@@ -379,6 +379,16 @@
             - 分析进行中：Wind 加载 ✅ → 3 年报解析 ✅ → Gate0 通过 ✅ → Gate1-8 执行中（shadow 模式，5400s 有界）
             - ⚠️ 会话暂停时后台任务仍运行：下次会话先检查 .pip-tmp/xpev-run-result.json（分析结果）与 output/xpev-9868/（报告）；进程若已结束说明跑完，若还在继续等其有界结束
         - ⏳ **下次会话续接**：① 小鹏分析结果评估（A4 验收：≤60min 有界、Gate 全链跑完即"跑得完"达成）→ ② 阶段 B（B1 章节级财年语义 + 分级阻断，证券专家 Top 10）→ ③ 阶段 C（C0-C5 审查效率）→ ④ 推送新进展到 GitHub
+        - ✅ 2026-08-21 会话（A4 验收 + 阶段B B1 实施）：
+          - **A4 验收通过**（用户指令：重新使用qual流程分析小鹏集团 2023/24/25 年报）：34.5 分钟有界跑完（Gate0-3 全过，Gate4 fail-closed 判失败无死循环）——「跑得完」达成
+          - 注：07:25 首次运行随会话暂停被杀（后台 job 会话级）；恢复后 MinerU 验证可用 + llm-bridge 重建 → 重跑成功（2070s）
+          - **阶段 B B1 实施完成**（提交 b50f8fd，HGF 终检 exit=0 MUST_PASS 全绿）：
+            - B1-1 财年语义：check_fiscal 扩展（ch5/7 从严、ch4/6 放行 + 对比语境/FY标注豁免 + 全章默认检查）+ 6 测试
+            - B1-2 分级阻断：_is_critical_gate_error（关键错误 enforce 阻断，字段缺失降级标注）+ critical_gates {4,8} + 默认模式 shadow→soft
+            - B1-3 ch0/ch10 审计：v8 Gate3 全 11 章生成（决策/概览复用 legacy 函数）+ legacy 组装前 ch10/ch0 检查
+            - HGF 增强：_count_asserts 支持 unittest（test_core 空桩误报修复）
+          - 测试：qual 75 passed + HGF 30 passed + ruff 全绿；提交 6f20681（gitignore .ssh_known_hosts）
+        - ⏳ **下次会话续接**：① 阶段 B 后续（B2a 估值程序化/current_price 去硬编码 → B2b 财务 100% Wind → B3 事实表多财年化 → B4 运营验证链 → B5 小包）→ ② 阶段 C（C0-C5 审查效率）→ ③ 重跑小鹏验证 B 阶段验收（财年错位 Critical 0、目标价程序输出、事实表可复核）→ ④ 推送 GitHub
         - ⚠️ **会话级状态提醒**：llm-bridge 动态插件（lbr-1/pkg-1）会话级，DSH 重启后需重建（源码 plugins/llm-bridge.js，cordis_define kind new idPrefix lbr → cordis_run）；SSH 私钥 id_ed25519 在工作区根（OneDrive 同步，建议移出！）
 
 ## 五、安全提醒（现状更新）
