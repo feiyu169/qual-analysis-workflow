@@ -352,6 +352,145 @@ subprocess 服务 spawn spec：`stdin:'pipe'` → `handle.stdin`（Writable）�
 - **集成验证三层次**：文件存在 → 可导入 → 业务逻辑中真正调用（"90% 陷阱"：
   HAS_* 标志=True 只证明能导入，不证明已接入；用 `grep -c` 验证调用点）。
 
+## 教学实例：16 Gate 全流程端到端跑通（狗粮化实录，2026-08-21）
+
+> 以下用 HGF **对自身**跑通一个真实项目的全过程作为教学案例。项目 = demo_hgf
+> 的"日志模块"（CalcLogger），全部 16 个 gate 真实推进 done。每一步都是可复现的——
+> 完整产物在 `workflow/.hgf-dogfood/`（gitignore，含全部文档/代码/探针/状态）。
+
+### 0. 项目设定与命令
+
+```powershell
+# 工作目录：workflow/.hgf-dogfood/（独立 git 仓库，pyproject 配 pythonpath）
+$py = "C:\Users\79902\AppData\Local\Programs\Python\Python314\python.exe"
+$env:PYTHONPATH = "D:\OneDrive\文档\deepseek harness workspace\workflow"
+cd "D:\OneDrive\文档\deepseek harness workspace\workflow\.hgf-dogfood"
+
+# 生命周期推进统一命令（--dir 指定项目，--file 传准出证据文档）
+& $py ../workflow_cli.py --lifecycle status --dir .          # 看状态
+& $py ../workflow_cli.py --lifecycle advance --gate <id> --file docs/<id>.md --dir .
+```
+
+**学习要点**：每推进一个 gate，先 `status` 看它是否 runnable（依赖全部 done），
+再准备准出证据，再 `advance`。被拒 = 检查器在真实工作（不是 bug）。
+
+### Phase 0 需求（gate_0_1 → 0_3）
+
+**gate_0_1 Grill Session（需求文档）**
+- 准出：`document_generated` → 文件存在且 ≥300 字符（V3.2.11 从 100 提到 300，仅拒空壳）
+- 文档结构：背景/目标 + 功能需求 FR-1..5 + 非功能 NFR + 验收标准 + 排除范围
+- ✅ 推进：`advance gate_0_1 --file docs/gate_0_1.md`
+
+**gate_0_2 安全需求评审**
+- 准出：`security_requirements` → **语义校验器**（必须含认证/授权/机密性/完整性条目）
+- 文档要有 STRIDE 表（Spoofing/Tampering/Repudiation/Information Disclosure/DoS/EoP）
+- ✅ 推进：`advance gate_0_2 --file docs/gate_0_2.md`
+
+**gate_0_3 需求评审**
+- 准出：`review_passed` → `.hgf/reviews.jsonl` 双签名记录
+  ```powershell
+  & $py ../workflow_cli.py --review-record gate_0_3 --verdict pass --reviewer agent --verifier heavyskill --kind independent --dir .
+  ```
+- **坑 1**：评审记录 gate 名必须填 **gate id**（如 gate_0_3），不是类型名（review_passed）——检查器按 gate id 查。
+
+### Phase 1 设计（gate_1_1 → 1_3）
+
+**gate_1_1 架构设计 + 威胁建模**（最容易被语义校验器拦截）
+- 准出：`architecture_document`（组件/数据流/信任边界/接口）+ `threat_model`（STRIDE/威胁/缓解/攻击面）
+- **坑 2**：两个准出类型的语义条目**合并检查**——一份文档必须同时含架构条目和 STRIDE 表，缺任一 → "缺少语义条目 N/M 组"被拒（狗粮化第一次就被拒，补 STRIDE 后过）
+- 文档结构：组件清单（CalcLogger/calc.py/calc.log）→ 数据流（调用→计算→log→写文件）→ 信任边界（进程/文件/输入）→ 接口定义 → STRIDE 表 → 攻击面
+
+**gate_1_2 接口设计**
+- 准出：`api_definition`（端点/请求/响应/schema）
+- 文档按"端点"组织：每个方法（构造/log/recent/clear/close）给请求/响应/错误
+
+**gate_1_3 详细设计**
+- 准出：`detailed_design`（模块/状态/错误处理/边界）
+- 文档含模块结构树 + CalcLogger 状态机（INIT→READY→LOGGING→CLOSED）+ 错误处理边界
+
+### Phase 2 实现（gate_2_1 → 2_2）
+
+**gate_2_1 代码实现（TDD）**——最严格，5 个准出全真跑
+- 准出：`unit_test_passed`（真跑 pytest）+ `tdd_evidence`（git 历史）+ `static_analysis`（真跑 ruff）+ `sast_scan`（真跑 semgrep）+ `dependency_scan`（真跑 safety）
+- **TDD 顺序**（关键）：先提交测试 → 再提交实现，让 git 首次提交时间证明"测试先于实现"
+  ```bash
+  git init && git add tests/ && git commit -m "TDD: tests first"
+  git add hgf_demo/ && git commit -m "feat: implement"
+  ```
+  tdd_evidence 检查器读 `git log --diff-filter=A`：tests/ 首次提交 ≤ 实现首次提交 → 过。
+- **坑 3**：tdd_evidence 只查项目**根目录** `tests/`——测试放子目录（hgf_demo/tests/）找不到，需在根建 tests/。
+- **坑 4**：`dependency_scan`（safety）在本环境无网络会超时挂起 → 检查器增强为"**零第三方依赖直通**"（requirements.txt 无版本约束行 = 无扫描目标，客观事实非静默降级）
+- 真实产物：`hgf_demo/logger.py`（CalcLogger）+ `calc.py`（集成）+ `tests/test_logger.py`（7 测试）
+
+**gate_2_2 代码审查（第三方）**
+- 准出：`automated_review`（文档）+ `manual_review`（双签名）+ `review_checklist`（文档）
+- 写审查报告（门禁结果表 + 清单勾选）+ review-record 双签名
+
+### Phase 3 集成/安全/验收（gate_3_1 → 3_3）
+
+**gate_3_1 集成测试**
+- 准出：`integration_test_passed`（**真验 L2**——需 tests/integration/ 或 @pytest.mark.integration）+ `data_desensitization`（语义：脱敏/字段/敏感）
+- 集成测试 = 真实跨模块链路（calc 调用 → logger 写文件 → 文件可读），不是单测冒充
+- 脱敏文档声明：日志仅数字参数无 PII
+
+**gate_3_2 安全测试**
+- 准出：`dast_scan` → 需**外部 DAST 报告**（--file）或 --confirm（V3.2.11 禁裸确认）
+- 写 DAST 报告（OWASP ZAP 模拟输出，本模块无 HTTP 端点以组件级审查替代，如实标注）
+
+**gate_3_3 验收测试**
+- 准出：`user_acceptance` → 独立评审记录 **+ 人工验收文件**（docs/user_acceptance.md 含"验收"≥100 字符）
+- **坑 5**：user_acceptance 拒绝 self-check（agent 不得自证通过）——必须先 `--review-record`（kind=independent）再 advance
+- 人工验收文件：验收结论 + 功能/质量/安全/纪律四维依据
+
+### Phase 4 部署（gate_4_1 → 4_3）
+
+**gate_4_1 部署准备 + 安全审计**
+- 准出：`deployment_checklist`（部署/环境/回滚/配置）+ `iac_security_audit`（真跑 checkov）+ `key_rotation`（轮换/密钥/过期/吊销）
+- **坑 6**：三个语义准出合并检查——一份文档需含全部条目（部署清单 + 密钥轮换表写在同一文件）
+- **坑 7**：checkov 对纯 Python 项目无 IaC 资产会报错 → 增强为"无 .tf/.tfvars/cloudformation/k8s 文件直通"（同零依赖逻辑）
+
+**gate_4_2 上线验证**
+- 准出：`health_check` → **真实探针**（scripts/probes/health_check.py 真跑：模块导入 + 功能冒烟 + 日志可写）
+- 探针返回 0 = 通过，非 0 = FAIL——比 --file 更真实
+
+**gate_4_3 监控配置**
+- 准出：`monitoring_configured`（监控/指标/告警/SLO）
+- 文档写指标（日志条数/错误率/活性）+ 告警规则 + SLO（可用性/性能）
+
+### Phase 5 运维（gate_5_1 → 5_2）
+
+**gate_5_1 线上监控**
+- 准出：`monitoring_normal` → 探针（scripts/probes/monitoring_normal.py：查错误率 vs SLO）
+- **坑 8（最有价值的拦截）**：探针真实发现 calc.log 错误率 38.5% > SLO 5% → **gate 被拒**。
+  根因是 gate_2_1 集成测试故意触发 ERROR 日志残留，非真实线上状态 → 清理测试残留 + 产生真实业务日志 → 重跑通过。
+  这证明监控 gate 真实有效：**测试数据污染线上指标会被拦截**。
+
+**gate_5_2 反馈收集**
+- 准出：`feedback_collected` → 双签名评审记录
+
+### 全程度量（--metrics 验证流程有效）
+
+```
+Phase 0: 0.0h   Phase 1: 0.01h   Phase 2: 0.01h
+Phase 3: 71.36h（真实时间跨度：3 天前推进 gate_3_1 到今天）  Phase 4: 0.01h  Phase 5: 0.0h
+累计返工: 0    缺陷逃逸率: 0.0
+```
+
+### 教学要点总结（8 个真实坑 = HGF 纪律的实证）
+
+| 坑 | 教训 | 对应机制 |
+|----|------|---------|
+| 1 | 评审记录 gate 名用 gate id 非类型名 | _check_review 按 gate id 查 |
+| 2 | 多准出语义条目合并检查，缺任一被拒 | _check_document_semantic |
+| 3 | tdd_evidence 只查根目录 tests/ | _check_tdd_evidence |
+| 4 | safety 无网络超时 → 零依赖直通 | _check_dependency |
+| 5 | user_acceptance 拒绝 self-check | _check_review kind 语义 |
+| 6 | 多语义准出合并文档 | _check_document_semantic |
+| 7 | checkov 无 IaC 直通 | _check_checkov |
+| 8 | **测试数据污染线上指标被监控探针拦截** | _check_health 探针 |
+
+**一句话**：HGF 的价值不在"设计了多少 gate"，而在**每个 gate 的真实检查器会在你"以为做完了"时拦下你**——狗粮化 8 次拦截（含 1 次监控探针抓污染）就是最硬的证据。
+
 ## 参考文档（工作区）
 
 - 主技能：`skills/software-development/gate-driven-development/SKILL.md`
