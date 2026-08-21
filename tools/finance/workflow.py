@@ -1227,7 +1227,28 @@ def _generate_chapter(
                 content, violations = clean_ai_artifacts(content)
                 if violations:
                     logger.warning(f"{chapter_name} 发现AI痕迹: {violations}")
-                
+
+                # ADVC 层2：锚点驱动的确定性数值清洗（clean-then-check——值类错误程序修正，
+                # 不依赖 LLM 重写；docs/qual-anchor-repair-architecture.md）
+                _advc_unresolved: list = []
+                try:
+                    from .qual_v8.anchor_repair import repair_chapter_values
+                    from .qual_v8.data_anchor import get_data_anchor
+                    _wind_dict = _wind_to_dict(ctx.wind) if ctx.wind else {}
+                    if _wind_dict:
+                        _clean = repair_chapter_values(
+                            chapter_num, content, get_data_anchor(_wind_dict),
+                        )
+                        if _clean.fixes:
+                            content = _clean.content
+                            logger.info(
+                                f"{chapter_name} ADVC 确定性修复 {len(_clean.fixes)} 处"
+                                f"（{_clean.fixes[0].kind}）——不再依赖 LLM 重写"
+                            )
+                        _advc_unresolved = _clean.unresolved
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"ADVC 清洗失败（非阻断）: {e}")
+
                 # 格式验证
                 check_result = structural_check(f"ch{chapter_num}", content)
                 
@@ -1272,6 +1293,17 @@ def _generate_chapter(
                     # 在prompt中增加修正提示（含 H1 铁律 + 闸门修正）
                     format_fix = _build_gate_fix_prompt(chapter_num, chapter_title=chapter_def['title'],
                                                         issues=all_issues[:6])
+                    # ADVC T3：值类问题无法程序校正 → omit 指令（"省略该数值"而非"修对"——
+                    # LLM 对数值的猜测已证明不可靠，omit 直接打破"写错→回滚→再写错"循环）
+                    if _advc_unresolved:
+                        _omit_metrics = sorted({u.metric for u in _advc_unresolved})
+                        format_fix += (
+                            f"\n\n【数值纪律·ADVC】以下指标的数字无法自动校正"
+                            f"（{'; '.join(_omit_metrics)}）。"
+                            f"重写时**禁止猜测这些指标的具体数值**——"
+                            f"请省略数值或改为定性表述（如'总资产规模保持稳健'），"
+                            f"不得输出未经 Wind 锚点确认的数字。"
+                        )
                     prompt = prompt + format_fix
                 else:
                     # 最后一次尝试，即使不通过也返回（标注闸门问题）

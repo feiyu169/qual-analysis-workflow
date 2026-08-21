@@ -61,7 +61,7 @@ def _make_fake_caller():
     return caller, calls
 
 
-def test_exemption_failclosed_empty_round():
+def test_exemption_failclosed_empty_round(monkeypatch):
     """豁免问题在后续轮不再上报时，passed 必须为 False（v3.1 P0-A-2）
 
     场景：前几轮报同签名问题（被豁免），最后一轮审查返回空 →
@@ -79,8 +79,8 @@ def test_exemption_failclosed_empty_round():
         return ["第5章营收增长100亿无解释"]  # 每轮都报
 
     import finance.quality.review_repair_loop as m
-    m._run_deep_review = fake_deep_review
-    m._run_substantive_review = fake_substantive
+    monkeypatch.setattr(m, "_run_deep_review", fake_deep_review)
+    monkeypatch.setattr(m, "_run_substantive_review", fake_substantive)
 
     result = review_and_repair_loop(
         chapters=chapters,
@@ -97,7 +97,7 @@ def test_exemption_failclosed_empty_round():
 
 # ============ P0-A-3: 单调守卫 ============
 
-def test_monotonic_guard_rollback():
+def test_monotonic_guard_rollback(monkeypatch):
     """修复引入新问题 → 回滚本轮，issues_fixed 不虚增（v3.1 P0-A-3）"""
     import finance.quality.review_repair_loop as m
 
@@ -116,9 +116,9 @@ def test_monotonic_guard_rollback():
             return ["第5章营收增长100亿无解释"]
         return ["第1章总资产900亿无解释"]  # 新问题
 
-    m._repair_chapters = fake_repair
-    m._run_deep_review = fake_deep_review
-    m._run_substantive_review = lambda *a, **k: []
+    monkeypatch.setattr(m, "_repair_chapters", fake_repair)
+    monkeypatch.setattr(m, "_run_deep_review", fake_deep_review)
+    monkeypatch.setattr(m, "_run_substantive_review", lambda *a, **k: [])
 
     def fake_caller(name, prompt):
         return '{"patches": []}'
@@ -132,7 +132,7 @@ def test_monotonic_guard_rollback():
             return ["第5章营收增长100亿无解释"]
         return ["第1章总资产900亿无解释"]
 
-    m._run_deep_review = phased_deep
+    monkeypatch.setattr(m, "_run_deep_review", phased_deep)
 
     chapters = dict(original_chapters)
     result = review_and_repair_loop(

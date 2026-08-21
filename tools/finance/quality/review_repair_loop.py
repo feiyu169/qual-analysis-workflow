@@ -567,6 +567,30 @@ def _repair_chapters(
     """
     fixed_count = 0
     
+    # ADVC 阶段0：确定性数值清洗（先于 LLM 修复——值类问题由程序修正，
+    # 不再让 LLM 反复产错；docs/qual-anchor-repair-architecture.md）
+    if wind_data:
+        try:
+            from ..qual_v8.anchor_repair import sweep_all_chapters
+            from ..qual_v8.data_anchor import get_data_anchor
+            _advc_fixed, _advc_fixes, _advc_unresolved = sweep_all_chapters(
+                chapters, get_data_anchor(wind_data),
+            )
+            if _advc_fixes:
+                # 就地更新（调用方依赖 chapters 引用变化）
+                chapters.clear()
+                chapters.update(_advc_fixed)
+                logger.info(
+                    f"ADVC sweep: 确定性修复 {len(_advc_fixes)} 处"
+                    f"（值类问题不进 LLM prompt）"
+                )
+            if _advc_unresolved:
+                logger.warning(
+                    f"ADVC sweep: {len(_advc_unresolved)} 处值类问题无法程序校正（T3 标注）"
+                )
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"ADVC sweep 失败（非阻断）: {e}")
+
     # 按章节分组问题
     import re
     chapter_issues = {}
@@ -584,7 +608,23 @@ def _repair_chapters(
             continue
         
         content = chapters[ch_num]
-        issues_text = "\n".join([f"- {issue}" for issue in ch_issues[:10]])
+
+        # ADVC triage：值类问题（数字锚点/财务数字不一致）不进 LLM prompt——
+        # 数字由确定性层处理，LLM 只修结构/表述/逻辑
+        # 判定：含财务指标 + 数值比较（"总资产(最新财年)在第3章=1031.63亿" 类）
+        def _is_value_issue(issue: str) -> bool:
+            if "数字锚点" in issue:
+                return True
+            return bool(
+                re.search(r"(总资产|营业收入|净利润|归母净利润|营业利润|经营现金流|"
+                          r"总负债|净资产|所有者权益)[^=\n]{0,20}=\s*-?\d", issue)
+            )
+
+        non_value_issues = [i for i in ch_issues if not _is_value_issue(i)]
+        if not non_value_issues:
+            logger.info(f"第{ch_num}章仅剩值类问题（ADVC 已处理/标注），跳过 LLM 修复")
+            continue  # 值类问题已由 sweep 修或 T3 标注，不再喂 LLM
+        issues_text = "\n".join([f"- {issue}" for issue in non_value_issues[:10]])
 
         # 铁律2：注入 Wind 锚点表（若有）
         wind_anchor = ""

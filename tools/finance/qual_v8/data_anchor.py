@@ -236,40 +236,32 @@ class DataAnchor:
                     fixes.append(f"{metric}: {value} -> {anchor_value}")
         return chapter_content, fixes
 
-    def _extract_data(self, content: str) -> dict[str, float]:
-        """从内容中提取数据（修复死代码：真实写入字典）
+    def extract_data_spans(self, content: str) -> list[dict]:
+        """ADVC：逐出现值提取（堵 last-wins——同指标多处出现每处独立返回）。
 
-        识别模式："营业收入80.0亿元" / "归母净利润 -7.76 亿元" / "净利润为11.4亿元" 等。
+        返回 [{span: (start, end), metric_key, value, unit, text}]，供锚点逐出现值校验与修复定位。
+        语境排除逻辑与 _extract_data 一致（R7-① 变化量/修饰量排除）。
         """
-        data: dict[str, float] = {}
+        spans: list[dict] = []
         if not content:
-            return data
+            return spans
 
-        # 指标关键词 → canonical 键（按长度降序，避免"净利润"先匹配"归母净利润"的子串）
         metric_patterns = sorted(_METRIC_UNITS.keys(), key=len, reverse=True)
-
-        # 通用模式：<指标词>非数字{0,15}<可选负号><数字><可选空格><单位>
-        # 0,15 容纳"累计减少/较上年同期增长"等变化语境（R7-① 排除变化量需看到这些词）
         for metric in metric_patterns:
             pattern = re.compile(
                 re.escape(metric) + r"[^\d\-]{0,15}(-?\d+\.?\d*)\s*(亿元|亿|万元|万|%)"
             )
             for m in pattern.finditer(content):
-                # R7-①：排除"变化量/修饰量"语境，保留"增长至/降至 X 亿元"最终值
                 match_text = m.group(0)
-                # 变化量/修饰量排除：变化词后直接跟数字（非"至/到/达"）或含"含/减值"等
-                # 例："下降2.5亿元"→排除；"增长至78.66亿元"→保留（至豁免）；"含商誉减值约5.4亿元"→排除
                 if re.search(
                     r"(?:累计|同比|环比|减少|增加|下降|上升|收缩|增长|降低|提高|缩小|扩大|变化|变动|跌幅|涨幅|下滑|回落|回升)"
                     r"(?!\s*(?:至|到|达))\s*\d",
                     match_text,
                 ) or re.search(r"(含|其中|减值|拖累|影响|涉及|主要系|主要受).{0,8}?\d", match_text):
                     continue
-                # 匹配串后修饰（"降至150亿元以下"、"约5.4亿元左右"）：以下/以上/左右 在单位后
                 ctx_after = content[m.end():m.end() + 6]
                 if re.search(r"(以下|以上|左右|不足|超过|不低于|不超过|区间|范围|至\s*$)", ctx_after):
                     continue
-                # 匹配串内以"约/约"结尾（"约5.4亿元"——"约"在数字前，已在 match_text 内检查）
                 if re.search(r"(约|约\s*)\d", match_text) and re.search(r"(以下|以上|左右)$", match_text):
                     continue
                 ctx_near = content[max(0, m.start() - 6):m.start()]
@@ -281,20 +273,42 @@ class DataAnchor:
                     if unit in ("万元", "万"):
                         value = value / 10000.0  # 统一为亿元
                     elif unit == "%":
-                        continue  # 百分比另行处理（不入财务锚点）
-                    k = canonical_key(metric)
-                    data[k] = value  # 同指标后出现的覆盖（简单策略）
+                        continue
+                    spans.append({
+                        "span": (m.start(), m.end()),
+                        "metric_key": canonical_key(metric),
+                        "metric": metric,
+                        "value": value,
+                        "unit": unit,
+                        "text": match_text,
+                    })
                 except ValueError:
                     continue
 
-        # 百分比指标（毛利率等）
+        # 百分比指标（毛利率等）——非财务锚点，仅记录供上层判断
         pct_pattern = re.compile(r"(毛利率|净利率|营业利润率)[^\d\-]{0,8}(-?\d+\.?\d*)\s*%")
         for m in pct_pattern.finditer(content):
             try:
-                data[f"{m.group(1)}_pct"] = float(m.group(2))
+                spans.append({
+                    "span": (m.start(), m.end()),
+                    "metric_key": "pct:" + canonical_key(m.group(1)),
+                    "metric": m.group(1),
+                    "value": float(m.group(2)),
+                    "unit": "%",
+                    "text": m.group(0),
+                })
             except ValueError:
                 continue
 
+        return spans
+
+    def _extract_data(self, content: str) -> dict[str, float]:
+        """从内容中提取数据（ADVC：薄封装 extract_data_spans，取每指标最后值）"""
+        data: dict[str, float] = {}
+        for item in self.extract_data_spans(content):
+            if item["unit"] == "%":
+                continue
+            data[item["metric_key"]] = item["value"]  # 同指标后出现的覆盖（兼容旧行为）
         return data
 
     def init_from_wind_data(self, wind_data: dict[str, Any]):
