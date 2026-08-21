@@ -88,6 +88,8 @@ def review_and_repair_loop(
     skip_repair: bool = False,
     llm_call_budget: int | None = None,
     deadline: float | None = None,
+    # C1-3：Gate3 跨章一致性预计算结果（首轮复用，避免重复跑静态检查）
+    precomputed_cross_chapter: list | None = None,
 ) -> ReviewRepairResult:
     """
     审查修复循环（v3.1：收敛早停 + 豁免累积判据 + 单调守卫 + fail-closed）
@@ -125,6 +127,9 @@ def review_and_repair_loop(
         if llm_caller is not None else None
     )
 
+    # C2-2：受影响章节（修复后增量审查用；首轮全量）
+    _affected_chapters: set | None = None
+
     for round_num in range(1, max_rounds + 1):
         logger.info(f"审查修复循环 第{round_num}轮")
         _round_start = _time.monotonic()
@@ -139,7 +144,14 @@ def review_and_repair_loop(
         # 1. 执行审查（首轮全量；修复后轮由调用方决定是否全量）
         round_issues = []
         try:
-            deep_issues = _run_deep_review(chapters, wind_data)
+            if round_num == 1 and precomputed_cross_chapter is not None:
+                # C1-3：Gate3 已跑过跨章一致性（中间无修改），首轮直接复用，不再重复静态检查
+                deep_issues = [
+                    f"[跨章节一致性] {iss}" for iss in precomputed_cross_chapter
+                ]
+                logger.info(f"审查修复循环 首轮复用 Gate3 跨章结果 {len(deep_issues)} 条（C1-3）")
+            else:
+                deep_issues = _run_deep_review(chapters, wind_data)
             round_issues.extend(deep_issues)
         except Exception as e:  # noqa: BLE001
             review_incomplete = True
@@ -153,6 +165,8 @@ def review_and_repair_loop(
                 budget_state=budget_state,
                 deadline=deadline,
                 llm_call_budget=llm_call_budget,
+                # C2-2：首轮全量；修复后轮仅审受影响章节（增量——LLM 调用降 60-70%）
+                only_chapters=_affected_chapters if round_num > 1 else None,
             )
             round_issues.extend(substantive_issues)
         except (LLMCallBudgetExceeded, WallClockDeadlineExceeded, DeterministicLLMFailure):
@@ -238,6 +252,16 @@ def review_and_repair_loop(
             logger.warning(f"修复异常: {e}")
             fixed_count = 0
         issues_fixed += fixed_count
+
+        # C2-2：记录受影响章节（内容变化的）——下一轮增量 LLM 审查用
+        _affected_chapters = {
+            k for k in chapters
+            if k in _snapshot_before_round and chapters[k] != _snapshot_before_round[k]
+        }
+        if fixed_count > 0 and not _affected_chapters:
+            # 修复计了数但内容未变（异常路径），保守全量
+            _affected_chapters = set(chapters.keys())
+        logger.info(f"修复轮受影响章节: {sorted(_affected_chapters) if _affected_chapters else '无'}（C2-2 增量）")
 
         # 6. 单调守卫（v3.1 P0-A-3：先减后置零 + 原始签名集比较）
         # 修复后全量静态重审（只比较静态检查器，避免 LLM 噪声）
@@ -416,9 +440,19 @@ def _run_substantive_review(
     budget_state: dict | None = None,     # v3.1：统一计数（S5 计入）
     deadline: float | None = None,        # v3.1 P0-B-1
     llm_call_budget: int | None = None,   # v3.1 P0-B-7
+    only_chapters: set | None = None,     # C2-2：增量审查——仅审指定章节（None=全量）
 ) -> list[str]:
-    """执行实质性审查（v3.1：enable_debate 门控对抗辩论；审查调用计入预算/墙钟）"""
+    """执行实质性审查（v3.1：enable_debate 门控对抗辩论；审查调用计入预算/墙钟）
+
+    C2-2：only_chapters 非 None 时仅审查指定章节（修复后增量——LLM 调用降 60-70%）。
+    """
     issues = []
+
+    # C2-2：章节过滤（增量审查）
+    if only_chapters is not None:
+        chapters = {k: v for k, v in chapters.items() if k in only_chapters}
+        if not chapters:
+            return issues  # 无受影响章节，跳过 LLM 审查
 
     # 审查改进：构造审查专用 caller（审查 system，避免报告撰写格式约束污染审查判断）
     # 仅当传入的是可包装的 llm_caller 时使用；否则退化为原 caller

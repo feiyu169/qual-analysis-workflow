@@ -252,7 +252,8 @@ class Gate1TypeInference(GateBase):
 
             return result
         except Exception as e:  # noqa: BLE001
-            logger.error(f"Gate1 事实提取失败: {e}")
+            import traceback as _tb
+            logger.error(f"Gate1 事实提取失败: {e}\n{_tb.format_exc()}")
             return {}
 
     def _check_required_fields(self, facts: dict[str, Any]) -> list[str]:

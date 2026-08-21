@@ -2,12 +2,11 @@
 Gate 8: 最终验证（人工确认）
 """
 
-from typing import Dict, Any
-from dataclasses import dataclass
-from datetime import datetime
 import logging
+from datetime import datetime
+from typing import Any
 
-from ..core.gate_engine import GateBase, GateSpec, GateResult
+from ..core.gate_engine import GateBase, GateResult, GateSpec
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ class Gate8FinalValidation(GateBase):
         )
         super().__init__(spec)
     
-    def execute(self, context: Dict[str, Any]) -> GateResult:
+    def execute(self, context: dict[str, Any]) -> GateResult:
         """执行Gate 8"""
         errors = []
         warnings = []
@@ -44,10 +43,10 @@ class Gate8FinalValidation(GateBase):
             try:
                 chs = context["chapters"]
                 parts = [f"# {context.get('company_name', '')} ({context.get('ticker', '')}) 买方定性分析报告\n"]
-                for num in sorted(k for k in chs.keys() if isinstance(k, int)):
+                for num in sorted(k for k in chs.keys() if isinstance(k, int)):  # noqa: SIM118
                     parts.append(f"# 第{num}章\n{chs[num]}")
                 context["report"] = "\n".join(parts)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Gate8 报告组装失败: {e}")
 
         # 1. 检查所有Gate是否通过
@@ -109,10 +108,10 @@ class Gate8FinalValidation(GateBase):
             errors=errors,
             warnings=warnings,
             execution_time=0.0,
-            timestamp=datetime.now().isoformat(),
+            timestamp=datetime.now().isoformat(),  # noqa: DTZ005
         )
     
-    def check_criteria(self, context: Dict[str, Any]) -> bool:
+    def check_criteria(self, context: dict[str, Any]) -> bool:
         """检查通过标准"""
         # 检查所有Gate是否通过
         gate_results = context.get("gate_results", {})
@@ -122,12 +121,9 @@ class Gate8FinalValidation(GateBase):
         
         # 检查人工确认
         human_confirmed = context.get("human_confirmed", False)
-        if not human_confirmed:
-            return False
-        
-        return True
+        return bool(human_confirmed)
     
-    def _check_all_gates(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _check_all_gates(self, context: dict[str, Any]) -> dict[str, Any]:
         """检查所有Gate是否通过"""
         errors = []
 
@@ -156,7 +152,7 @@ class Gate8FinalValidation(GateBase):
             "failed_gates": failed_gates,
         }
     
-    def _check_critical_issues(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _check_critical_issues(self, context: dict[str, Any]) -> dict[str, Any]:
         """检查Critical问题（真实：数字校验器 + 模板指纹 + 结构校验）"""
         errors = []
         critical_found = []
@@ -168,7 +164,7 @@ class Gate8FinalValidation(GateBase):
         # 1. 数字校验器：报告内财务数字 vs Wind 锚点
         if chapters and wind_data:
             try:
-                from ..data_anchor import DataAnchor, CrossChapterValidator
+                from ..data_anchor import CrossChapterValidator, DataAnchor
                 # 复用 Gate5 已准备的锚点，否则重建
                 anchor = context.get("data_anchor")
                 if anchor is None:
@@ -178,7 +174,7 @@ class Gate8FinalValidation(GateBase):
                 if not validation["passed"]:
                     for e in validation["errors"][:10]:
                         critical_found.append(f"数字不一致: {e}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(f"Gate8 数字校验异常: {e}")
 
         # 2. 模板泄漏指纹（R5 ch8/ch9 实锤：组合构建/沪深300/买入评级）
@@ -217,8 +213,9 @@ class Gate8FinalValidation(GateBase):
         if self_made_h1:
             critical_found.append(f"正文含自造 H1 章节标题 {len(self_made_h1)} 处（LLM 结构失控）")
 
-        # 4. 占位符
-        for pattern in ["[Placeholder]", "XX亿元", "LLM_GENERATE"]:
+        # 4. 占位符（C5-2：统一常量全量 5 pattern——原 3 pattern 漏"待填写/TBD"逃出收口）
+        from ...quality.placeholder_rules import PLACEHOLDER_PATTERNS
+        for pattern in PLACEHOLDER_PATTERNS:
             if pattern in full_text:
                 critical_found.append(f"占位符残留: {pattern}")
 
@@ -231,7 +228,7 @@ class Gate8FinalValidation(GateBase):
             "critical_found": critical_found,
         }
 
-    def _request_human_confirmation(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _request_human_confirmation(self, context: dict[str, Any]) -> dict[str, Any]:
         """请求人工确认（保留自动化默认；可被调用方覆盖）"""
         errors = []
 
@@ -246,7 +243,7 @@ class Gate8FinalValidation(GateBase):
             "human_confirmed": human_confirmed,
         }
 
-    def _check_report_format(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _check_report_format(self, context: dict[str, Any]) -> dict[str, Any]:
         """检查报告格式（真实：非空 + H1 唯一性）"""
         errors = []
 
@@ -266,7 +263,7 @@ class Gate8FinalValidation(GateBase):
             "errors": errors,
         }
     
-    def _check_report_size(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _check_report_size(self, context: dict[str, Any]) -> dict[str, Any]:
         """检查报告大小"""
         errors = []
 
@@ -280,7 +277,7 @@ class Gate8FinalValidation(GateBase):
         if report_size < min_size:
             # 仅当报告为空时才报错；否则记警告（quick 预填/组装模式）
             if not report:
-                errors.append(f"报告为空: 0KB")
+                errors.append("报告为空: 0KB")
             else:
                 logger.warning(f"Gate8: 报告偏小 {report_size/1024:.1f}KB（可能为 quick 组装模式）")
         elif report_size > max_size:
@@ -292,7 +289,7 @@ class Gate8FinalValidation(GateBase):
             "size_kb": report_size / 1024,
         }
 
-    def _run_redteam_review(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _run_redteam_review(self, context: dict[str, Any]) -> dict[str, Any]:
         """红队审查层：接入 buy_side_report_review skill（ReviewIntegrator）
 
         - 无 llm_caller：跳过（确定性检查已覆盖）
@@ -310,9 +307,9 @@ class Gate8FinalValidation(GateBase):
             return {"passed": True, "errors": [], "warnings": [], "skipped": True}
 
         wind_data = context.get("wind_data", {})
-        chapters = context.get("chapters", {})
+        chapters = context.get("chapters", {})  # noqa: F841
         try:
-            from ...quality.review_integrator import ReviewIntegrator, ReviewConfig
+            from ...quality.review_integrator import ReviewConfig, ReviewIntegrator
 
             integrator = ReviewIntegrator(ReviewConfig(
                 threshold="P0",          # 致命问题阻断
@@ -342,10 +339,12 @@ class Gate8FinalValidation(GateBase):
             # 改进点3+：长报告（>12000 字符）红队审查有截断风险——统一 review_chunker 分批补审
             # P1-④：每批 checkpoint 落盘（进程中断可续审）
             batch_issues = []
+            warnings_redteam = []  # 修复既有 F821：warnings 未定义
             unreviewed = []
             if len(report) > 12000:
-                from ...quality.review_chunker import split_report
                 import json as _json
+
+                from ...quality.review_chunker import split_report
                 checkpoint_dir = None
                 try:
                     from pathlib import Path as _Path
@@ -353,7 +352,7 @@ class Gate8FinalValidation(GateBase):
                     if _cp_root:
                         checkpoint_dir = _Path(_cp_root) / "redteam_checkpoints"
                         checkpoint_dir.mkdir(parents=True, exist_ok=True)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     checkpoint_dir = None
 
                 logger.info(f"Gate8: 报告 {len(report)} 字符 > 12000，review_chunker 分批红队补审")
@@ -369,10 +368,10 @@ class Gate8FinalValidation(GateBase):
                                 with open(cp_path, encoding="utf-8") as _f:
                                     _cp = _json.load(_f)
                                 batch_issues.extend(_cp.get("fatal", []))
-                                warnings.extend(_cp.get("important", []))
+                                warnings_redteam.extend(_cp.get("important", []))
                                 logger.info(f"Gate8 片段 {seg_id} 从 checkpoint 恢复")
                                 continue
-                        except Exception:
+                        except Exception:  # noqa: BLE001, S110
                             pass
                     try:
                         r = integrator.review_report_text(
@@ -383,15 +382,15 @@ class Gate8FinalValidation(GateBase):
                         fatal = [f"红队致命(seg{seg_id}): {iss.description[:120]}" for iss in r.fatal_issues[:3]]
                         important = [f"红队重要(seg{seg_id}): {iss.description[:120]}" for iss in r.important_issues[:3]]
                         batch_issues.extend(fatal)
-                        warnings.extend(important)
+                        warnings_redteam.extend(important)
                         # 落盘 checkpoint
                         if cp_path:
                             try:
                                 with open(cp_path, "w", encoding="utf-8") as _f:
                                     _json.dump({"fatal": fatal, "important": important}, _f, ensure_ascii=False)
-                            except Exception:
+                            except Exception:  # noqa: BLE001, S110
                                 pass
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001
                         logger.warning(f"Gate8 片段 {seg_id} 红队补审失败: {e}")
                         unreviewed.append(seg_id)
 
@@ -407,7 +406,7 @@ class Gate8FinalValidation(GateBase):
                 errors.append(f"红队致命: {issue.description[:150]}")
             # 分批补审的致命问题（来自长报告后段）
             for bi in batch_issues[:5]:
-                errors.append(bi)
+                errors.append(bi)  # noqa: PERF402
             # 重要/建议 → warning
             for issue in review_result.important_issues[:5]:
                 warnings.append(f"红队重要: {issue.description[:150]}")
@@ -437,6 +436,6 @@ class Gate8FinalValidation(GateBase):
                 "important": important_count,
                 "suggestion": suggestion_count,
             }
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Gate8 红队审查失败（非阻断）: {e}")
             return {"passed": True, "errors": [], "warnings": [f"红队审查失败: {e}"]}

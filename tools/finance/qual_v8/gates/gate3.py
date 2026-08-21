@@ -67,6 +67,9 @@ class Gate3ChapterWriting(GateBase):
         #    阻断语义由 Gate4（审查修复）与 Gate8（最终 Critical 校验）承担
         consistency_result = self._check_consistency(chapters)
         details["consistency"] = consistency_result
+        # C1-3：跨章结果挂 context，Gate4 首轮复用（中间无修改，结果相同——避免重复跑）
+        context["gate3_consistency_issues"] = consistency_result["errors"]
+        context["gate3_consistency_passed"] = consistency_result["passed"]
 
         if not consistency_result["passed"]:
             warnings.extend(consistency_result["errors"])

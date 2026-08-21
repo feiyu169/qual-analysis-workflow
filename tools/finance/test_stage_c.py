@@ -1,0 +1,177 @@
+"""阶段 C 审查效率测试（C1-1/3 + C2-2 + C5-2）
+
+验收（路线图 C）：
+- C1-3：Gate3 跨章结果首轮复用（loop 不重复跑 deep 静态）
+- C2-2：修复后轮仅审受影响章节（LLM 调用降）
+- C5-2：占位符统一常量（gate8 全量 5 pattern，含待填写/TBD 不逃出）
+- C1-1：gate4 logic 结果挂 context（check_criteria 复用）
+"""
+import sys
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools"))
+
+import pytest
+
+from finance.qual_v8.gates.gate4 import Gate4AuditRepair
+from finance.qual_v8.gates.gate8 import Gate8FinalValidation
+from finance.quality.placeholder_rules import PLACEHOLDER_PATTERNS
+from finance.quality.review_repair_loop import (
+    _run_substantive_review,
+    review_and_repair_loop,
+)
+
+# ===== C1-3：Gate3 跨章结果首轮复用 =====
+
+def test_precomputed_cross_chapter_skips_deep_review(monkeypatch):
+    """C1-3：提供 precomputed_cross_chapter 时，首轮不重跑 _run_deep_review"""
+    import finance.quality.review_repair_loop as m
+
+    deep_calls = {"n": 0}
+
+    def counting_deep(ch, wd):
+        deep_calls["n"] += 1
+        return []
+
+    monkeypatch.setattr(m, "_run_deep_review", counting_deep)
+    monkeypatch.setattr(m, "_run_substantive_review", lambda *a, **k: [])
+
+    def fake_caller(name, prompt):
+        return '{"patches": []}'
+
+    result = review_and_repair_loop(
+        chapters={1: "第1章内容"},
+        ctx=MagicMock(),
+        llm_caller=fake_caller,
+        max_rounds=1,
+        precomputed_cross_chapter=["第1章 vs 第2章: 总资产不一致"],
+    )
+    # 首轮审查复用预计算（deep 0 次）；单调守卫的静态 deep 仍跑（1 次，必要防线）
+    # 无 precomputed 时首轮审查 + 单调守卫 = 2 次 → 此处 1 次证明首轮审查被跳过
+    assert deep_calls["n"] == 1, f"C1-3 首轮应复用 Gate3 结果（仅单调守卫跑），实跑 {deep_calls['n']} 次"
+    assert result.passed is False  # 预计算结果有矛盾 → 不通过
+
+
+def test_no_precomputed_runs_deep_review(monkeypatch):
+    """无预计算结果时首轮照常跑 _run_deep_review"""
+    import finance.quality.review_repair_loop as m
+
+    deep_calls = {"n": 0}
+
+    def counting_deep(ch, wd):
+        deep_calls["n"] += 1
+        return []
+
+    monkeypatch.setattr(m, "_run_deep_review", counting_deep)
+    monkeypatch.setattr(m, "_run_substantive_review", lambda *a, **k: [])
+
+    def fake_caller(name, prompt):
+        return '{"patches": []}'
+
+    review_and_repair_loop(
+        chapters={1: "第1章内容"},
+        ctx=MagicMock(),
+        llm_caller=fake_caller,
+        max_rounds=1,
+    )
+    assert deep_calls["n"] == 1
+
+
+# ===== C2-2：增量审查（仅受影响章节） =====
+
+def test_substantive_review_only_chapters():
+    """C2-2：only_chapters 过滤——只审指定章节"""
+    # 直接验证 only_chapters 过滤逻辑：构造受监控的检查器
+    captured = {}
+
+    def fake_fact_checker(chapters, wd):
+        captured["chapters"] = chapters
+        from finance.quality.fact_checker import FactCheckResult
+        return FactCheckResult(passed=True, issues=[])
+
+    monkeypatch_obj = pytest.MonkeyPatch()
+    monkeypatch_obj.setattr("finance.quality.fact_checker.check_facts", fake_fact_checker)
+
+    try:
+        # depth/conclusion 等检查器全部 pass（避免真实 LLM）
+        def _fake_check(*a, **k):
+            class _R:
+                passed = True
+                issues: list = None
+                llm_failed = False
+            return _R()
+
+        monkeypatch_obj.setattr("finance.quality.depth_reviewer.check_depth", _fake_check)
+        monkeypatch_obj.setattr("finance.quality.conclusion_validator.check_conclusion", _fake_check)
+        monkeypatch_obj.setattr("finance.quality.assumption_checker.check_assumptions", _fake_check)
+
+        _run_substantive_review(
+            {1: "ch1", 2: "ch2", 5: "ch5"},
+            lambda n, p: "ok",
+            {},
+            "综合",
+            budget_state={"calls": 0, "wall_clock_exceeded": False, "budget_exceeded": False},
+            only_chapters={2, 5},
+        )
+        # 事实核查收到的应是过滤后子集
+        assert set(captured["chapters"].keys()) == {2, 5}, \
+            f"C2-2 增量应只审受影响章节，实为 {list(captured['chapters'].keys())}"
+    finally:
+        monkeypatch_obj.undo()
+
+
+def test_substantive_review_empty_only_returns():
+    """C2-2：only_chapters 为空集 → 跳过（返回空）"""
+    issues = _run_substantive_review(
+        {1: "ch1"}, lambda n, p: "ok", {}, "综合",
+        only_chapters=set(),
+    )
+    assert issues == []
+
+
+# ===== C5-2：占位符统一常量 =====
+
+def test_placeholder_patterns_complete():
+    """C5-2：占位符常量含全部 5 pattern（含待填写/TBD 不逃出）"""
+    assert set(PLACEHOLDER_PATTERNS) == {"[Placeholder]", "XX亿元", "待填写", "TBD", "LLM_GENERATE"}
+
+
+def test_gate8_uses_full_placeholder_patterns():
+    """C5-2：Gate8 用全量 pattern（待填写/TBD 逃出收口修复）"""
+    gate = Gate8FinalValidation()
+    # 红队确定性检查应捕获"待填写"占位符
+    result = gate._check_placeholder_deterministic("正文含待填写内容") if hasattr(
+        gate, "_check_placeholder_deterministic") else None
+    if result is not None:
+        assert "待填写" in str(result)
+    else:
+        # 无独立方法则验证常量被引用（源码级）
+        import inspect
+        src = inspect.getsource(Gate8FinalValidation)
+        assert "PLACEHOLDER_PATTERNS" in src, "Gate8 应引用统一常量"
+
+
+# ===== C1-1：gate4 logic 结果挂 context =====
+
+def test_gate4_logic_result_cached():
+    """C1-1：logic 结果挂 context，check_criteria 复用（不重复跑）"""
+    gate = Gate4AuditRepair()
+    context = {"chapters": {1: "内容"}}
+    with patch.object(gate, "_detect_contradictions", return_value={
+        "passed": True, "errors": [], "contradictions": [], "critical_count": 0,
+    }) as mock_detect, \
+         patch.object(gate, "_check_risk_disclosure", return_value={
+             "passed": True, "errors": [], "covered_count": 5,
+         }):
+        # 模拟 execute 已跑：挂 context
+        context["gate4_logic_result"] = mock_detect.return_value
+        mock_detect.reset_mock()
+        ok = gate.check_criteria(context)
+        assert ok is True
+        mock_detect.assert_not_called(), "C1-1 check_criteria 应复用 execute 结果"
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])

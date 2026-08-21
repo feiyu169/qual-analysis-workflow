@@ -120,7 +120,9 @@ class Gate4AuditRepair(GateBase):
             errors.extend(substantive_result["errors"])
 
         # 3. 逻辑矛盾检测（真实：quality.logic_consistency_check）
+        #    C1-1：结果挂 context 供 check_criteria 复用（不再重复跑）
         contradiction_result = self._detect_contradictions(chapters)
+        context["gate4_logic_result"] = contradiction_result
         details["contradictions"] = contradiction_result
 
         if not contradiction_result["passed"]:
@@ -163,8 +165,12 @@ class Gate4AuditRepair(GateBase):
         """检查通过标准（形式问题交 Gate8 收口；此处只查硬性：逻辑矛盾/风险覆盖）"""
         chapters = context.get("chapters", {})
 
-        # 逻辑矛盾（硬性）
-        contradiction_passed = self._detect_contradictions(chapters)["passed"]
+        # 逻辑矛盾（硬性）—— C1-1：复用 execute 的结果（若已跑），避免重复计算
+        contradiction_result = context.get("gate4_logic_result")
+        if contradiction_result is None:
+            contradiction_result = self._detect_contradictions(chapters)
+            context["gate4_logic_result"] = contradiction_result
+        contradiction_passed = contradiction_result["passed"]
 
         # 风险提示（硬性）
         risk_passed = self._check_risk_disclosure(chapters)["passed"]
@@ -178,7 +184,9 @@ class Gate4AuditRepair(GateBase):
         format_errors = 0
         import re  # R7-②：'元/股' 专项检测需要 re（此方法后续来源检查也用到）
 
-        placeholder_patterns = ["[Placeholder]", "XX亿元", "待填写", "TBD", "LLM_GENERATE"]
+        # C5-2：占位符统一常量（L1/G3/G4a/G8 同源）
+        from ...quality.placeholder_rules import PLACEHOLDER_PATTERNS
+        placeholder_patterns = PLACEHOLDER_PATTERNS
 
         for ch_num, content in chapters.items():
             # 占位符
@@ -273,6 +281,8 @@ class Gate4AuditRepair(GateBase):
                 # v3.1 P0-B-8：全局墙钟/调用预算透传（与 workflow context 同源）
                 llm_call_budget=context.get("llm_call_budget"),
                 deadline=context.get("_wall_deadline"),
+                # C1-3：Gate3 跨章结果首轮复用（避免重复静态检查）
+                precomputed_cross_chapter=context.get("gate3_consistency_issues"),
             )
 
             if not result.passed:
