@@ -49,6 +49,21 @@ class Gate8FinalValidation(GateBase):
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Gate8 报告组装失败: {e}")
 
+        # 0.5 ADVC 组装闸门救援 sweep（P1：最终闸门前最后一次确定性数值清洗——
+        # 值类问题由程序修正，不依赖 LLM 重写；T2 低置信开关从 context 读取）
+        rescue_result = self._advc_rescue_sweep(context)
+        details["advc_rescue"] = rescue_result
+        if rescue_result.get("fixed_count", 0) > 0:
+            # 已修复 → 重新组装 report（sweep 已就地更新 context["chapters"]）
+            try:
+                chs = context["chapters"]
+                parts = [f"# {context.get('company_name', '')} ({context.get('ticker', '')}) 买方定性分析报告\n"]
+                for num in sorted(k for k in chs.keys() if isinstance(k, int)):  # noqa: SIM118
+                    parts.append(f"# 第{num}章\n{chs[num]}")
+                context["report"] = "\n".join(parts)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Gate8 救援后报告重组失败: {e}")
+
         # 1. 检查所有Gate是否通过
         all_gates_result = self._check_all_gates(context)
         details["all_gates"] = all_gates_result
@@ -122,6 +137,56 @@ class Gate8FinalValidation(GateBase):
         # 检查人工确认
         human_confirmed = context.get("human_confirmed", False)
         return bool(human_confirmed)
+
+    def _advc_rescue_sweep(self, context: dict[str, Any]) -> dict[str, Any]:
+        """ADVC 组装闸门救援 sweep（P1：最终闸门前确定性数值清洗）。
+
+        在 Gate8 数字校验（_check_critical_issues）之前执行：若 chapters 中仍残留
+        可确定性修复的值类错位（T1 高置信恒开；T2 低置信由 context['advc_enable_t2']
+        开关，默认关），就地修正并记录，随后校验器以清洗后的内容为准。
+
+        Returns:
+            {"fixed_count", "fixes", "unresolved_count", "hint_count", "skipped"}
+        """
+        chapters = context.get("chapters", {})
+        wind_data = context.get("wind_data", {})
+        if not chapters or not wind_data:
+            return {"fixed_count": 0, "skipped": True, "reason": "无 chapters/wind_data"}
+
+        try:
+            from ..anchor_repair import sweep_all_chapters
+            from ..data_anchor import get_data_anchor
+
+            enable_t2 = bool(context.get("advc_enable_t2", False))
+            _fixed, _fixes, _unresolved, _hints = sweep_all_chapters(
+                chapters, get_data_anchor(wind_data), enable_t2=enable_t2,
+            )
+            if _fixes:
+                # 就地更新 chapters（Gate8 后续校验/组装读取同一 dict）
+                chapters.clear()
+                chapters.update(_fixed)
+                logger.info(
+                    f"Gate8 ADVC 救援 sweep: 确定性修复 {len(_fixes)} 处"
+                    f"（T2={'开' if enable_t2 else '关'}）——值类问题不再依赖 LLM"
+                )
+            if _unresolved:
+                logger.warning(
+                    f"Gate8 ADVC 救援 sweep: {len(_unresolved)} 处值类问题仍无法程序校正（T3 标注）"
+                )
+            return {
+                "fixed_count": len(_fixes),
+                "fixes": [
+                    {"metric": f.metric, "old": f.old_value, "new": f.new_value,
+                     "kind": f.kind, "confidence": f.confidence}
+                    for f in _fixes[:10]
+                ],
+                "unresolved_count": len(_unresolved),
+                "hint_count": len(_hints),
+                "skipped": False,
+            }
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Gate8 ADVC 救援 sweep 失败（非阻断）: {e}")
+            return {"fixed_count": 0, "skipped": True, "reason": str(e)}
     
     def _check_all_gates(self, context: dict[str, Any]) -> dict[str, Any]:
         """检查所有Gate是否通过"""

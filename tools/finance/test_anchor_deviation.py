@@ -53,6 +53,20 @@ def test_digit_typo_hint():
         f"31.6 不是唯一强签名错位: {devs}"
 
 
+def test_digit_typo_2dp_high_place_value():
+    """1131.63 vs 1031.63（百位单字差异）→ digit_typo 弱签名（2 位小数口径修复回归）
+
+    全精度串（"10316263"）长度差会淹没 1 位转写差异 → 漏检；
+    2 位小数串（"103163" vs "113163"）差 1 位 → 命中 digit_typo hint（P2 弱提示通道）。
+    """
+    devs = anchor_deviation(1131.63, TOTAL_ASSETS)
+    assert devs, "1131.63 应命中 digit_typo 弱签名"
+    dt = [d for d in devs if d.kind == "digit_typo"]
+    assert dt, f"应有 digit_typo 签名: {devs}"
+    assert dt[0].anchor_value == 1031.6263
+    assert dt[0].confidence == "hint", "弱签名只能是 hint（T2 关时绝不自动替换）"
+
+
 def test_ambiguous_multiple_candidates():
     """歧义：值可匹配多个锚点的错位模式 → 多候选（调用方 FY 归因消歧）"""
     # 31.63 对 [12.34, 123.4] 无强签名 → 无偏差（不是任何锚点的错位模式）

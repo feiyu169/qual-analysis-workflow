@@ -57,6 +57,8 @@ class WorkflowConfig:
     global_timeout_seconds: int = 5400          # 全局墙钟预算（90 分钟）
     max_llm_calls_per_gate: int = 200           # 单 Gate LLM 调用次数上限（v3.1 P1-1 60→200）
     shadow_skip_repair: bool = True             # shadow 模式 Gate4 跳过修复循环
+    # P1（ADVC）：T2 低置信修复开关（弱签名+FY 上下文唯一仍自动替换；自证兜底）
+    advc_enable_t2: bool = False                # 默认关——宁可不修不误修
 
 
 # v3.1 P0-B-1/3：重试策略三模式（RETRY_POLICY 单一事实来源）
@@ -274,6 +276,8 @@ class QualWorkflow:
         context["shadow_skip_repair"] = (
             qual_mode == "shadow" and self.config.shadow_skip_repair
         )
+        # P1（ADVC）：T2 低置信修复开关——消费方：Gate4 修复循环 / Gate8 组装闸门救援 sweep
+        context["advc_enable_t2"] = self.config.advc_enable_t2
         # v3.1 P0-B-1：重试策略（按模式取表）
         retry_policy = RETRY_POLICY.get(qual_mode, RETRY_POLICY["soft"])
         gate_attempts = retry_policy["gate_attempts"]

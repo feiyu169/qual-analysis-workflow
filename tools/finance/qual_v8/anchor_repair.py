@@ -1,12 +1,16 @@
 """锚点驱动的确定性数值修复层（ADVC，docs/qual-anchor-repair-architecture.md）
 
 层1 修复引擎（唯一新组件，零 LLM）：
-- repair_chapter_values：单章扫描 → T1 高置信自动替换（span 定位 + 自证）/ T3 只标注
-- sweep_all_chapters：全章确定性清洗（修复循环/生成清洗层共用）
+- repair_chapter_values：单章扫描 → T1 高置信自动替换（span 定位 + 自证）/ T2 低置信（开关）
+  / T3 只标注 / digit_typo 弱提示（hints 通道，不阻断）
+- sweep_all_chapters：全章确定性清洗（修复循环/组装闸门共用）
 
 T1 六条件：指标绑定（财务锚点指标）+ 唯一高置信签名 + 语境排斥 + span 精确定位 +
 自证（替换后整章 validate_chapter_any_fy 必须通过——与修复前同一把 fail-closed 校验器）。
+T2 低置信（enable_t2 开关，默认关）：仅弱签名（digit_typo）但候选锚点唯一（FY 上下文唯一）
+→ 仍可自动替换（同样走自证闭环）。
 T3 只标注：无签名/歧义/跨指标暗示 → UnresolvedValue 证据清单（绝不喂 LLM）。
+digit_typo 弱提示（T2 关 或 目标歧义）：hints 清单——提示不阻断，调用方按需呈现。
 """
 import logging
 from dataclasses import dataclass, field
@@ -24,8 +28,8 @@ class RepairFix:
     old_value: float
     new_value: float
     fiscal_year: int | None
-    kind: str          # "multiply10" | "divide10" | "prefix_drop"
-    confidence: str    # "high"
+    kind: str          # "multiply10" | "divide10" | "prefix_drop" | "digit_typo"
+    confidence: str    # "high"（T1）| "low"（T2）
 
 
 @dataclass
@@ -45,6 +49,7 @@ class ChapterRepairResult:
     content: str
     fixes: list[RepairFix] = field(default_factory=list)
     unresolved: list[UnresolvedValue] = field(default_factory=list)
+    hints: list[UnresolvedValue] = field(default_factory=list)  # P2：digit_typo 弱提示（不阻断）
 
 
 def _format_value(new_value: float, old_span_text: str) -> str:
@@ -62,16 +67,20 @@ def repair_chapter_values(
     chapter_num: int,
     content: str,
     anchor,
+    *,
+    enable_t2: bool = False,
 ) -> ChapterRepairResult:
-    """单章确定性数值修复（T1 自动替换 + T3 只标注）。
+    """单章确定性数值修复（T1 自动替换 + T2 低置信开关 + T3 只标注 + digit_typo 弱提示）。
 
     Args:
         chapter_num: 章节号
         content: 章节内容
         anchor: DataAnchor（含锚点 + extract_data_spans + validate_chapter_any_fy）
+        enable_t2: T2 低置信修复开关（P1：默认关；开时弱签名+FY 上下文唯一 → 仍可替换，
+            自证闭环兜底——宁可不修不误修）
 
     Returns:
-        ChapterRepairResult（清洗后内容 + 修复记录 + 未解决清单）
+        ChapterRepairResult（清洗后内容 + 修复记录 + 未解决清单 + 弱提示清单）
     """
     result = ChapterRepairResult(content=content)
 
@@ -87,9 +96,10 @@ def repair_chapter_values(
             return []  # 百分比指标不入锚点
         return [(dp.value, dp.fiscal_year) for dp in anchor.get_metric_points(metric_key)]
 
-    # 第一遍：判定 T1 替换集 / T3 未解决
+    # 第一遍：判定 T1/T2 替换集 / T3 未解决 / digit_typo 弱提示
     fixes: list[RepairFix] = []
     unresolved: list[UnresolvedValue] = []
+    hints: list[UnresolvedValue] = []
 
     for item in spans:
         metric_key = item["metric_key"]
@@ -117,11 +127,30 @@ def repair_chapter_values(
         # 高置信且唯一（单一锚点的强签名）
         high = [d for d in devs if d.confidence == "high"]
         if not high:
-            # T3：仅弱签名（digit_typo hint）→ 只标注
-            unresolved.append(UnresolvedValue(
+            # 仅弱签名（digit_typo hint）：
+            # - T2 开 + 候选锚点唯一（FY 上下文唯一）→ 低置信替换（自证兜底）
+            # - 否则 → digit_typo 弱提示（hints，不阻断；绝不喂 LLM）
+            weak = [d for d in devs if d.confidence in ("low", "hint")]
+            if enable_t2 and weak:
+                unique_targets = {(d.anchor_value, d.fiscal_year) for d in weak}
+                if len(unique_targets) == 1:
+                    d = weak[0]
+                    # 语境排斥：span 文本含近似/区间修饰 → 不修
+                    if not any(kw in item["text"] for kw in
+                               ("约", "左右", "以上", "以下", "区间", "范围")):
+                        fixes.append(RepairFix(
+                            chapter=chapter_num, metric=item["metric"],
+                            metric_key=metric_key, span=item["span"],
+                            old_value=value, new_value=d.anchor_value,
+                            fiscal_year=d.fiscal_year, kind=d.kind,
+                            confidence="low",  # T2 低置信
+                        ))
+                        continue
+            # T3/T2 未命中 → digit_typo 弱提示（不阻断；记录供调用方呈现）
+            hints.append(UnresolvedValue(
                 chapter=chapter_num, metric=item["metric"], metric_key=metric_key,
-                value=value, reason="no_signature",
-                detail=f"{item['text']} 仅弱签名（{devs[0].kind}）",
+                value=value, reason="digit_typo_hint",
+                detail=f"{item['text']} 仅弱签名（{'、'.join(sorted({x.kind for x in weak or devs}))}）",
             ))
             continue
 
@@ -151,6 +180,7 @@ def repair_chapter_values(
             fiscal_year=d.fiscal_year, kind=d.kind, confidence=d.confidence,
         ))
 
+    result.hints = hints
     if not fixes:
         result.unresolved = unresolved  # 修复局部 unresolved 未回写 result 的 bug
         return result
@@ -188,28 +218,41 @@ def repair_chapter_values(
                 value=fix.old_value, reason="conflict",
                 detail=f"自证失败：{fix.metric}={fix.old_value} 无法自动校正",
             ))
-        return ChapterRepairResult(content=content, fixes=[], unresolved=unresolved)
+        return ChapterRepairResult(content=content, fixes=[], unresolved=unresolved,
+                                   hints=hints)
 
     logger.info(f"ADVC 修复第{chapter_num}章 {len(fixes)} 处（自证通过）")
-    return ChapterRepairResult(content=new_content, fixes=fixes, unresolved=unresolved)
+    return ChapterRepairResult(content=new_content, fixes=fixes, unresolved=unresolved,
+                               hints=hints)
 
 
 def sweep_all_chapters(
     chapters: dict[int, str],
     anchor,
-) -> tuple[dict[int, str], list[RepairFix], list[UnresolvedValue]]:
-    """全章确定性清洗（ADVC 层1：修复循环轮首 / 组装闸门共用）。"""
+    *,
+    enable_t2: bool = False,
+) -> tuple[dict[int, str], list[RepairFix], list[UnresolvedValue], list[UnresolvedValue]]:
+    """全章确定性清洗（ADVC 层1：修复循环轮首 / 组装闸门救援共用）。
+
+    Returns:
+        (fixed_chapters, fixes, unresolved, hints) —— 4 元组（P2：hints 为 digit_typo 弱提示）
+    """
     fixed: dict[int, str] = dict(chapters)
     all_fixes: list[RepairFix] = []
     all_unresolved: list[UnresolvedValue] = []
+    all_hints: list[UnresolvedValue] = []
 
     for ch_num, content in chapters.items():
-        result = repair_chapter_values(ch_num, content, anchor)
+        result = repair_chapter_values(ch_num, content, anchor, enable_t2=enable_t2)
         if result.fixes:
             fixed[ch_num] = result.content
         all_fixes.extend(result.fixes)
         all_unresolved.extend(result.unresolved)
+        all_hints.extend(result.hints)
 
-    if all_fixes:
-        logger.info(f"ADVC sweep: 修复 {len(all_fixes)} 处 / 未解决 {len(all_unresolved)} 处")
-    return fixed, all_fixes, all_unresolved
+    if all_fixes or all_hints:
+        logger.info(
+            f"ADVC sweep: 修复 {len(all_fixes)} 处 / 未解决 {len(all_unresolved)} 处"
+            f" / 弱提示 {len(all_hints)} 处"
+        )
+    return fixed, all_fixes, all_unresolved, all_hints

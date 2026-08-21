@@ -110,7 +110,7 @@ def test_idempotent():
 def test_sweep_all_chapters():
     """sweep：全章扫描修复"""
     chapters = {3: "归母净利润-1.13946亿元，亏损收窄。", 6: "总资产31.63亿元。"}
-    fixed, fixes, _ = sweep_all_chapters(chapters, _anchor())
+    fixed, fixes, _unresolved, _hints = sweep_all_chapters(chapters, _anchor())
     assert len(fixes) >= 2
     assert "1031.63" in fixed[6] or "1031.6263" in fixed[6]
     assert "-11.3946" in fixed[3]

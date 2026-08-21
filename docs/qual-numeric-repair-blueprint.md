@@ -9,6 +9,13 @@
 > - 全量 132 测试通过；ruff 零新增告警。P1（T2 开关）、P2（digit_typo 提示/负样本回流）按计划留待后续。
 > 另修复 test_v31_p0a 裸模块属性赋值跨文件泄漏（monkeypatch 化），消除 pytest 全量运行的顺序污染。
 
+> **P1/P2 实施状态（2026-08-22 追加，commit 待推送）**：
+> - **P1 T2 低置信开关** ✅ `anchor_repair.repair_chapter_values(..., enable_t2=False)` / `sweep_all_chapters(..., enable_t2=False)`——弱签名（digit_typo）但 FY 上下文唯一目标（单候选）时仍自动替换，自证闭环兜底；默认关（宁可不修不误修）。配置：`WorkflowConfig.advc_enable_t2`（默认 False）→ context → Gate4 修复循环 / Gate8 救援 sweep。
+> - **P1 组装闸门救援 sweep** ✅ `gate8._advc_rescue_sweep`——最终闸门前对 chapters 做全章确定性清洗（T1 恒开、T2 由 context 开关），有修复则就地更新并重组 report，随后数字校验器以清洗后内容为准。覆盖决策/概览章（不经 _generate_chapter 清洗层的第 0/10 章）。
+> - **P2 digit_typo 弱提示** ✅ 新增 `ChapterRepairResult.hints` 通道——弱签名（digit_typo）不修复不阻断（T2 关时），进 hints 清单供调用方呈现；`sweep_all_chapters` 返回 4 元组 `(fixed, fixes, unresolved, hints)`。修复 digit_typo 全精度串长度淹没问题（2 位小数口径比较：1131.63 vs 1031.63 命中弱签名）。
+> - **P2 T3 案例回流负样本** ✅ `test_advc_golden.py` 黄金回归集（15 例：真实错位 4 正样本 + 合法/历史/近似 5 负样本 + 幻觉只标注 + digit_typo 提示 + T2 开/关 + 幂等 + sweep 契约），已接入 `tests/test_qual_v31_aggregate.py`（HGF 门禁入口，防校验器回退）。
+> - 全量 236 测试通过（含 tests/ 聚合 88）；ruff 零告警。P2 digit_typo 提示已随 Gate8/日志呈现，未做报告正文标注（留待闸三人工抽核呈现）。
+
 问题：LLM 写作数值转写错位（1031.63→31.63），Gate4 拦截但修复循环 LLM 反复产错 → 报告无法产出。
 双专家独立评审后综合：
 - **投资分析专家**（方法论）：`docs/qual-anchor-repair-architecture.md` 前身为方法论评审（本文件合并）
@@ -71,8 +78,8 @@
 | **P0** | _extract_data last-wins 修复（extract_data_spans） | 同指标多处出现不漏检 |
 | **P0** | anchor_repair T1/T3（自证：替换后校验器必须通过） | test_anchor_repair：同值不同指标/历史引用/幂等/自证 |
 | **P0** | 接 _generate_chapter 清洗层 + _repair_chapters 分层 | test_generate_clean：mock LLM 错值→1 次调用不重试；test_repair_loop_no_llm_values：LLM prompt 不含值类问题 |
-| **P1** | T2 开关、组装闸门救援 sweep | 低置信场景可开启 |
-| **P2** | digit_typo 提示、T3 案例回流负样本 | 防校验器回退 golden set |
+| **P1** | T2 开关、组装闸门救援 sweep（✅ 已落地：enable_t2 开关 + gate8 _advc_rescue_sweep） | 低置信场景可开启；最终闸门前确定性救援 |
+| **P2** | digit_typo 提示、T3 案例回流负样本（✅ 已落地：hints 通道 + test_advc_golden 黄金集 15 例） | 防校验器回退 golden set |
 
 ## 六、回归防线
 

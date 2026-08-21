@@ -17,3 +17,11 @@ from finance.test_run_scripts_consistent import *  # noqa: F401,F403
 
 # qual_v8 引擎核心（既有）
 from finance.qual_v8.tests.test_core import *  # noqa: F401,F403
+
+# ADVC 黄金回归集（P2：历史错例正/负样本——防校验器回退）
+from finance.test_advc_golden import *  # noqa: F401,F403
+
+# ADVC 层0/层1/层2（P0 既有 + P1 T2 开关）
+from finance.test_anchor_deviation import *  # noqa: F401,F403
+from finance.test_anchor_repair import *  # noqa: F401,F403
+from finance.test_advc_wiring import *  # noqa: F401,F403

@@ -98,6 +98,8 @@ def review_and_repair_loop(
     deadline: float | None = None,
     # C1-3：Gate3 跨章一致性预计算结果（首轮复用，避免重复跑静态检查）
     precomputed_cross_chapter: list | None = None,
+    # P1：T2 低置信修复开关（ADVC 层1，默认关；开时弱签名+FY 唯一目标仍可替换）
+    enable_t2: bool = False,
 ) -> ReviewRepairResult:
     """
     审查修复循环（v3.1：收敛早停 + 豁免累积判据 + 单调守卫 + fail-closed）
@@ -253,7 +255,8 @@ def review_and_repair_loop(
         _snapshot_before_round = {k: v for k, v in chapters.items()}  # 单调守卫快照
         before_count = len(kept)
         try:
-            fixed_count = _repair_chapters(chapters, kept, repair_caller, wind_data)
+            fixed_count = _repair_chapters(chapters, kept, repair_caller, wind_data,
+                                           enable_t2=enable_t2)
         except (WallClockDeadlineExceeded, LLMCallBudgetExceeded):
             raise  # 预算/墙钟异常 → fail-closed，向上传播
         except Exception as e:  # noqa: BLE001
@@ -559,6 +562,8 @@ def _repair_chapters(
     issues: list[str],
     llm_caller: Callable[[str, str], str],
     wind_data: dict | None = None,
+    *,
+    enable_t2: bool = False,
 ) -> int:
     """使用 LLM 修复章节（Patch 模式，规范审查：最小侵入+锚点+校验闭环）
 
@@ -573,8 +578,8 @@ def _repair_chapters(
         try:
             from ..qual_v8.anchor_repair import sweep_all_chapters
             from ..qual_v8.data_anchor import get_data_anchor
-            _advc_fixed, _advc_fixes, _advc_unresolved = sweep_all_chapters(
-                chapters, get_data_anchor(wind_data),
+            _advc_fixed, _advc_fixes, _advc_unresolved, _advc_hints = sweep_all_chapters(
+                chapters, get_data_anchor(wind_data), enable_t2=enable_t2,
             )
             if _advc_fixes:
                 # 就地更新（调用方依赖 chapters 引用变化）
@@ -587,6 +592,10 @@ def _repair_chapters(
             if _advc_unresolved:
                 logger.warning(
                     f"ADVC sweep: {len(_advc_unresolved)} 处值类问题无法程序校正（T3 标注）"
+                )
+            if _advc_hints:
+                logger.info(
+                    f"ADVC sweep: {len(_advc_hints)} 处弱签名（digit_typo）仅提示不阻断"
                 )
         except Exception as e:  # noqa: BLE001
             logger.warning(f"ADVC sweep 失败（非阻断）: {e}")

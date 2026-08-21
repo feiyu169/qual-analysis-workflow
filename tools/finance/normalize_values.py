@@ -78,7 +78,7 @@ def anchor_deviation(
         AnchorDeviation 列表（可能多个候选——由调用方 FY 归因消歧）
     """
     deviations: list[AnchorDeviation] = []
-    v_str = _digit_string(value)
+    v2 = _digit_string(round(value, 2))  # 2 位小数口径（财务转写基线，prefix_drop/digit_typo 共用）
 
     for anchor_value, fy in anchors:
         if anchor_value is None or anchor_value == 0:
@@ -86,7 +86,6 @@ def anchor_deviation(
         # 精确命中 → 不是错位
         if abs(value - anchor_value) <= max(abs(anchor_value), 1e-9) * tolerance:
             continue
-        a_str = _digit_string(anchor_value)
 
         # ×10ⁿ/÷10ⁿ（n=1..4）
         for n in range(1, 5):
@@ -106,7 +105,6 @@ def anchor_deviation(
 
         # prefix_drop：value 串是 anchor 串后缀，丢 ≥2 位前缀（1031.63→31.63）
         # 财务口径：数字串按 2 位小数比较（锚点 1031.6263 → 1031.63，与 LLM 转写一致）
-        v2 = _digit_string(round(value, 2))
         a2 = _digit_string(round(anchor_value, 2))
         if a2.endswith(v2) and len(a2) - len(v2) >= 2 and v2:
             deviations.append(AnchorDeviation(
@@ -129,18 +127,20 @@ def anchor_deviation(
             ))
 
     # digit_typo：编辑距离 ≤2（对未命中任何强签名的锚点）
+    # 用 2 位小数数字串比较（与 prefix_drop 的财务转写口径一致——LLM 转写按 2 位小数）：
+    # 全精度串（1031.6263→"10316263"）长度差会淹没 1 位转写差异，导致 1131.63 vs 1031.63 漏检
     if not deviations:
         for anchor_value, fy in anchors:
             if anchor_value is None:
                 continue
-            a_str = _digit_string(anchor_value)
-            if abs(len(a_str) - len(v_str)) <= 2 and v_str and a_str:
+            a2 = _digit_string(round(anchor_value, 2))
+            if abs(len(a2) - len(v2)) <= 2 and v2 and a2:
                 # 简单编辑距离（Levenshtein 简化：长度差+不同位）
-                dist = _simple_edit_distance(v_str, a_str)
+                dist = _simple_edit_distance(v2, a2)
                 if 0 < dist <= 2:
                     deviations.append(AnchorDeviation(
                         kind="digit_typo", anchor_value=anchor_value, fiscal_year=fy,
-                        confidence="hint", note=f"编辑距离 {dist}（弱签名）",
+                        confidence="hint", note=f"编辑距离 {dist}（弱签名，2位小数口径）",
                     ))
 
     return deviations

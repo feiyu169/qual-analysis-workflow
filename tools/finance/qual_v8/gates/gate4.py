@@ -284,6 +284,8 @@ class Gate4AuditRepair(GateBase):
                 deadline=context.get("_wall_deadline"),
                 # C1-3：Gate3 跨章结果首轮复用（避免重复静态检查）
                 precomputed_cross_chapter=context.get("gate3_consistency_issues"),
+                # P1：T2 低置信修复开关（ADVC 层1，默认关；弱签名+FY 唯一目标仍可替换）
+                enable_t2=bool(context.get("advc_enable_t2", False)),
             )
 
             if not result.passed:

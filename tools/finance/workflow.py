@@ -1231,13 +1231,17 @@ def _generate_chapter(
                 # ADVC 层2：锚点驱动的确定性数值清洗（clean-then-check——值类错误程序修正，
                 # 不依赖 LLM 重写；docs/qual-anchor-repair-architecture.md）
                 _advc_unresolved: list = []
+                _advc_hints: list = []
                 try:
                     from .qual_v8.anchor_repair import repair_chapter_values
                     from .qual_v8.data_anchor import get_data_anchor
                     _wind_dict = _wind_to_dict(ctx.wind) if ctx.wind else {}
                     if _wind_dict:
+                        # P1：T2 低置信修复开关（DataContext.advc_enable_t2，默认关）
+                        _enable_t2 = bool(getattr(ctx, "advc_enable_t2", False))
                         _clean = repair_chapter_values(
                             chapter_num, content, get_data_anchor(_wind_dict),
+                            enable_t2=_enable_t2,
                         )
                         if _clean.fixes:
                             content = _clean.content
@@ -1246,8 +1250,14 @@ def _generate_chapter(
                                 f"（{_clean.fixes[0].kind}）——不再依赖 LLM 重写"
                             )
                         _advc_unresolved = _clean.unresolved
+                        _advc_hints = _clean.hints
                 except Exception as e:  # noqa: BLE001
                     logger.warning(f"ADVC 清洗失败（非阻断）: {e}")
+                if _advc_hints:
+                    logger.info(
+                        f"{chapter_name} ADVC 弱签名提示 {len(_advc_hints)} 处"
+                        f"（digit_typo，不阻断）"
+                    )
 
                 # 格式验证
                 check_result = structural_check(f"ch{chapter_num}", content)

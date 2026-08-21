@@ -205,3 +205,4 @@
 | v1.1 | 2026-08-19 | 按综合审议（docs/qual-expert-suggestions-adjudication.md）修订：B1 章节级财年语义+分级阻断；B2 拆 B2a/B2b；B4-4/4-5 转验收合并；B4-6 可比重写+数据源化；新增 B5 小包 |
 | v2.0 | 2026-08-19 | 新增阶段 C（审查环节优化，docs/qual-review-loop-efficiency.md）：C0 D2 结构化问题身份 + C1 去重 + C2 分层触发 + C3 清单驱动/红队门控 + C4 预算协同；阶段 B 落地为 qual-stage-b-arch/code.md |
 | v2.1 | 2026-08-19 | 按阶段 C 综合审议（docs/qual-stage-c-adjudication.md）修订：C4-3 豁免 fail-closed 硬约束（防缺陷1 回归）；新增 C2-3 受影响集闭包、C3-2 红队 fatal 回流、C0-2 FixVerification 扩展、C5 验收口径修正包（data_repair 统一/pattern 常量/锚点 10 处/降幅修正）；依赖矩阵新增 C←A/C←B 5 项；M6 验收重写 |
+| v2.2 | 2026-08-22 | ADVC 落地收尾（docs/qual-numeric-repair-blueprint.md）：P0 三层实现 + **P1** T2 低置信开关 + 组装闸门救援 sweep（gate8）+ **P2** digit_typo 弱提示（hints 通道）+ 黄金回归集 test_advc_golden（防校验器回退）；236 测试全绿 |
