@@ -87,6 +87,52 @@ class TestNumericGuard:
         r = g.check_fiscal(5, "2025财年公司收入73.66亿元，2024年作对比。", wind_data)
         assert r.passed
 
+    # ===== B1-1：章节级财年语义（路线图 B1-1，验收：ch5 历史当期→fail / ch6 合法历史引用→通过）=====
+    def test_fiscal_ch5_prior_without_context_fail(self, wind_data):
+        """B1-1a: ch5 历史财年当当期（无豁免）→ 阻断"""
+        g = NumericGuard()
+        r = g.check_fiscal(5, "2024年度总资产827.06亿元，经营表现良好，研发投入持续加大。", wind_data)
+        assert not r.passed
+        assert any(v.gate == "fiscal" for v in r.violations)
+
+    def test_fiscal_ch5_prior_with_fy_label_pass(self, wind_data):
+        """B1-1b: ch5 历史引用带强制 FY 标注 → 豁免通过"""
+        g = NumericGuard()
+        r = g.check_fiscal(
+            5,
+            "2025年度总资产215.83亿元；FY2024 总资产229.45亿元，同比变化明显。",
+            wind_data,
+        )
+        assert r.passed
+
+    def test_fiscal_ch5_prior_with_compare_context_pass(self, wind_data):
+        """B1-1c: ch5 历史引用带对比语境 → 豁免通过"""
+        g = NumericGuard()
+        r = g.check_fiscal(
+            5,
+            "2025年度总资产215.83亿元，较2024年度的229.45亿元下降，经营表现稳健。",
+            wind_data,
+        )
+        assert r.passed
+
+    def test_fiscal_ch6_historical_reference_lenient(self, wind_data):
+        """B1-1d: ch6 合法历史引用（放行章节）→ 通过（路线图验收项）"""
+        g = NumericGuard()
+        r = g.check_fiscal(6, "2024年度总资产827.06亿元，2025年度1031.63亿元，财务结构变化显著。", wind_data)
+        assert r.passed
+
+    def test_fiscal_ch7_prior_as_current_fail(self, wind_data):
+        """B1-1e: ch7 估值章从严——历史财年当当期 → 阻断"""
+        g = NumericGuard()
+        r = g.check_fiscal(7, "基于2024年度收入81.21亿元，给出估值区间。", wind_data)
+        assert not r.passed
+
+    def test_fiscal_ch4_lenient(self, wind_data):
+        """B1-1f: ch4 放行章节 → 历史引用不阻断"""
+        g = NumericGuard()
+        r = g.check_fiscal(4, "最近变化：2024年度收入81.21亿元，2025年度73.66亿元。", wind_data)
+        assert r.passed
+
     def test_currency_hk(self, wind_data):
         """T7: 港股每股价值人民币未标注 → 拦截"""
         g = NumericGuard()

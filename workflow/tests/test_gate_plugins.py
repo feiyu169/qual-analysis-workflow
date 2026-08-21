@@ -49,6 +49,23 @@ def test_test_quality_passes_real_assertions(tmp_path):
     assert result.status == GateExecutionStatus.PASSED
 
 
+def test_test_quality_passes_unittest_style(tmp_path):
+    """V3.3.2（B1 触达）：unittest.TestCase 的 self.assertXxx 应计为断言，非空桩"""
+    wd = str(tmp_path)
+    os.makedirs(os.path.join(wd, "tests"))
+    with open(os.path.join(wd, "tests", "test_u.py"), "w", encoding="utf-8") as f:
+        f.write(
+            "import unittest\n"
+            "class TestU(unittest.TestCase):\n"
+            "    def test_x(self):\n"
+            "        self.assertTrue(True)\n"
+            "        self.assertEqual(1, 1)\n"
+        )
+    plugin = QualityGate(_config(name="test_quality", tool="test-quality"))
+    result = plugin.execute([], wd)
+    assert result.status == GateExecutionStatus.PASSED, f"unittest 断言应被识别: {result.message}"
+
+
 def test_test_quality_handles_multiline_strings(tmp_path):
     """回归：函数体内含列 0 的多行字符串时，不得误判为空桩"""
     wd = str(tmp_path)

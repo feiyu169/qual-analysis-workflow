@@ -55,8 +55,15 @@ MIN_FINANCIAL_NUMBERS = 3
 FINANCIAL_CHAPTERS = {5, 6}
 # 估值章编号
 VALUATION_CHAPTERS = {7}
-# 财年铁律章节（ch5 经营表现 / ch4 最近变化）
-FISCAL_STRICT_CHAPTERS = {4, 5}
+# 财年铁律章节（B1-1 修订：ch5 经营表现 / ch7 估值 从严——当期锚断言）
+FISCAL_STRICT_CHAPTERS = {5, 7}
+# 放行章节（B1-1 修订：ch6 财务分析 / ch4 最近变化——历史引用宽松豁免，不阻断）
+FISCAL_LENIENT_CHAPTERS = {4, 6}
+# 历史引用豁免语境词（对比/趋势语境：引用处附近出现即豁免）
+FISCAL_HISTORICAL_CONTEXT = [
+    "对比", "历史", "上年", "同期", "趋势", "同比", "较上年", "相较于", "回顾", "此前",
+    "较", "下降", "上升", "增长", "回落", "变化", "低于", "高于",
+]
 # 币值敏感章节
 CURRENCY_CHAPTERS = {7}
 
@@ -209,7 +216,7 @@ class NumericGuard:
         return result
 
     # ------------------------------------------------------------
-    # 闸门3：财年一致性（ch4/ch5 必须锚最新财年）
+    # 闸门3：财年一致性（B1-1：章节级当期锚断言 + 历史引用上下文豁免 + 章节调参）
     # ------------------------------------------------------------
     def check_fiscal(
         self,
@@ -218,30 +225,81 @@ class NumericGuard:
         wind_data: dict,
     ) -> GateResult:
         result = GateResult(passed=True)
-        if chapter_num not in FISCAL_STRICT_CHAPTERS:
+        if chapter_num in FISCAL_LENIENT_CHAPTERS:
+            # B1-1：放行章节（ch6 财务分析 / ch4 最近变化）——历史引用宽松豁免
             return result
+        if chapter_num not in FISCAL_STRICT_CHAPTERS:
+            # 非严格非放行章节：默认检查（同严格语义，当期锚断言）
+            pass
 
-        # 最新财年
+        # 最新财年 + 全部历史财年
         labels = ((wind_data or {}).get("_year_labels") or {}).get("财年") or []
         if not labels:
             return result
         latest_fy = labels[-1]
-        prior_fy = latest_fy - 1
+        prior_fys = labels[:-1]
+        if not prior_fys:
+            return result
 
-        # ch5 检查：是否把 prior 财年当当期（如"2024年度…经营表现"无"对比/历史"标注）
-        # 违规模式：出现 f"{prior_fy}年度" 或 f"{prior_fy}财年" 且无"对比/历史/上年"标注
-        prior_refs = re.findall(rf"{prior_fy}[年财]度?", content)
         latest_refs = re.findall(rf"{latest_fy}[年财]度?", content)
-        if prior_refs and not latest_refs:
-            result.passed = False
-            result.violations.append(GateViolation(
-                gate="fiscal", chapter=chapter_num,
-                message=(
-                    f"财年错位：本章大量引用 FY{prior_fy}（{len(prior_refs)} 处）但无 FY{latest_fy} 当期数据，"
-                    f"须以 FY{latest_fy} 为当期（2024 只能作对比/历史）"
-                ),
-            ))
+        if not latest_refs:
+            # 全章无最新财年引用：先查是否纯历史引用（全部带豁免）——否则判当期错位
+            active_prior = [pf for pf in prior_fys if re.search(rf"{pf}[年财]度?", content)]
+            if active_prior:
+                exempted = all(
+                    self._historical_context_exempt(content, f"{pf}年度", pf) or
+                    self._historical_context_exempt(content, f"{pf}财年", pf)
+                    for pf in active_prior
+                )
+                if not exempted:
+                    result.passed = False
+                    result.violations.append(GateViolation(
+                        gate="fiscal", chapter=chapter_num,
+                        message=(
+                            f"财年错位：本章引用历史财年 {[f'FY{pf}' for pf in active_prior]} 但无 "
+                            f"FY{latest_fy} 当期数据，须以 FY{latest_fy} 为当期"
+                            f"（历史引用须带 FY 标注或对比/趋势语境）"
+                        ),
+                    ))
+            return result
+
+        # 有最新财年引用：逐处检查历史财年引用是否带豁免（FY 标注 或 对比语境）
+        for pf in prior_fys:
+            refs = re.findall(rf"{pf}[年财]度?", content)
+            if not refs:
+                continue
+            for ref in refs:
+                pos = content.find(ref)
+                if pos < 0:
+                    continue
+                if self._historical_context_exempt(content, ref, pf, pos):
+                    continue  # 对比/趋势语境 或 强制 FY 标注 → 豁免
+                result.passed = False
+                result.violations.append(GateViolation(
+                    gate="fiscal", chapter=chapter_num,
+                    message=(
+                        f"财年错位：'{ref}' 未标注 FY{pf} 且无对比/趋势语境"
+                        f"（当期应为 FY{latest_fy}，历史引用须带 FY 标注或对比标注）"
+                    ),
+                ))
         return result
+
+    def _historical_context_exempt(
+        self, content: str, ref: str, prior_fy: int, pos: int | None = None,
+    ) -> bool:
+        """历史引用豁免判定：引用处附近 80 字符内含豁免语境词，或带强制 FY 标注"""
+        if pos is None:
+            pos = content.find(ref)
+        if pos < 0:
+            return False
+        window = content[max(0, pos - 80):pos + len(ref) + 80]
+        # 强制 FY 标注：引用处附近出现 FY{pf} 或 （{pf}年） 形式
+        if re.search(rf"FY\s*{prior_fy}", window):
+            return True
+        if re.search(rf"[（(]\s*{prior_fy}\s*年\s*[）)]", window):
+            return True
+        # 对比/趋势语境词
+        return any(w in window for w in FISCAL_HISTORICAL_CONTEXT)
 
     # ------------------------------------------------------------
     # 闸门4：币值/单位语义（估值章每股价值币种对齐）

@@ -119,7 +119,7 @@ def main():
             "shares": shares,
             "current_price": 21.48,
             "fiscal_year": 2025,
-            "qual_mode": "shadow",     # enforce 可阻断（Gate8 红队失败即停）
+            "qual_mode": "soft",     # B1-2：A4 验收后默认从 shadow 翻转为 soft（告警不阻断；enforce 可阻断关键错误）
             "output_dir": out_dir,
             "human_confirmed": True,
         }

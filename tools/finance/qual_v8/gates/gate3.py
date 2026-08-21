@@ -2,12 +2,12 @@
 Gate 3: 逐章写作（大纲→分章→交叉验证→组装）
 """
 
-from typing import Dict, Any, List
+import logging
 from dataclasses import dataclass
 from datetime import datetime
-import logging
+from typing import Any
 
-from ..core.gate_engine import GateBase, GateSpec, GateResult
+from ..core.gate_engine import GateBase, GateResult, GateSpec
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +17,8 @@ class ChapterConfig:
     """章节配置"""
     total_chapters: int  # 总章节数
     min_word_count: int  # 最小字数
-    required_sections: List[str]  # 必需章节
-    placeholder_patterns: List[str]  # 占位符模式
+    required_sections: list[str]  # 必需章节
+    placeholder_patterns: list[str]  # 占位符模式
 
 
 class Gate3ChapterWriting(GateBase):
@@ -48,7 +48,7 @@ class Gate3ChapterWriting(GateBase):
             placeholder_patterns=["[Placeholder]", "XX亿元", "待填写", "TBD"],
         )
     
-    def execute(self, context: Dict[str, Any]) -> GateResult:
+    def execute(self, context: dict[str, Any]) -> GateResult:
         """执行Gate 3（真实：11章 LLM 生成 + 完整性/占位符/一致性检查）"""
         errors = []
         warnings = []
@@ -115,23 +115,23 @@ class Gate3ChapterWriting(GateBase):
             errors=errors,
             warnings=warnings,
             execution_time=0.0,
-            timestamp=datetime.now().isoformat(),
+            timestamp=datetime.now().isoformat(),  # noqa: DTZ005
         )
 
-    def check_criteria(self, context: Dict[str, Any]) -> bool:
+    def check_criteria(self, context: dict[str, Any]) -> bool:
         """检查通过标准（核心：章节数量；字数/占位符由后续 Gate 收口）"""
         chapters = context.get("chapters", {})
 
         # 检查章节完整性（数量是硬性）
-        if len(chapters) < self.config.total_chapters - 2:  # 允许缺 0/10
+        if len(chapters) < self.config.total_chapters - 2:  # 允许缺 0/10  # noqa: SIM103
             return False
 
         return True
 
-    def _generate_outline(self, context: Dict[str, Any]) -> Dict[str, Any]:
+    def _generate_outline(self, context: dict[str, Any]) -> dict[str, Any]:
         """生成大纲（真实：finance.workflow.CHAPTERS 标题）"""
         try:
-            from ...workflow import CHAPTERS, _CHAPTER_WRITE_ORDER
+            from ...workflow import _CHAPTER_WRITE_ORDER, CHAPTERS
             outline = {}
             for num in [0] + _CHAPTER_WRITE_ORDER + [10]:
                 ch_def = CHAPTERS.get(num)
@@ -139,11 +139,11 @@ class Gate3ChapterWriting(GateBase):
                     outline[num] = f"第{num}章: {ch_def['title']}"
             if outline:
                 return outline
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Gate3 大纲生成降级: {e}")
         return {i: f"第{i}章大纲" for i in range(self.config.total_chapters)}
 
-    def _generate_chapters(self, context: Dict[str, Any], outline: Dict[str, Any]) -> Dict[int, str]:
+    def _generate_chapters(self, context: dict[str, Any], outline: dict[str, Any]) -> dict[int, str]:
         """分章生成（真实：workflow 11 章生成链）
 
         context 需含：llm_caller、wind_data、filing_data、ticker、company_name、market、shares
@@ -161,7 +161,11 @@ class Gate3ChapterWriting(GateBase):
             return {}
 
         try:
-            from ...workflow import _build_chapter_prompt, _generate_chapter, _CHAPTER_WRITE_ORDER
+            from ...workflow import (
+                _CHAPTER_WRITE_ORDER,
+                _build_chapter_prompt,
+                _generate_chapter,
+            )
             from ..adapters import build_data_context
 
             ctx = build_data_context(
@@ -177,29 +181,45 @@ class Gate3ChapterWriting(GateBase):
             if facts and not getattr(ctx, "facts", None):
                 ctx.facts = facts
 
-            chapters: Dict[int, str] = {}
+            chapters: dict[int, str] = {}
             for chapter_num in _CHAPTER_WRITE_ORDER:
                 prompt = _build_chapter_prompt(chapter_num, ctx, chapters)
                 content = _generate_chapter(chapter_num, prompt, ctx, llm_caller,
                                             deadline=context.get("_wall_deadline"))  # v3.1 P0-B-1
                 chapters[chapter_num] = content
                 logger.info(f"Gate3 第{chapter_num}章完成: {len(content)}字符")
+
+            # B1-3：ch10（决策）与 ch0（概览）纳入生成与审计（全 11 章）
+            # 决策章依赖前 9 章综合，概览章依赖全部（含决策）——故在 1-9 章之后补生成
+            from ...workflow import (
+                _generate_decision_chapter,
+                _generate_overview_chapter,
+            )
+
+            decision = _generate_decision_chapter(chapters, ctx, llm_caller)
+            chapters[10] = decision
+            logger.info(f"Gate3 第10章完成（决策）: {len(decision)}字符")
+            overview = _generate_overview_chapter(chapters, ctx, llm_caller)
+            chapters[0] = overview
+            logger.info(f"Gate3 第0章完成（概览）: {len(overview)}字符")
             return chapters
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Gate3 章节生成失败: {e}")
             return {}
 
-    def _check_consistency(self, chapters: Dict[int, str]) -> Dict[str, Any]:
+    def _check_consistency(self, chapters: dict[int, str]) -> dict[str, Any]:
         """检查一致性（真实：quality.cross_chapter_consistency）"""
         errors = []
 
         try:
-            from ...quality.cross_chapter_consistency import check_cross_chapter_consistency
+            from ...quality.cross_chapter_consistency import (
+                check_cross_chapter_consistency,
+            )
             result = check_cross_chapter_consistency(chapters)
             if not result.passed:
                 for issue in result.issues:
                     errors.append(f"第{issue.chapter1}章 vs 第{issue.chapter2}章: {issue.description}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Gate3 一致性检查失败（非阻断）: {e}")
 
         return {
@@ -207,7 +227,7 @@ class Gate3ChapterWriting(GateBase):
             "errors": errors,
         }
 
-    def _check_completeness(self, chapters: Dict[int, str]) -> Dict[str, Any]:
+    def _check_completeness(self, chapters: dict[int, str]) -> dict[str, Any]:
         """检查完整性"""
         errors = []
 
@@ -225,7 +245,7 @@ class Gate3ChapterWriting(GateBase):
             "errors": errors,
         }
 
-    def _check_placeholders(self, chapters: Dict[int, str]) -> Dict[str, Any]:
+    def _check_placeholders(self, chapters: dict[int, str]) -> dict[str, Any]:
         """检查占位符"""
         errors = []
 

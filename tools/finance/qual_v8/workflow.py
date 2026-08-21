@@ -31,6 +31,21 @@ from .monitoring.alerts import AlertManager, MetricsCollector
 logger = logging.getLogger(__name__)
 
 
+# B1-2：enforce 分级阻断——关键错误关键词（数值矛盾/财年错位/占位符/量级）
+# 命中任一 → ComplianceBlockedException；未命中（字段缺失/降级类）→ 降级标注不阻断
+CRITICAL_GATE_ERROR_KEYWORDS = [
+    "数值矛盾", "财年错位", "跨章节一致性", "量级", "矛盾",
+    "占位符", "模板残留", "空壳", "空章",
+]
+
+
+def _is_critical_gate_error(err_text: str) -> bool:
+    """B1-2：Gate 失败是否属关键错误（enforce 下阻断）"""
+    if not err_text:
+        return False
+    return any(kw in err_text for kw in CRITICAL_GATE_ERROR_KEYWORDS)
+
+
 @dataclass
 class WorkflowConfig:
     """工作流配置"""
@@ -392,16 +407,19 @@ class QualWorkflow:
             context["gate_results"] = gate_results
             context["results"] = results
 
-            # enforce 模式：关键 Gate 未通过或 check_criteria 失败 → 阻断
-            critical_gates = {0, 2, 4, 8}
+            # B1-2 分级阻断：enforce 下仅"关键错误"阻断（数值矛盾/财年错位/占位符等）；
+            # Gate0/2 数据源问题（字段缺失/降级）不阻断，产出带标注报告
+            critical_gates = {4, 8}
             if qual_mode == "enforce" and gate_num in critical_gates:  # noqa: SIM102
                 if not result.passed or not result.details.get("check_criteria_passed"):
-                    from .workflow_context import ComplianceBlockedException
-                    self.state_machine.transition_workflow(WorkflowState.FAILED)
-                    raise ComplianceBlockedException(
-                        f"Gate {gate_num} {'未通过' if not result.passed else 'check_criteria 失败'}，"
-                        f"enforce 模式阻断: {result.errors[:3]}"
-                    )
+                    err_text = "; ".join(result.errors[:6])
+                    if _is_critical_gate_error(err_text):
+                        from .workflow_context import ComplianceBlockedException
+                        self.state_machine.transition_workflow(WorkflowState.FAILED)
+                        raise ComplianceBlockedException(
+                            f"Gate {gate_num} 关键错误阻断（B1-2 分级）: {result.errors[:3]}"
+                        )
+                    logger.warning(f"Gate {gate_num} 非关键失败（B1-2 降级标注，不阻断）: {err_text[:120]}")
 
             # 更新指标
             self.metrics_collector.record_gate_result(gate_num, results[f"gate_{gate_num}"])

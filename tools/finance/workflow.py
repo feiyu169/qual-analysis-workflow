@@ -30,7 +30,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional
 
-from .data_context import DataContext, FacetResult, WindData, FilingData, SearchResult
+from .data_context import DataContext, FacetResult, FilingData, SearchResult, WindData
 
 # v3.1 P0-B-1：确定性/终止性异常（不重试，fail-closed 白名单）
 from .llm_errors import DeterministicLLMFailure, WallClockDeadlineExceeded
@@ -51,7 +51,11 @@ except ImportError:
 
 # v3 新组件: ExceptionHandler (异常分级处理)
 try:
-    from .quality.v3.exception_handler import ExceptionHandler, FatalException, WarningException
+    from .quality.v3.exception_handler import (
+        ExceptionHandler,
+        FatalException,
+        WarningException,
+    )
     HAS_EXCEPTION_HANDLER = True
 except ImportError:
     HAS_EXCEPTION_HANDLER = False
@@ -707,13 +711,13 @@ def _process_filing(
     """
     from .processors import (
         CNSectionsProcessor,
+        FinancialTableExtractor,
         HKSectionsProcessor,
+        SectionIdentifier,
+        US8KSectionsProcessor,
         US10KSectionsProcessor,
         US10QSectionsProcessor,
         US20FSectionsProcessor,
-        US8KSectionsProcessor,
-        FinancialTableExtractor,
-        SectionIdentifier,
     )
 
     # 兼容预处理的 sections（直接传入已处理的数据）
@@ -1470,7 +1474,7 @@ def _audit_and_fix(
     start_time = time.time()
     logger.info(f"Step 4: 审计修复 (max_rounds={max_rounds}, timeout={timeout_seconds}s)")
 
-    from .quality import structural_check, semantic_audit, repair_chapter
+    from .quality import repair_chapter, semantic_audit, structural_check
 
     fixed: dict[int, str] = {}
 
@@ -1760,7 +1764,7 @@ def _generate_decision_chapter(
     # v3 T8: DecisionAggregator聚合各章判断
     if HAS_DECISION_AGGREGATOR:
         try:
-            from .decision.aggregator import DecisionAggregator, ChapterJudgment
+            from .decision.aggregator import ChapterJudgment, DecisionAggregator
             judgments = []
             for num, ch_content in chapters.items():
                 if num < 10:
@@ -2474,8 +2478,13 @@ def run_analysis(
     # Qual流程整合：初始化WorkflowContext（非侵入式）
     # ==================================================
     try:
-        from .qual_v8.workflow_context import get_workflow_context, QualConfig, ComplianceBlockedException
         import os
+
+        from .qual_v8.workflow_context import (
+            ComplianceBlockedException,
+            QualConfig,
+            get_workflow_context,
+        )
         qual_mode = os.environ.get("QUAL_MODE", "shadow")  # 从环境变量读取模式
         qual_config = QualConfig(mode=qual_mode)
         qual_ctx = get_workflow_context(qual_config)
@@ -2767,8 +2776,8 @@ def run_analysis(
     # Step 4.5: 质量增强（数据修复+估值+深度优化）
     # ==================================================
     try:
-        from .quality_enhancer import enhance_report_quality
         from .base_valuation import compute_base_valuation
+        from .quality_enhancer import enhance_report_quality
 
         wind_valuation_data = None
         if ctx.wind:
@@ -2918,7 +2927,10 @@ def run_analysis(
     # ==================================================
     gate_checks_report = None
     try:
-        from .gate_checks_integration import run_gate_checks_in_workflow, GateChecksBlockedError
+        from .gate_checks_integration import (
+            GateChecksBlockedError,
+            run_gate_checks_in_workflow,
+        )
         
         # 提取DCF参数（如果可用）
         dcf_params = None
@@ -3127,6 +3139,22 @@ def run_analysis(
         all_chapters_content[9] = synthesis  # 综合结论章放在第9章位置
     all_chapters_content[10] = decision
     all_chapters_content[0] = overview
+
+    # B1-3：ch10/ch0 纳入审计（组装前质量检查——结构 + 数值闸门，失败记 warning 不阻断）
+    try:
+        from .quality.numeric_guard import check_chapter_gates
+        from .quality.structural_check import structural_check
+        _wind_dict = _wind_to_dict(ctx.wind) if ctx.wind else {}
+        for _ch in (10, 0):
+            _content = all_chapters_content.get(_ch, "")
+            _sres = structural_check(f"ch{_ch}", _content)
+            if _sres.issues:
+                logger.warning(f"B1-3 审计: 第{_ch}章结构问题 {len(_sres.issues)} 处（{_sres.issues[:2]}）")
+            _g = check_chapter_gates(_ch, _content, _wind_dict, market=ctx.market)
+            if not _g.passed:
+                logger.warning(f"B1-3 审计: 第{_ch}章数值闸门未通过: {[v.message for v in _g.violations[:3]]}")
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"B1-3 审计 ch0/ch10 失败（非阻断）: {e}")
 
     # ==================================================
     # Qual流程整合：完成工作流（非侵入式）

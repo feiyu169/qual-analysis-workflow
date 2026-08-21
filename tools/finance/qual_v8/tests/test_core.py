@@ -3,13 +3,12 @@ Qual流程v8.4 - 测试模块
 """
 
 import unittest
-import time
-from typing import Dict, Any
 
-from ..core.state_machine import StateMachine, GateState, WorkflowState
 from ..core.audit_logger import AuditLogger
-from ..core.circuit_breaker import CircuitBreaker, ErrorType as CBErrorType
-from ..core.error_classifier import ErrorClassifier, ErrorType as ECErrorType
+from ..core.circuit_breaker import CircuitBreaker
+from ..core.circuit_breaker import ErrorType as CBErrorType
+from ..core.error_classifier import ErrorClassifier
+from ..core.state_machine import GateState, StateMachine, WorkflowState
 from ..core.supervisor import FlowComplianceChecker
 from ..gates.gate0 import Gate0DataSourceValidation
 
@@ -266,6 +265,59 @@ class TestFlowComplianceChecker(unittest.TestCase):
         result_fail = checker.check_gate(0, execution_log_fail)
         self.assertFalse(result_fail.passed)
         self.assertTrue(len(result_fail.failed_checks) > 0)
+
+
+class TestB1FiscalGating(unittest.TestCase):
+    """B1-2：enforce 分级阻断——关键错误 vs 降级错误"""
+
+    def test_critical_error_keywords(self):
+        from ..workflow import _is_critical_gate_error
+
+        # 关键错误（数值矛盾/财年错位/占位符）→ 阻断
+        self.assertTrue(_is_critical_gate_error("数值矛盾：总资产不一致"))
+        self.assertTrue(_is_critical_gate_error("财年错位：引用 FY2024 无当期"))
+        self.assertTrue(_is_critical_gate_error("跨章节一致性发现 74 个矛盾"))
+        self.assertTrue(_is_critical_gate_error("模板残留：1427.8 亿"))
+        self.assertTrue(_is_critical_gate_error("占位符 [Placeholder]"))
+
+    def test_non_critical_error_not_blocked(self):
+        from ..workflow import _is_critical_gate_error
+
+        # 非关键（字段缺失/数据源降级）→ 不阻断
+        self.assertFalse(_is_critical_gate_error("字段缺失：营业总收入未披露"))
+        self.assertFalse(_is_critical_gate_error("数据源降级：MinerU 不可用"))
+        self.assertFalse(_is_critical_gate_error(""))
+        self.assertFalse(_is_critical_gate_error(None))
+
+
+class TestB1ChapterCoverage(unittest.TestCase):
+    """B1-3：Gate3 生成链覆盖 ch0/ch10（全 11 章）"""
+
+    def test_gate3_generates_all_11_chapters(self):
+        from unittest import mock
+
+        from ..gates.gate3 import Gate3ChapterWriting
+
+        gate = Gate3ChapterWriting()
+
+        with mock.patch("finance.workflow._generate_chapter",
+                        side_effect=lambda n, p, ctx, caller, **kw: f"第{n}章生成内容"), \
+             mock.patch("finance.workflow._generate_decision_chapter",
+                        return_value="第10章决策内容"), \
+             mock.patch("finance.workflow._generate_overview_chapter",
+                        return_value="第0章概览内容"):
+            out = gate._generate_chapters(
+                {"llm_caller": lambda *a, **k: "ok",
+                 "wind_data": {}, "filing_data": {},
+                 "ticker": "9868.HK", "company_name": "小鹏集团-W",
+                 "market": "hk", "shares": 18.87},
+                {},
+            )
+
+        # 全 11 章：0-10
+        self.assertEqual(set(out.keys()), set(range(11)))
+        self.assertIn("第10章决策内容", out[10])
+        self.assertIn("第0章概览内容", out[0])
 
 
 if __name__ == "__main__":

@@ -202,7 +202,7 @@ def main():
             "shares": shares,
             "current_price": 46.52,
             "fiscal_year": 2025,
-            "qual_mode": "shadow",
+            "qual_mode": "soft",   # B1-2：A4 验收后默认从 shadow 翻转为 soft（告警不阻断，完整走链）
             "output_dir": out_dir,
             "human_confirmed": True,
         }

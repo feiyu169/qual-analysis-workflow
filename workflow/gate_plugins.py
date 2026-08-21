@@ -674,7 +674,11 @@ class TestQualityPlugin(GatePlugin):
 
     @staticmethod
     def _count_asserts(node) -> int:
-        """统计函数体中的断言数量（assert 语句 + pytest.raises / raises 调用）"""
+        """统计函数体中的断言数量（assert 语句 + pytest.raises + unittest self.assertXxx）
+
+        V3.3.2（B1 触达）：支持 unittest 风格——`self.assertTrue/assertEqual/fail` 等
+        属性调用亦计为断言，避免 unittest.TestCase 测试被误判为空桩。
+        """
         import ast
 
         count = 0
@@ -684,12 +688,14 @@ class TestQualityPlugin(GatePlugin):
                 continue
             if isinstance(child, ast.Call):
                 func = child.func
-                if (
-                    isinstance(func, ast.Attribute)
-                    and func.attr == "raises"
-                    or isinstance(func, ast.Name)
-                    and func.id == "raises"
-                ):
+                if isinstance(func, ast.Attribute):
+                    if (
+                        func.attr == "raises"
+                        or func.attr.startswith("assert")
+                        or func.attr == "fail"
+                    ):
+                        count += 1
+                elif isinstance(func, ast.Name) and func.id == "raises":
                     count += 1
         return count
 
