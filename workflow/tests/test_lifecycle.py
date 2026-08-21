@@ -151,18 +151,26 @@ def test_advance_review_requires_record(tmp_path):
         lifecycle.advance(wd, gates, deps, "gate_0_2")
 
     # reviewer == verifier（自签）→ 拒绝
-    _write_review({
-        "gate": "gate_0_2", "verdict": "pass",
-        "reviewer": "tester", "verifier": "tester",
-    })
+    _write_review(
+        {
+            "gate": "gate_0_2",
+            "verdict": "pass",
+            "reviewer": "tester",
+            "verifier": "tester",
+        }
+    )
     with pytest.raises(lifecycle.LifecycleError, match="自签"):
         lifecycle.advance(wd, gates, deps, "gate_0_2")
 
     # 双签名且不同 → 通过
-    _write_review({
-        "gate": "gate_0_2", "verdict": "pass",
-        "reviewer": "executor", "verifier": "independent-expert",
-    })
+    _write_review(
+        {
+            "gate": "gate_0_2",
+            "verdict": "pass",
+            "reviewer": "executor",
+            "verifier": "independent-expert",
+        }
+    )
     rec = lifecycle.advance(wd, gates, deps, "gate_0_2")
     assert rec["status"] == "done"
 
@@ -206,9 +214,19 @@ def _git_commit(wd, files_content, message):
             f.write(content)
         subprocess.run(["git", "add", path], cwd=wd, check=False)
         subprocess.run(
-            ["git", "-c", "user.name=t", "-c", "user.email=t@t",
-             "commit", "-q", "-m", message],
-            cwd=wd, check=False,
+            [
+                "git",
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-q",
+                "-m",
+                message,
+            ],
+            cwd=wd,
+            check=False,
         )
     time.sleep(1.1)  # 保证提交时间戳可区分
 
@@ -243,9 +261,17 @@ def test_sast_mapping_is_semgrep_not_ruff():
     """sast_scan 必须映射到真 SAST 检查器，而不是 ruff 兜底"""
     import lifecycle_checkers
 
-    assert lifecycle_checkers._CHECKERS["sast_scan"] is lifecycle_checkers._check_semgrep
-    assert lifecycle_checkers._CHECKERS["dependency_scan"] is lifecycle_checkers._check_dependency
-    assert lifecycle_checkers._CHECKERS["iac_security_audit"] is lifecycle_checkers._check_checkov
+    assert (
+        lifecycle_checkers._CHECKERS["sast_scan"] is lifecycle_checkers._check_semgrep
+    )
+    assert (
+        lifecycle_checkers._CHECKERS["dependency_scan"]
+        is lifecycle_checkers._check_dependency
+    )
+    assert (
+        lifecycle_checkers._CHECKERS["iac_security_audit"]
+        is lifecycle_checkers._check_checkov
+    )
     assert lifecycle_checkers._CHECKERS["dast_scan"] is lifecycle_checkers._check_dast
 
 
@@ -305,7 +331,9 @@ def test_dast_requires_external_report(tmp_path):
     report = os.path.join(str(tmp_path), "dast-report.json")
     with open(report, "w", encoding="utf-8") as f:
         f.write("{}")
-    ok, issues = lifecycle._check_dast({"id": "gate_3_2"}, str(tmp_path), "dast-report.json")
+    ok, issues = lifecycle._check_dast(
+        {"id": "gate_3_2"}, str(tmp_path), "dast-report.json"
+    )
     assert ok is True
 
 
@@ -390,7 +418,9 @@ def test_document_threshold_raised_to_300(tmp_path):
 def test_semantic_check_requires_architecture_entries(tmp_path):
     """架构文档必须含组件/数据流/信任边界/接口——长度满足但缺条目 → FAIL"""
     wd = str(tmp_path)
-    _write_doc(wd, "gate_1_1", "这是一份架构文档。\n" + "填充内容。" * 120)  # 够长但无结构
+    _write_doc(
+        wd, "gate_1_1", "这是一份架构文档。\n" + "填充内容。" * 120
+    )  # 够长但无结构
     gate = {
         "id": "gate_1_1",
         "exit_criteria": [{"type": "architecture_document"}],
@@ -405,13 +435,13 @@ def test_semantic_check_passes_with_entries(tmp_path):
     """架构文档含全部条目 → 通过"""
     wd = str(tmp_path)
     _write_doc(
-        wd, "gate_1_1",
+        wd,
+        "gate_1_1",
         "# 架构\n"
         "组件：用户服务、订单服务。\n"
         "数据流：用户→订单。\n"
         "信任边界：内外网隔离。\n"
-        "接口：REST API。\n"
-        + "填充。" * 150,
+        "接口：REST API。\n" + "填充。" * 150,
     )
     gate = {
         "id": "gate_1_1",
@@ -554,11 +584,15 @@ def test_reopen_cascades_downstream(tmp_path):
             {
                 "gates": {
                     "gate_0_1": {
-                        "name": "A", "phase": 0, "depends_on": [],
+                        "name": "A",
+                        "phase": 0,
+                        "depends_on": [],
                         "exit_criteria": [{"type": "document_generated"}],
                     },
                     "gate_0_2": {
-                        "name": "B", "phase": 0, "depends_on": ["gate_0_1"],
+                        "name": "B",
+                        "phase": 0,
+                        "depends_on": ["gate_0_1"],
                         "exit_criteria": [{"type": "document_generated"}],
                     },
                 }
@@ -568,10 +602,13 @@ def test_reopen_cascades_downstream(tmp_path):
         )
     gates = lifecycle.load_gates(cfg)
     # 手动置两 gate 为 done
-    lifecycle.save_state(wd, {
-        "gate_0_1": {"status": "done", "completed_at": "2026-01-01T00:00:00"},
-        "gate_0_2": {"status": "done", "completed_at": "2026-01-01T00:00:00"},
-    })
+    lifecycle.save_state(
+        wd,
+        {
+            "gate_0_1": {"status": "done", "completed_at": "2026-01-01T00:00:00"},
+            "gate_0_2": {"status": "done", "completed_at": "2026-01-01T00:00:00"},
+        },
+    )
     rec = lifecycle.reopen(wd, gates, "gate_0_1", reason="需求变更")
     assert rec["reopened"] == "gate_0_1"
     assert rec["rework_count"] == 1
@@ -581,6 +618,7 @@ def test_reopen_cascades_downstream(tmp_path):
     assert state["gate_0_2"]["status"] == "blocked"
     # 返工写入 failure_log
     from failure_log import load_failures
+
     entries = load_failures(wd)
     assert any(e.get("gate") == "gate_0_1" for e in entries)
 
@@ -592,9 +630,16 @@ def test_metrics_reports_rework_and_escape(tmp_path):
     """metrics 聚合返工计数 + 缺陷逃逸率"""
     wd = str(tmp_path)
     # 手工造状态：一个 gate done + rework_count
-    lifecycle.save_state(wd, {
-        "gate_3_1": {"status": "done", "completed_at": "2026-01-02T00:00:00", "rework_count": 2},
-    })
+    lifecycle.save_state(
+        wd,
+        {
+            "gate_3_1": {
+                "status": "done",
+                "completed_at": "2026-01-02T00:00:00",
+                "rework_count": 2,
+            },
+        },
+    )
     # 造 failures：一个 Phase 3 gate（逃逸）+ 一个 Phase 2 gate
     import failure_log
 
@@ -698,7 +743,11 @@ def test_confirm_without_evidence_rejected(tmp_path):
         lifecycle.advance(wd, gates, deps, "gate_0_1", confirm=True)
     # 有证据文件的 confirm → 可推进（复用文档作证据）
     lifecycle.advance(
-        wd, gates, deps, "gate_0_1",
-        file_hint="docs/gate_0_1.md", confirm=True,
+        wd,
+        gates,
+        deps,
+        "gate_0_1",
+        file_hint="docs/gate_0_1.md",
+        confirm=True,
     )
     assert lifecycle.load_state(wd)["gate_0_1"]["status"] == "done"

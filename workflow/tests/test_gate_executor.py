@@ -195,11 +195,69 @@ def test_failure_auto_recorded(tmp_path):
     log = os.path.join(wd, ".hgf", "failures.jsonl")
     assert os.path.exists(log)
     from failure_log import load_failures
+
     entries = load_failures(wd)
     assert len(entries) == 1
     entry = entries[0]
     assert entry["gate"] == "static_analysis"
     assert entry["root_cause"] is None
+
+
+def test_failure_log_self_failure_not_recorded(tmp_path):
+    """V3.3.2 S1：failure_log 门禁自身的失败不得写入 failures.jsonl（防自锁雪崩）。
+
+    历史 bug：failure_log 因"记录不完整"FAIL 时，其自身失败也被 record_failure
+    追加（且必然缺 root_cause/fix）→ 下次检查更多不完整 → 指数爆炸（232 条/196
+    未解决）。修复后 failure_log 自身失败只出现在 runs.jsonl 历史与报告里。
+    """
+    import gate_plugins
+    from gate_types import Issue
+
+    class _FakeFailureLogPlugin(GatePlugin):
+        verification_levels = frozenset({"L1"})
+
+        def execute(self, files, working_dir):
+            return GateResult(
+                name="failure_log",
+                tool="failure-log",
+                status=GateExecutionStatus.FAILED,
+                exit_code=1,
+                issues_count=2,
+                message="2 条失败记录不完整",
+                issues=[
+                    Issue(
+                        severity="error", message="缺 root_cause", rule="failure-log"
+                    ),
+                    Issue(severity="error", message="缺 fix", rule="failure-log"),
+                ],
+            )
+
+        def is_available(self):
+            return True
+
+    gate_plugins.GATE_PLUGINS["failure-log"] = _FakeFailureLogPlugin
+    path = _write_config(
+        tmp_path,
+        {
+            "must_pass": [
+                {
+                    "name": "failure_log",
+                    "tool": "failure-log",
+                    "verification": "L1",
+                    "timeout": 10,
+                }
+            ]
+        },
+        {"L1": {"must_pass": ["failure_log"], "should_pass": [], "optional": []}},
+    )
+    executor = GateExecutor(path)
+    report = executor.execute_gates("L1", files=["a.py"], working_dir=str(tmp_path))
+    assert report.failed == 1
+    assert report.must_pass_failed == ["failure_log"]
+    # 关键断言：failure_log 自身失败不产生新失败记录
+    from failure_log import load_failures
+
+    assert load_failures(str(tmp_path)) == []
 
 
 # ── V3.2 重试/升级接线 ─────────────────────────────────────────────────────
@@ -257,6 +315,7 @@ def test_must_pass_error_blocks_pipeline(tmp_path):
 
 class _VersionedFake(_FakePlugin):
     """带版本契约的假插件"""
+
     min_version = "2.0.0"
     max_version = "4.0.0"
     version = "3.0.0"
@@ -267,19 +326,37 @@ class _VersionedFake(_FakePlugin):
 
 def _versioned_executor(tmp_path):
     import gate_plugins
+
     gate_plugins.GATE_PLUGINS["fake"] = _VersionedFake
     path = os.path.join(str(tmp_path), "gates.yaml")
     with open(path, "w", encoding="utf-8") as f:
-        yaml.safe_dump({
-            "gates": {"must_pass": [
-                {"name": "fake_gate", "tool": "fake", "verification": "L1", "timeout": 10}
-            ]},
-            "level_gates": {"L1": {
-                "must_pass": ["fake_gate"], "should_pass": [], "optional": []
-            }},
-        }, f, allow_unicode=True)
+        yaml.safe_dump(
+            {
+                "gates": {
+                    "must_pass": [
+                        {
+                            "name": "fake_gate",
+                            "tool": "fake",
+                            "verification": "L1",
+                            "timeout": 10,
+                        }
+                    ]
+                },
+                "level_gates": {
+                    "L1": {
+                        "must_pass": ["fake_gate"],
+                        "should_pass": [],
+                        "optional": [],
+                    }
+                },
+            },
+            f,
+            allow_unicode=True,
+        )
     executor = GateExecutor(path)
-    executor.failure_handler = FailureHandler({"gate_retry_delay": 0, "gate_max_retries": 1})
+    executor.failure_handler = FailureHandler(
+        {"gate_retry_delay": 0, "gate_max_retries": 1}
+    )
     return executor
 
 
@@ -314,6 +391,7 @@ def test_version_contract_blocks_below_min(tmp_path):
 
 def test_parse_version_helper():
     from gate_plugin import GatePlugin
+
     assert GatePlugin._parse_version("safety, version 3.8.1") == (3, 8, 1)
     assert GatePlugin._parse_version("ruff 0.16.3") == (0, 16, 3)
 
@@ -324,21 +402,32 @@ def test_parse_version_helper():
 def _fp_executor(tmp_path, exceptions_yaml):
     """构造带自定义 exceptions.yaml 的执行器"""
     import gate_plugins
+
     gate_plugins.GATE_PLUGINS["fake"] = _FakePlugin
     exc_path = os.path.join(str(tmp_path), "exceptions.yaml")
     with open(exc_path, "w", encoding="utf-8") as f:
         f.write(exceptions_yaml)
     path = _write_config(
         tmp_path,
-        {"must_pass": [
-            {"name": "fake_gate", "tool": "fake", "verification": "L1", "timeout": 10}
-        ]},
+        {
+            "must_pass": [
+                {
+                    "name": "fake_gate",
+                    "tool": "fake",
+                    "verification": "L1",
+                    "timeout": 10,
+                }
+            ]
+        },
         {"L1": {"must_pass": ["fake_gate"], "should_pass": [], "optional": []}},
     )
     executor = GateExecutor(path)
-    executor.failure_handler = FailureHandler({"gate_retry_delay": 0, "gate_max_retries": 1})
+    executor.failure_handler = FailureHandler(
+        {"gate_retry_delay": 0, "gate_max_retries": 1}
+    )
     # 注入自定义误报配置
     import false_positive_checker as fpc
+
     executor.false_positive_checker = fpc.FalsePositiveChecker(exc_path)
     return executor
 
@@ -367,8 +456,11 @@ def test_false_positive_all_issues_waived_passes(tmp_path):
         "    permanent: true\n"
     )
     from gate_types import Issue
+
     _FakePlugin._results = [
-        _failed_with_issues([Issue(severity="error", message="x", file="a.py", rule="fake-rule-1")])
+        _failed_with_issues(
+            [Issue(severity="error", message="x", file="a.py", rule="fake-rule-1")]
+        )
     ]
     executor = _fp_executor(tmp_path, exc)
     report = executor.execute_gates("L1", files=["a.py"], working_dir=str(tmp_path))
@@ -390,11 +482,14 @@ def test_false_positive_partial_waive_keeps_failed(tmp_path):
         "    permanent: true\n"
     )
     from gate_types import Issue
+
     _FakePlugin._results = [
-        _failed_with_issues([
-            Issue(severity="error", message="x", file="a.py", rule="fake-rule-1"),
-            Issue(severity="error", message="y", file="a.py", rule="real-rule-9"),
-        ])
+        _failed_with_issues(
+            [
+                Issue(severity="error", message="x", file="a.py", rule="fake-rule-1"),
+                Issue(severity="error", message="y", file="a.py", rule="real-rule-9"),
+            ]
+        )
     ]
     executor = _fp_executor(tmp_path, exc)
     report = executor.execute_gates("L1", files=["a.py"], working_dir=str(tmp_path))
@@ -408,8 +503,11 @@ def test_false_positive_no_match_unchanged(tmp_path):
     """无匹配误报 → 行为不变（FAILED）"""
     exc = "known_false_positives: []\n"
     from gate_types import Issue
+
     _FakePlugin._results = [
-        _failed_with_issues([Issue(severity="error", message="x", file="a.py", rule="r1")])
+        _failed_with_issues(
+            [Issue(severity="error", message="x", file="a.py", rule="r1")]
+        )
     ]
     executor = _fp_executor(tmp_path, exc)
     report = executor.execute_gates("L1", files=["a.py"], working_dir=str(tmp_path))

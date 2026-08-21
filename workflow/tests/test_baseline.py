@@ -60,3 +60,28 @@ def test_update_saves_and_returns_changes(tmp_path):
     assert changes2 == []
     with open(baseline.path(wd), encoding="utf-8") as f:
         assert json.load(f)["config_sha256"] == "abc123"
+
+
+def test_load_returns_none_when_missing(tmp_path):
+    """缺失文件 → None（无基线）"""
+    assert baseline.load(str(tmp_path)) is None
+
+
+def test_load_returns_none_when_corrupt(tmp_path):
+    """V3.3.2 S2：损坏的 baseline.json → None 而非崩溃（实测旧版遗留文件
+    末尾多一个 } 导致 --canary 抛未捕获 JSONDecodeError）"""
+    wd = str(tmp_path)
+    os.makedirs(os.path.join(wd, ".hgf"), exist_ok=True)
+    with open(os.path.join(wd, ".hgf", "baseline.json"), "w", encoding="utf-8") as f:
+        f.write('{"a": 1}\n}')  # 无效 JSON（Extra data）
+    assert baseline.load(wd) is None
+
+
+def test_load_returns_dict_when_valid(tmp_path):
+    wd = str(tmp_path)
+    os.makedirs(os.path.join(wd, ".hgf"), exist_ok=True)
+    with open(os.path.join(wd, ".hgf", "baseline.json"), "w", encoding="utf-8") as f:
+        f.write('{"config_sha256": "abc", "tool_versions": {}}')
+    data = baseline.load(wd)
+    assert data is not None
+    assert data["config_sha256"] == "abc"

@@ -11,7 +11,9 @@ import tool_runner
 
 def test_split_command_basic():
     assert tool_runner.split_command("ruff check a.py") == [
-        "ruff", "check", "a.py",
+        "ruff",
+        "check",
+        "a.py",
     ]
 
 
@@ -52,10 +54,12 @@ def test_safe_run_utf8_encoding(tmp_path, monkeypatch):
 
     def fake_run(argv, **kw):
         captured.update(kw)
+
         class R:
             returncode = 0
             stdout = "中文输出"
             stderr = ""
+
         return R()
 
     monkeypatch.setattr(tool_runner.subprocess, "run", fake_run)
@@ -78,10 +82,12 @@ def test_lifecycle_static_uses_tool_runner(tmp_path, monkeypatch):
     def fake_safe_run(argv, cwd, timeout=120):
         captured["argv"] = argv
         captured["shell_invoked"] = False
+
         class R:
             returncode = 0
             stdout = ""
             stderr = ""
+
         return R()
 
     monkeypatch.setattr(tool_runner, "safe_run", fake_safe_run)
@@ -94,22 +100,24 @@ def test_lifecycle_tool_scan_uses_tool_runner(tmp_path, monkeypatch):
     """_check_tool_scan 经 tool_runner 拆分命令 + 安全执行"""
     import lifecycle
 
-    monkeypatch.setattr(
-        tool_runner, "check_tool_available", lambda tool: True
-    )
+    monkeypatch.setattr(tool_runner, "check_tool_available", lambda tool: True)
     captured = {}
 
     def fake_safe_run(argv, cwd, timeout=120):
         captured["argv"] = argv
+
         class R:
             returncode = 0
             stdout = "{}"
             stderr = ""
+
         return R()
 
     monkeypatch.setattr(tool_runner, "safe_run", fake_safe_run)
     ok, issues = lifecycle._check_tool_scan(
-        {"id": "gate_2_1"}, str(tmp_path), None,
+        {"id": "gate_2_1"},
+        str(tmp_path),
+        None,
         tool="semgrep",
         command="semgrep --config=p/r2c-ci --json .",
         label="SAST",

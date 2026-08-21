@@ -1,13 +1,13 @@
 """金丝雀版本回归单元测试（漂移检测 + 真实金丝雀执行）"""
 
-
 import canary
 
 
 def test_drift_from_baseline_none():
-    # 无 baseline 记录 → "首次执行"漂移
+    # V3.3.2（自审查 S2）：无 baseline 记录 → 自动重建基线快照
+    # （重建成功 → 无漂移返回 []；目录不可写 → 返回"重建失败"信息，不崩溃）
     drift = canary.drift_from_baseline("C:/definitely/not/exists/dir")
-    assert drift == ["首次执行，已建立基线"]
+    assert drift == [] or any("重建" in d for d in drift)
 
 
 def test_drift_empty_when_versions_match(tmp_path):

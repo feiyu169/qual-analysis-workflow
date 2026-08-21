@@ -8,7 +8,9 @@ import hgf_state
 
 def test_record_and_records_roundtrip(tmp_path):
     wd = str(tmp_path)
-    hgf_state.record("failures", wd, {"gate": "a", "root_cause": None}, writer="failure_log")
+    hgf_state.record(
+        "failures", wd, {"gate": "a", "root_cause": None}, writer="failure_log"
+    )
     entries = hgf_state.records("failures", wd)
     assert len(entries) == 1
     assert entries[0]["gate"] == "a"
@@ -29,7 +31,9 @@ def test_records_tolerates_legacy_bare_records(tmp_path):
     with open(p, "w", encoding="utf-8") as f:
         f.write(json.dumps({"success": True, "level": "L1"}) + "\n")
     # 新版信封
-    hgf_state.record("runs", wd, {"success": False, "level": "L2"}, writer="run_history")
+    hgf_state.record(
+        "runs", wd, {"success": False, "level": "L2"}, writer="run_history"
+    )
     entries = hgf_state.records("runs", wd)
     assert len(entries) == 2
     assert entries[0]["success"] is True

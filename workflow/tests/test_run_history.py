@@ -107,14 +107,26 @@ def _run_entry(results, success=True):
 def test_gate_health_flags_always_failed(tmp_path):
     """从未通过过的门禁被标记 always_failed（逃逸舱口识别）"""
     wd = str(tmp_path)
-    run_history.append_run(wd, _run_entry([
-        {"name": "dependency_scan", "status": "error"},
-        {"name": "static_analysis", "status": "passed"},
-    ], success=False))
-    run_history.append_run(wd, _run_entry([
-        {"name": "dependency_scan", "status": "error"},
-        {"name": "static_analysis", "status": "passed"},
-    ], success=False))
+    run_history.append_run(
+        wd,
+        _run_entry(
+            [
+                {"name": "dependency_scan", "status": "error"},
+                {"name": "static_analysis", "status": "passed"},
+            ],
+            success=False,
+        ),
+    )
+    run_history.append_run(
+        wd,
+        _run_entry(
+            [
+                {"name": "dependency_scan", "status": "error"},
+                {"name": "static_analysis", "status": "passed"},
+            ],
+            success=False,
+        ),
+    )
     health = run_history.gate_health(run_history.history(wd))
     assert health["dependency_scan"]["always_failed"] is True
     assert health["dependency_scan"]["fail_rate"] == 1.0
@@ -125,12 +137,24 @@ def test_gate_health_flags_always_failed(tmp_path):
 def test_gate_health_recovers_after_pass(tmp_path):
     """门禁曾失败但后来通过 → 不是 always_failed"""
     wd = str(tmp_path)
-    run_history.append_run(wd, _run_entry([
-        {"name": "unit_test", "status": "failed"},
-    ], success=False))
-    run_history.append_run(wd, _run_entry([
-        {"name": "unit_test", "status": "passed"},
-    ], success=True))
+    run_history.append_run(
+        wd,
+        _run_entry(
+            [
+                {"name": "unit_test", "status": "failed"},
+            ],
+            success=False,
+        ),
+    )
+    run_history.append_run(
+        wd,
+        _run_entry(
+            [
+                {"name": "unit_test", "status": "passed"},
+            ],
+            success=True,
+        ),
+    )
     health = run_history.gate_health(run_history.history(wd))
     assert health["unit_test"]["always_failed"] is False
     assert health["unit_test"]["fail_rate"] == 0.5

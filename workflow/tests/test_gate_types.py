@@ -128,18 +128,33 @@ def test_format_report_renders_failure():
 def test_tool_health_in_report():
     """V3.2.5 环境维度：SKIPPED/ERROR 门禁进入 tool_health，且报告有该段"""
     from gate_types import GateLevel, GateResult
+
     skipped = GateResult(
-        name="security_scan", tool="semgrep", status=GateExecutionStatus.SKIPPED,
-        exit_code=0, issues_count=0, message="工具不可用: semgrep",
+        name="security_scan",
+        tool="semgrep",
+        status=GateExecutionStatus.SKIPPED,
+        exit_code=0,
+        issues_count=0,
+        message="工具不可用: semgrep",
         level=GateLevel.SHOULD_PASS,
     )
     report = GateExecutionReport(
-        level="L1", total_gates=2, passed=1, failed=0,
-        skipped=1, must_pass_failed=[], results=[skipped], duration=1.0,
-        tool_health=[{
-            "gate": "security_scan", "tool": "semgrep",
-            "status": "skipped", "message": "工具不可用: semgrep",
-        }],
+        level="L1",
+        total_gates=2,
+        passed=1,
+        failed=0,
+        skipped=1,
+        must_pass_failed=[],
+        results=[skipped],
+        duration=1.0,
+        tool_health=[
+            {
+                "gate": "security_scan",
+                "tool": "semgrep",
+                "status": "skipped",
+                "message": "工具不可用: semgrep",
+            }
+        ],
     )
     d = report.to_dict()
     assert d["tool_health"][0]["gate"] == "security_scan"

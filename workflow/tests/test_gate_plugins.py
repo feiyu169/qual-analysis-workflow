@@ -63,7 +63,9 @@ def test_test_quality_passes_unittest_style(tmp_path):
         )
     plugin = QualityGate(_config(name="test_quality", tool="test-quality"))
     result = plugin.execute([], wd)
-    assert result.status == GateExecutionStatus.PASSED, f"unittest 断言应被识别: {result.message}"
+    assert result.status == GateExecutionStatus.PASSED, (
+        f"unittest 断言应被识别: {result.message}"
+    )
 
 
 def test_test_quality_handles_multiline_strings(tmp_path):
@@ -177,18 +179,26 @@ def test_build_argv_expands_files_individually():
 
     with_template = P(_config(name="x", tool="ruff", command="ruff check {files}"))
     assert with_template._build_argv(["a.py", "b.py"], "fallback") == [
-        "ruff", "check", "a.py", "b.py",
+        "ruff",
+        "check",
+        "a.py",
+        "b.py",
     ]
 
     # 路径含空格：作为独立元素保留，不被拆开
     spacey = P(_config(name="x", tool="ruff", command="ruff check {files}"))
     assert spacey._build_argv(["my dir/a.py", "b.py"], "fallback") == [
-        "ruff", "check", "my dir/a.py", "b.py",
+        "ruff",
+        "check",
+        "my dir/a.py",
+        "b.py",
     ]
 
     fallback = P(_config(name="x", tool="ruff", command=""))
     assert fallback._build_argv(["a.py"], "ruff check {files}") == [
-        "ruff", "check", "a.py",
+        "ruff",
+        "check",
+        "a.py",
     ]
 
 
@@ -216,10 +226,12 @@ def test_run_command_accepts_argv_and_str(tmp_path, monkeypatch):
     def fake_run(argv, **kw):
         subprocess_kwargs.update(kw)
         captured["argv"] = argv
+
         class R:
             returncode = 0
             stdout = ""
             stderr = ""
+
         return R()
 
     monkeypatch.setattr(_gp.subprocess, "run", fake_run)
@@ -295,8 +307,10 @@ def test_safety_parse_dict_format():
     from gate_plugins import SafetyPlugin
 
     plugin = SafetyPlugin(_config(name="dependency_scan", tool="safety"))
-    out = ('{"vulnerabilities": [{"package_name": "flask", '
-           '"vulnerability_id": "86909", "advisory": "x"}], "remediations": {}}')
+    out = (
+        '{"vulnerabilities": [{"package_name": "flask", '
+        '"vulnerability_id": "86909", "advisory": "x"}], "remediations": {}}'
+    )
     issues = plugin._parse_safety_output(out)
     assert len(issues) == 1
     assert issues[0].rule == "86909"

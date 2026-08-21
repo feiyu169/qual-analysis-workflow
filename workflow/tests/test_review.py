@@ -29,8 +29,9 @@ def test_build_pack_truncates(tmp_path):
 
 def test_record_review_dual_signature(tmp_path):
     wd = str(tmp_path)
-    rec = review.record_review(wd, "gate_0_3", "pass",
-                               reviewer="agent", verifier="heavyskill")
+    rec = review.record_review(
+        wd, "gate_0_3", "pass", reviewer="agent", verifier="heavyskill"
+    )
     assert rec["reviewer"] == "agent"
     assert rec["verifier"] == "heavyskill"
     assert rec["reviewer"] != rec["verifier"]
@@ -42,8 +43,7 @@ def test_record_review_dual_signature(tmp_path):
 
 def test_record_review_self_signature_rejected_by_lifecycle(tmp_path):
     wd = str(tmp_path)
-    review.record_review(wd, "gate_0_3", "pass",
-                         reviewer="agent", verifier="agent")
+    review.record_review(wd, "gate_0_3", "pass", reviewer="agent", verifier="agent")
     ok, issues = lifecycle._check_review({"id": "gate_0_3"}, wd, None)
     assert ok is False
     assert any("自签" in i for i in issues)
@@ -67,8 +67,12 @@ def test_self_check_rejected_for_user_acceptance(tmp_path):
 
     with pytest.raises(ValueError, match="independent"):
         review.record_review(
-            wd, "user_acceptance", "pass",
-            reviewer="agent", verifier="heavyskill", kind="self-check",
+            wd,
+            "user_acceptance",
+            "pass",
+            reviewer="agent",
+            verifier="heavyskill",
+            kind="self-check",
         )
 
 
@@ -76,8 +80,12 @@ def test_self_check_allowed_for_review_passed(tmp_path):
     """review_passed 允许 self-check（结构化自检）"""
     wd = str(tmp_path)
     rec = review.record_review(
-        wd, "review_passed", "pass",
-        reviewer="agent", verifier="heavyskill", kind="self-check",
+        wd,
+        "review_passed",
+        "pass",
+        reviewer="agent",
+        verifier="heavyskill",
+        kind="self-check",
     )
     assert rec["kind"] == "self-check"
     ok, issues = lifecycle._check_review({"id": "review_passed"}, wd, None)
@@ -92,11 +100,18 @@ def test_lifecycle_rejects_self_check_user_acceptance(tmp_path):
     p = os.path.join(wd, ".hgf", "reviews.jsonl")
     os.makedirs(os.path.dirname(p), exist_ok=True)
     with open(p, "a", encoding="utf-8") as f:
-        f.write(json.dumps({
-            "gate": "user_acceptance", "verdict": "pass",
-            "reviewer": "agent", "verifier": "heavyskill",
-            "kind": "self-check",
-        }) + "\n")
+        f.write(
+            json.dumps(
+                {
+                    "gate": "user_acceptance",
+                    "verdict": "pass",
+                    "reviewer": "agent",
+                    "verifier": "heavyskill",
+                    "kind": "self-check",
+                }
+            )
+            + "\n"
+        )
     ok, issues = lifecycle._check_review({"id": "user_acceptance"}, wd, None)
     assert ok is False
     assert any("自证" in i for i in issues)
@@ -121,11 +136,18 @@ def test_user_acceptance_requires_human_evidence(tmp_path):
     p = os.path.join(wd, ".hgf", "reviews.jsonl")
     os.makedirs(os.path.dirname(p), exist_ok=True)
     with open(p, "a", encoding="utf-8") as f:
-        f.write(json.dumps({
-            "gate": "user_acceptance", "verdict": "pass",
-            "reviewer": "agent", "verifier": "heavyskill",
-            "kind": "independent",
-        }) + "\n")
+        f.write(
+            json.dumps(
+                {
+                    "gate": "user_acceptance",
+                    "verdict": "pass",
+                    "reviewer": "agent",
+                    "verifier": "heavyskill",
+                    "kind": "independent",
+                }
+            )
+            + "\n"
+        )
     # 无人工证据 → 拒绝（即使独立评审记录存在）
     ok, issues = lifecycle._check_review({"id": "user_acceptance"}, wd, None)
     assert ok is False
@@ -140,11 +162,18 @@ def test_user_acceptance_passes_with_evidence(tmp_path):
     p = os.path.join(wd, ".hgf", "reviews.jsonl")
     os.makedirs(os.path.dirname(p), exist_ok=True)
     with open(p, "a", encoding="utf-8") as f:
-        f.write(json.dumps({
-            "gate": "user_acceptance", "verdict": "pass",
-            "reviewer": "agent", "verifier": "heavyskill",
-            "kind": "independent",
-        }) + "\n")
+        f.write(
+            json.dumps(
+                {
+                    "gate": "user_acceptance",
+                    "verdict": "pass",
+                    "reviewer": "agent",
+                    "verifier": "heavyskill",
+                    "kind": "independent",
+                }
+            )
+            + "\n"
+        )
     doc = os.path.join(wd, "docs", "user_acceptance.md")
     os.makedirs(os.path.dirname(doc), exist_ok=True)
     with open(doc, "w", encoding="utf-8") as f:
