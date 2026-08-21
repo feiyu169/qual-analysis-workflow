@@ -93,8 +93,13 @@
 - P2 共识 9 项全部落地（config 全键打通、--accept-partial、fallback 告警、filter 统一、
   successful_count 语义、DeliberationRecord 序列化一致、ruff 增量可度量）
 - 残余警告（不阻断，待环境允许）：
-  1. `max_tokens=32768` 未经真实端点验证（无 DEEPSEEK_API_KEY）——有 key 后跑 K=2 真实冒烟，
-     确认端点接受 32768 且长输出不转 failed
+  1. ~~`max_tokens=32768` 未经真实端点验证~~ **已验证（2026-08-21，真实 API）**：
+     - v4-pro 接受 max_tokens=32768（HTTP 200，finish=stop 完整输出）
+     - deepseek-chat K=2 端到端：truncation 全 0/False、2/2 轨迹含最终答案标记、
+       共识为完整句子、审议完整收尾（10.58s）
+     - v4-pro K=1 端到端：truncation 全 0、轨迹/审议完整（136s，推理模型预期耗时）
+     - 小预算(512)对比：截断被检测（truncated=1+content_fallback=1）、轨迹剔除、
+       successful_count=0、final_answer=None（不采信残稿）、⚠️ 告警 + 早退统一判定——全部生效
   2. is_terminated 对无标点收尾答案仍偏保守（"宁漏勿错"取舍，已文档化）
   3. 存量 format 债（ruff format 29 文件）为 OPTIONAL 门禁，未纳入本次修复
-- 结论：可合入；真实 API 冒烟作为跟进项
+- 结论：**可合入，真实 API 冒烟已验证通过**（原"待有 key 后跑"跟进项已闭环）
