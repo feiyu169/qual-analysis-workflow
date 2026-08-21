@@ -115,11 +115,12 @@ class ParallelReasoner:
             {"role": "user", "content": query},
         ]
 
-    async def reason(self, query: str) -> ReasoningResult:
+    async def reason(self, query: str, k: Optional[int] = None) -> ReasoningResult:
         """Execute parallel reasoning with K independent trajectories.
 
         Args:
             query: The problem/question to reason about.
+            k: 轨迹数覆盖（P54-增强-路径3：auto_k 时由 pipeline 传入，None 用 config.reason_k）。
 
         Returns:
             ReasoningResult with all trajectories and metadata.
@@ -127,7 +128,7 @@ class ParallelReasoner:
         if not self.client:
             raise RuntimeError("ParallelReasoner not initialized. Use async with.")
 
-        k = self.config.reason_k
+        k = k or self.config.reason_k
         logger.info(f"Starting parallel reasoning with K={k} trajectories")
         start_time = time.monotonic()
 

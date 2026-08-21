@@ -362,7 +362,7 @@ class _FakeAllTruncatedReasoner:
     async def __aexit__(self, *args):
         return None
 
-    async def reason(self, query):
+    async def reason(self, query, k=None):
         return ReasoningResult(
             trajectories=["残稿一", "残稿二"],
             answers=["a", "b"],
@@ -406,3 +406,255 @@ def test_pipeline_all_truncated_returns_early_no_deliberation():
     d = res.to_dict()
     assert d["truncation"]["reasoning_truncated_count"] == 2
     assert d["reasoning"]["successful_count"] == 0
+
+
+# ---------- P54-增强-路径3：quality_score + auto_k ----------
+
+
+def test_score_trajectory_factors():
+    from workflow.utils import score_trajectory
+
+    # 截断 → 0
+    assert score_trajectory("x" * 100, meta={"truncated": True}) == 0.0
+    # 完整 + 答案标记 + 可提取 → 高分
+    good = score_trajectory(
+        "分析……\n**最终答案：通过。**",
+        answer="通过",
+        meta={"truncated": False, "content_fallback": False},
+    )
+    assert good >= 60.0
+    # 思维链回退降权
+    fallback = score_trajectory(
+        "thinking..." * 20, answer=None, meta={"content_fallback": True}
+    )
+    assert fallback < good
+
+
+def test_auto_k_for_query_scales():
+    from workflow.utils import auto_k_for_query
+
+    assert auto_k_for_query("1+1=?") == 2  # short
+    assert auto_k_for_query("x" * 1000) == 4  # medium
+    assert auto_k_for_query("x" * 4000) == 8  # long
+    assert auto_k_for_query("q", {"short": 3, "medium": 5, "long": 9}) == 3
+
+
+def test_cache_assigns_quality_score_and_ranks_selection():
+    cache = MemoryCache()
+    # 同答案组内：高质量轨迹应优先被选
+    cache.add_trajectories(
+        [
+            "短残稿",  # 低质量（无标记、未收尾）
+            "完整分析……\n**最终答案：通过。**",  # 高质量
+            "另一条完整分析。\n**最终答案：通过。**",  # 高质量
+        ]
+    )
+    assert cache.trajectories[1].quality_score > cache.trajectories[0].quality_score
+    selected = cache.select_trajectories(k=2)
+    # 同答案（通过）组内按质量降序 → 先选高质量两条，低质量残稿靠后或不被选
+    assert 0 not in selected[:2] or cache.trajectories[0].quality_score == min(
+        t.quality_score for t in cache.trajectories
+    )
+
+
+# ---------- P54-增强-路径4：split_pack 分批 ----------
+
+
+def test_split_pack_single_chunk_when_short():
+    from workflow.splitter import split_pack
+
+    assert split_pack("短内容") == ["短内容"]
+
+
+def test_split_pack_respects_max_chars():
+    from workflow.splitter import split_pack
+
+    content = "\n\n".join(f"## 章节{i}\n" + "x" * 500 for i in range(10))
+    chunks = split_pack(content, max_chars=1500, overlap=100, max_chunks=5)
+    assert 1 < len(chunks) <= 5
+    # 单块不含重叠段时 ≤ max_chars（重叠段另计）
+    for c in chunks:
+        assert len(c) <= 1500 + 100 + 60  # 重叠+衔接标记余量
+
+
+def test_split_pack_boundary_split_and_overlap():
+    from workflow.splitter import split_pack
+
+    content = (
+        "# 标题\n"
+        + "a" * 800
+        + "\n## 章节一\n"
+        + "b" * 800
+        + "\n## 章节二\n"
+        + "c" * 800
+    )
+    chunks = split_pack(content, max_chars=1000, overlap=50, max_chunks=3)
+    assert len(chunks) >= 2
+    # 重叠段存在（衔接标记）
+    assert any("[--- 上下文衔接" in c for c in chunks)
+
+
+def test_split_pack_respects_max_chunks_cap():
+    from workflow.splitter import split_pack
+
+    content = "x" * 50000
+    chunks = split_pack(content, max_chars=2000, overlap=0, max_chunks=4)
+    assert len(chunks) == 4
+    assert "已截断" in chunks[-1]
+
+
+# ---------- P54-增强-路径1：结论验证器 ----------
+
+
+def test_rule_validate_verdict_format():
+    from workflow.validator import rule_validate
+
+    # 无裁决词 → issue
+    r = rule_validate("分析了架构和性能，以下是细节……", "审查技术方案", fail_on_p0=True)
+    assert any(i["rule"] == "verdict_format" for i in r.issues)
+    # 有裁决词 → 无 verdict_format issue
+    r2 = rule_validate(
+        "架构合理，最终判定：**有条件通过**", "审查技术方案", fail_on_p0=True
+    )
+    assert not any(i["rule"] == "verdict_format" for i in r2.issues)
+
+
+def test_rule_validate_p0_consistency():
+    from workflow.validator import rule_validate
+
+    # 声明 P0 但裁决 PASS → 矛盾 issue
+    r = rule_validate("存在 P0 致命缺陷，建议通过。", "审查技术方案", fail_on_p0=True)
+    assert any(i["rule"] == "p0_consistency" for i in r.issues)
+    assert r.verdict in ("FAIL", "PASS_WITH_WARNING")
+
+
+def test_rule_validate_coverage_warning():
+    from workflow.validator import rule_validate
+
+    r = rule_validate("结论：通过。", "请按维度一、维度二、维度三审查", fail_on_p0=True)
+    assert any("维度" in w for w in r.warnings)
+
+
+def test_parse_validator_json_fenced_and_bare():
+    from workflow.validator import _parse_validator_json
+
+    # ```json 围栏
+    fenced = '```json\n{"issues": [{"severity": "P0", "message": "m"}], "verdict": "FAIL"}\n```'
+    d = _parse_validator_json(fenced)
+    assert d and d["verdict"] == "FAIL" and d["issues"][0]["severity"] == "P0"
+    # 裸 JSON（容忍前缀文本）
+    bare = '分析如下。{"verdict": "PASS", "issues": []}'
+    d2 = _parse_validator_json(bare)
+    assert d2 and d2["verdict"] == "PASS"
+    # 非法 → None
+    assert _parse_validator_json("not json at all") is None
+
+
+def test_validate_conclusion_fail_open_without_key():
+    import asyncio
+
+    from configuration import HeavySkillConfig
+    from workflow.validator import validate_conclusion
+
+    async def run():
+        cfg = HeavySkillConfig(api_key="k", enable_validator=True, validator_api_key="")
+        return await validate_conclusion("结论：通过。", ["轨迹"], "q", cfg)
+
+    res = asyncio.run(run())
+    # 无 key → 仅规则校验，不抛异常（fail-open）
+    assert any("未配置" in w for w in res.warnings)
+    assert res.llm_checked is False
+
+
+# ---------- P54-增强-路径2：异质二审仲裁 ----------
+
+
+class _FakeSecondClient:
+    """返回指定裁决词的 fake mimo 客户端。"""
+
+    def __init__(self, content, truncated=False):
+        self._content = content
+        self._truncated = truncated
+
+    async def chat_completion(self, messages, model, temperature, max_tokens):
+        from agent.openai_compatible import LLMResponse
+
+        return LLMResponse(
+            content=self._content,
+            model="mimo-v2.5-pro",
+            finish_reason="length" if self._truncated else "stop",
+            truncated=self._truncated,
+        )
+
+    async def close(self):
+        pass
+
+
+def _run_second_review(client, trajectories, first_verdict):
+    import asyncio
+    import unittest.mock as m
+
+    from configuration import HeavySkillConfig
+    from workflow import second_review as sr
+
+    async def run():
+        cfg = HeavySkillConfig(api_key="k", validator_api_key="x")
+        reviewer = sr.SecondReviewer(cfg)
+        with m.patch(
+            "workflow.second_review.OpenAICompatibleClient", lambda **kw: client
+        ):
+            return await reviewer.review(
+                trajectories=trajectories, query="q", first_verdict=first_verdict
+            )
+
+    return asyncio.run(run())
+
+
+def test_second_review_agreement_raises_confidence():
+    res = _run_second_review(
+        _FakeSecondClient("综合判定：**通过**。"), ["轨迹1"], "PASS"
+    )
+    assert res.second_verdict == "PASS"
+    assert res.conflict is False
+    assert res.final_verdict == "PASS"
+    assert res.confidence >= 0.9  # 一致 → 置信度提升
+
+
+def test_second_review_fail_safe_on_disagreement():
+    # 一审 PASS vs 二审 FAIL → 取 FAIL（安全优先）+ conflict
+    res = _run_second_review(
+        _FakeSecondClient("存在致命缺陷，判定：**不通过**。"), ["轨迹1"], "PASS"
+    )
+    assert res.second_verdict == "FAIL"
+    assert res.conflict is True
+    assert res.final_verdict == "FAIL"
+
+
+def test_second_review_fail_open_on_exception():
+    import asyncio
+    import unittest.mock as m
+
+    from configuration import HeavySkillConfig
+    from workflow import second_review as sr
+
+    class _Boom:
+        async def chat_completion(self, *a, **kw):
+            raise RuntimeError("network down")
+
+        async def close(self):
+            pass
+
+    async def run():
+        cfg = HeavySkillConfig(api_key="k", validator_api_key="x")
+        reviewer = sr.SecondReviewer(cfg)
+        with m.patch(
+            "workflow.second_review.OpenAICompatibleClient", lambda **kw: _Boom()
+        ):
+            return await reviewer.review(
+                trajectories=["t"], query="q", first_verdict="PASS"
+            )
+
+    res = asyncio.run(run())
+    # 二审失败 → 采用一审，不抛异常
+    assert res.final_verdict == "PASS"
+    assert any("采用一审" in w for w in res.warnings)

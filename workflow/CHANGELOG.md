@@ -1,5 +1,47 @@
 # Changelog
 
+## 2026-08-21 — heavyskill 审查质量四路径增强（双模型 deepseek+mimo，按技术方案实施）
+
+### 背景
+P54 复审结论"能保证不残缺，不能保证结论必然正确"。按
+`skills/heavyskill/references/enhancement-plan-dual-model.md` 实施四条增强路径补齐质量缺口。
+实测 mimo-v2.5-pro（token-plan-cn.xiaomimimo.com）key 有效、OpenAI 兼容、与 deepseek-v4-pro
+同为推理模型（截断治理机制对双模型通用）。
+
+### 路径3：quality_score 落地 + 动态 K
+- `utils.score_trajectory`（0-100 确定性规则：完整性 40 + 有效性 40 + 退化惩罚，truncated 归零）
+- `memory_cache` 赋值 quality_score（替换恒 1.0 死字段）；`_select_max_answer_frequency`/
+  `_select_max_diversity` 组内按质量分降序择优
+- `utils.auto_k_for_query`（short/medium/long 分档）+ `ParallelReasoner.reason(k=)` 覆盖 +
+  pipeline 首轮质量不足自动补跑（`k_extended` 输出）
+
+### 路径4：审查包分批（split_pack + 元审议）
+- `workflow/splitter.py`：章节边界（markdown 标题/def|class/分隔线）切分 + 500 字符重叠 +
+  max_chunks 上限
+- `workflow/chunked_review.py`：ChunkedReviewer——分块独立 pipeline → 分块结论聚合 →
+  元审议（复用 SequentialDeliberator）
+
+### 路径1：结论验证器（mimo 规则+LLM 混合）
+- `workflow/validator.py`：规则校验（verdict_format/p0_consistency/coverage_complete）+
+  mimo LLM 校验（逻辑矛盾/遗漏维度/过度自信，JSON 输出宽松解析）；fail-open 降级
+
+### 路径2：异质模型独立二审（mimo）
+- `workflow/second_review.py`：mimo 独立二审（不注入一审结论）→ 确定性仲裁（任一 FAIL
+  取 FAIL/一致提升置信度/分歧标记人工复核）；fail-open
+
+### 集成与配置
+- HeavySkillConfig 新增 quality/validator/second_review 配置组；CLI `--auto-k`/
+  `--enable-validator`/`--enable-second-review`/`--validator-api-key`；输出 JSON 新增
+  `k_extended`/`validation`/`second_review` 字段；config.yaml 增配置段（密钥占位符）
+
+### 验证
+- 单测 18 → 33（质量分×3/auto_k×2/选择排序/splitter×4/规则验证×3/JSON 解析/二审仲裁×3）
+- ruff 全绿（新代码零新增债）；HGF CLI 9 门禁全部 MUST_PASS（exit=0）
+- **真实双模型端到端（105s）**：deepseek-chat 主链路 truncation 全 0；
+  mimo validator 抓到 2 个真实 P1 issue（"测试用例指数增长判断缺乏严谨性"/
+  "首因效应分析遗漏自我修正维度"）+ 维度覆盖 warning；mimo 独立二审给出更严格裁决、
+  仲裁安全优先生效——异质校验价值实证
+
 ## 2026-08-21 — heavyskill P54 复审修复（R1-R7，HGF 裁决 FAIL → PASS_WITH_WARNING）
 
 ### 背景

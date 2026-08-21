@@ -19,3 +19,17 @@ summary_temperature: 0.3
 temperature: 0.7
 timeout: 300
 top_p: 0.95
+# ---- P54-增强（双模型 deepseek+mimo，参考 references/enhancement-plan-dual-model.md）----
+# 路径3：轨迹质量分参与选择 + 动态 K（CLI --auto-k 开启）
+quality_enabled: true
+auto_k: false
+auto_k_scale: {short: 2, medium: 4, long: 8}
+quality_retry_threshold: 60.0
+# 路径1+2：结论验证器 / 异质二审（mimo；CLI --enable-validator / --enable-second-review 开启；
+# key 用 --validator-api-key 传入或改此值，勿提交真实密钥）
+enable_validator: false
+enable_second_review: false
+validator_model: mimo-v2.5-pro
+validator_api_base: https://token-plan-cn.xiaomimimo.com/v1
+validator_api_key: <XIAOMI_TOKEN_PLAN_CN_API_KEY>
+validator_fail_on_p0: true

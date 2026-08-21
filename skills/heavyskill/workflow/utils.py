@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import re
 from collections import Counter
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,7 @@ SENTENCE_TERMINATORS = (
     "}",
     ">",
     "```",
+    "**",
 )
 
 
@@ -184,6 +185,56 @@ def extract_all_answers(texts: List[str]) -> List[Optional[str]]:
         List of extracted answers (None for failed extractions).
     """
     return [extract_answer(text) for text in texts]
+
+
+def score_trajectory(
+    text: str,
+    answer: Optional[str] = None,
+    meta: Optional[Dict[str, Any]] = None,
+) -> float:
+    """P54-增强-路径3：轨迹质量分（0-100，确定性规则，零 LLM 成本）。
+
+    完整性（0-40）：长度覆盖 + 完整收尾；有效性（0-40）：最终答案标记 + 可提取；
+    退化惩罚：truncated 直接归零（配合 is_valid 剔除）、content_fallback 降权。
+
+    Args:
+        text: 轨迹文本。
+        answer: extract_answer 提取的答案（可为 None）。
+        meta: 附加信息，支持 {"truncated": bool, "content_fallback": bool}。
+
+    Returns:
+        0.0-100.0 的质量分。
+    """
+    meta = meta or {}
+    if meta.get("truncated"):
+        return 0.0
+    s = 0.0
+    # 完整性（0-40）
+    s += min(len(text) / 2000, 1.0) * 20
+    s += 20 if is_terminated(text) else 0
+    # 有效性（0-40）
+    if "最终答案" in text or "Final Answer" in text:
+        s += 30
+    if answer is not None:
+        s += 10
+    if meta.get("content_fallback"):
+        s *= 0.3  # 思维链回退降权
+    return round(min(s, 100.0), 1)
+
+
+def auto_k_for_query(query: str, scale: Optional[Dict[str, int]] = None) -> int:
+    """P54-增强-路径3：按 query 长度自动选择 K。
+
+    scale 示例：{"short": 2, "medium": 4, "long": 8}——
+    short: ≤800 字符（简单问题） / medium: ≤3000 / long: 其余。
+    """
+    scale = scale or {"short": 2, "medium": 4, "long": 8}
+    n = len(query or "")
+    if n > 3000:
+        return scale.get("long", 8)
+    if n > 800:
+        return scale.get("medium", 4)
+    return scale.get("short", 2)
 
 
 def get_answer_frequencies(answers: List[Optional[str]]) -> Counter:

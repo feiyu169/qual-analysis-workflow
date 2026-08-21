@@ -219,6 +219,31 @@ Examples:
         action="store_true",
         help="P54-R5: 显式接受截断/退化的部分结果（否则截断且无答案时 exit 2）。",
     )
+    # P54-增强：质量/验证/二审开关（default=None 以便 config.yaml 兜底）
+    parser.add_argument(
+        "--auto-k",
+        action="store_true",
+        default=None,
+        help="P54-增强-路径3: 按 query 长度自动定 K（quality/auto_k）。",
+    )
+    parser.add_argument(
+        "--enable-validator",
+        action="store_true",
+        default=None,
+        help="P54-增强-路径1: 启用结论验证器（mimo 规则+LLM 校验）。",
+    )
+    parser.add_argument(
+        "--enable-second-review",
+        action="store_true",
+        default=None,
+        help="P54-增强-路径2: 启用异质模型独立二审（mimo）。",
+    )
+    parser.add_argument(
+        "--validator-api-key",
+        type=str,
+        default=None,
+        help="mimo 验证/二审 API key（config.yaml 或环境注入）。",
+    )
     parser.add_argument(
         "--quiet",
         action="store_true",
@@ -266,6 +291,19 @@ def build_config(args: argparse.Namespace, defaults: dict) -> HeavySkillConfig:
         prompt_type=PromptType(pick("prompt_type", "general")),
         language=Language(pick("language", "en")),
         selection_strategy=SelectionStrategy(pick("strategy", "max_answer_frequency")),
+        # P54-增强：质量分/动态 K/验证器/二审（CLI > config.yaml > 内置默认）
+        quality_enabled=pick("quality_enabled", True),
+        auto_k=bool(pick("auto_k", False)),
+        auto_k_scale=pick("auto_k_scale", {"short": 2, "medium": 4, "long": 8}),
+        quality_retry_threshold=pick("quality_retry_threshold", 60.0),
+        enable_validator=bool(pick("enable_validator", False)),
+        validator_model=pick("validator_model", "mimo-v2.5-pro"),
+        validator_api_base=pick(
+            "validator_api_base", "https://token-plan-cn.xiaomimimo.com/v1"
+        ),
+        validator_api_key=pick("validator_api_key", ""),
+        validator_fail_on_p0=pick("validator_fail_on_p0", True),
+        enable_second_review=bool(pick("enable_second_review", False)),
         timeout=defaults.get("timeout", 120.0),
         verbose=args.verbose,
     )

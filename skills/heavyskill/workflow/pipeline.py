@@ -27,7 +27,11 @@ from configuration import HeavySkillConfig, SelectionStrategy
 from .memory_cache import MemoryCache
 from .parallel_reasoning import ParallelReasoner, ReasoningResult
 from .sequential_deliberation import DeliberationResult, SequentialDeliberator
-from .utils import estimate_total_tokens, filter_trajectories
+from .utils import (
+    auto_k_for_query,
+    estimate_total_tokens,
+    filter_trajectories,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +61,12 @@ class HeavySkillResult:
     total_tokens: int = 0
     total_latency: float = 0.0
     iterations_completed: int = 0
+    # P54-增强-路径3：auto_k 是否触发过质量补跑（输出到 JSON 供消费端感知）
+    k_extended: bool = False
+    # P54-增强-路径1：结论验证结果（enable_validator 时非 None）
+    validation: Optional[Any] = None
+    # P54-增强-路径2：异质二审结果（enable_second_review 时非 None）
+    second_review: Optional[Any] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary for JSON output."""
@@ -70,6 +80,7 @@ class HeavySkillResult:
             "total_tokens": self.total_tokens,
             "total_latency_seconds": round(self.total_latency, 2),
             "iterations_completed": self.iterations_completed,
+            "k_extended": self.k_extended,
             "cache_stats": self.cache_stats,
             # P54：截断摘要——消费端先看这里，>0 必须处理（重跑/增大预算/标记接受）
             "truncation": {
@@ -94,6 +105,12 @@ class HeavySkillResult:
 
         if self.deliberation_results:
             result["deliberation"] = [d.to_dict() for d in self.deliberation_results]
+
+        if self.validation is not None:
+            result["validation"] = self.validation.to_dict()
+
+        if self.second_review is not None:
+            result["second_review"] = self.second_review.to_dict()
 
         return result
 
@@ -226,9 +243,16 @@ class HeavySkillPipeline:
         logger.info("STAGE 1: Parallel Reasoning")
         logger.info("=" * 40)
 
+        # P54-增强-路径3：auto_k 按 query 长度定 K
+        k = (
+            auto_k_for_query(query, self.config.auto_k_scale)
+            if self.config.auto_k
+            else self.config.reason_k
+        )
+
         reasoning_result: Optional[ReasoningResult] = None
         async with ParallelReasoner(self.config) as reasoner:
-            reasoning_result = await reasoner.reason(query)
+            reasoning_result = await reasoner.reason(query, k=k)
 
         # Store trajectories in cache
         # P54：透传逐轨迹截断/思维链回退标记——截断轨迹不参与审议与共识
@@ -239,6 +263,38 @@ class HeavySkillPipeline:
             content_fallback=[r.content_fallback for r in reasoning_result.responses],
         )
         total_tokens += reasoning_result.total_tokens
+
+        # P54-增强-路径3：首轮质量不足（有效轨迹少 / 平均质量分低于阈值）时补跑
+        k_extended = False
+        if self.config.auto_k:
+            valid_now = cache.get_valid_trajectories()
+            avg_quality = (
+                sum(t.quality_score for t in valid_now) / len(valid_now)
+                if valid_now
+                else 0.0
+            )
+            if len(valid_now) < self.config.summary_k or (
+                avg_quality < self.config.quality_retry_threshold and valid_now
+            ):
+                logger.warning(
+                    f"auto_k 补跑：有效轨迹 {len(valid_now)} 条 / 平均质量 {avg_quality:.1f}"
+                    f"（阈值 {self.config.quality_retry_threshold}），补 {2} 条"
+                )
+                async with ParallelReasoner(self.config) as reasoner2:
+                    extra = await reasoner2.reason(query, k=2)
+                cache.add_trajectories(
+                    extra.trajectories,
+                    latencies=[r.latency_seconds for r in extra.responses],
+                    truncated=[r.truncated for r in extra.responses],
+                    content_fallback=[r.content_fallback for r in extra.responses],
+                )
+                total_tokens += extra.total_tokens
+                reasoning_result.trajectories.extend(extra.trajectories)
+                reasoning_result.answers.extend(extra.answers)
+                reasoning_result.responses.extend(extra.responses)
+                reasoning_result.truncated_count += extra.truncated_count
+                reasoning_result.content_fallback_count += extra.content_fallback_count
+                k_extended = True
 
         # Filter trajectories for quality
         # P54-R5：早退判定统一用 cache 的有效集（is_valid 已排除截断轨迹），
@@ -311,6 +367,66 @@ class HeavySkillPipeline:
             if final_answer:
                 logger.info("Using consensus answer as final fallback")
 
+        # P54-增强-路径1：结论验证器（规则 + mimo LLM，异质校验）
+        validation = None
+        if self.config.enable_validator:
+            try:
+                from .validator import validate_conclusion
+
+                last_delib = (
+                    deliberation_results[-1].deliberation_response
+                    if deliberation_results
+                    else ""
+                )
+                validation = await validate_conclusion(
+                    deliberation_response=last_delib or final_answer or "",
+                    trajectories=cache.get_trajectory_contents(),
+                    query=query,
+                    config=self.config,
+                )
+                if validation.verdict == "FAIL":
+                    logger.warning(
+                        f"结论验证 FAIL：{len(validation.issues)} 项 issue"
+                        f"（validator={validation.validator_model}）"
+                    )
+            except Exception as e:  # noqa: BLE001 - fail-open，不阻断主链路
+                logger.warning(f"结论验证异常，跳过: {e}")
+                validation = None
+
+        # P54-增强-路径2：异质模型独立二审（mimo，不注入一审结论）
+        second_review = None
+        if self.config.enable_second_review:
+            try:
+                from .second_review import SecondReviewer
+                from .validator import _detect_verdict
+
+                reviewer = SecondReviewer(self.config)
+                second_review = await reviewer.review(
+                    trajectories=cache.get_trajectory_contents(),
+                    query=query,
+                    first_verdict=_detect_verdict(
+                        (
+                            deliberation_results[-1].deliberation_response
+                            if deliberation_results
+                            else ""
+                        )
+                        or final_answer
+                        or ""
+                    ),
+                    first_conclusion=(
+                        deliberation_results[-1].deliberation_response
+                        if deliberation_results
+                        else ""
+                    ),
+                )
+                if second_review.conflict:
+                    logger.warning(
+                        f"二审裁决分歧：一审 vs 二审 → {second_review.final_verdict}，建议人工复核"
+                    )
+            except Exception as e:  # noqa: BLE001 - fail-open
+                logger.warning(f"二审异常，跳过: {e}")
+                second_review = None
+
         total_latency = time.monotonic() - pipeline_start
 
         logger.info("=" * 40)
@@ -330,6 +446,9 @@ class HeavySkillPipeline:
             total_tokens=total_tokens,
             total_latency=total_latency,
             iterations_completed=len(deliberation_results),
+            k_extended=k_extended,
+            validation=validation,
+            second_review=second_review,
         )
 
     async def run_with_progress(

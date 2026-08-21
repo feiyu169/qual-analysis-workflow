@@ -91,10 +91,24 @@ class HeavySkillConfig:
     selection_strategy: SelectionStrategy = SelectionStrategy.MAX_ANSWER_FREQUENCY
 
     # P54-增强-路径3：轨迹质量分与动态 K（quality_score 落地，替换恒 1.0 死字段）
-    quality_enabled: bool = True           # 质量分参与选择排序（按分数在策略组内择优）
-    auto_k: bool = False                   # 按 query 长度自动定 K（--auto-k 开关）
-    auto_k_scale: Dict[str, int] = field(default_factory=lambda: {"short": 2, "medium": 4, "long": 8})
+    quality_enabled: bool = True  # 质量分参与选择排序（按分数在策略组内择优）
+    auto_k: bool = False  # 按 query 长度自动定 K（--auto-k 开关）
+    auto_k_scale: Dict[str, int] = field(
+        default_factory=lambda: {"short": 2, "medium": 4, "long": 8}
+    )
     quality_retry_threshold: float = 60.0  # 首轮平均质量分低于此值且 auto_k 时触发补跑
+
+    # P54-增强-路径1：结论验证器（mimo 规则+LLM 混合校验，异质视角）
+    enable_validator: bool = False  # 审议后启用结论验证（默认关，显式开启）
+    validator_model: str = "mimo-v2.5-pro"
+    validator_api_base: str = "https://token-plan-cn.xiaomimimo.com/v1"
+    validator_api_key: str = ""  # 从环境/配置注入，勿硬编码
+    validator_fail_on_p0: bool = (
+        True  # 验证发现 P0 级 issue 时强制 FAIL（否则降为 warning）
+    )
+
+    # P54-增强-路径2：异质模型独立二审（mimo；复用 validator 的 mimo 配置）
+    enable_second_review: bool = False  # 审议后启用独立二审（默认关，显式开启）
 
     # HTTP Configuration
     timeout: float = 120.0

@@ -22,6 +22,7 @@ from .utils import (
     extract_all_answers,
     filter_trajectories,
     get_answer_frequencies,
+    score_trajectory,
     select_top_k_trajectories,
 )
 
@@ -105,12 +106,19 @@ class MemoryCache:
             )
             if is_fallback:
                 answer = None
+            # P54-增强-路径3：质量分落地（替换恒 1.0 死字段）
+            quality = score_trajectory(
+                content,
+                answer=answer,
+                meta={"truncated": is_truncated, "content_fallback": is_fallback},
+            )
             trajectory = Trajectory(
                 index=len(self.trajectories),
                 content=content,
                 answer=answer,
                 tokens=len(content) // 4,  # rough estimate
                 latency=latencies[i] if latencies and i < len(latencies) else 0.0,
+                quality_score=quality,
                 is_valid=not is_truncated,
                 truncated=is_truncated,
             )
@@ -210,18 +218,28 @@ class MemoryCache:
     def _select_max_answer_frequency(
         self, valid: List[Trajectory], k: int
     ) -> List[int]:
-        """Select trajectories with the most frequently occurring answers."""
+        """Select trajectories with the most frequently occurring answers.
+
+        P54-增强-路径3：同答案组内按 quality_score 降序择优（高质量轨迹优先进审议）。
+        """
         answers = [t.answer for t in valid]
         answer_freq = get_answer_frequencies(answers)
 
         if not answer_freq:
-            # No valid answers, return first k indices
-            return [t.index for t in valid[:k]]
+            # No valid answers, return first k by quality
+            ranked = sorted(valid[:k], key=lambda t: -t.quality_score)
+            return [t.index for t in ranked]
 
         # Group trajectories by answer
         answer_to_indices: Dict[Optional[str], List[int]] = {}
         for t in valid:
             answer_to_indices.setdefault(t.answer, []).append(t.index)
+
+        # 组内按质量分降序（路径3）
+        for ans, idxs in answer_to_indices.items():
+            answer_to_indices[ans] = sorted(
+                idxs, key=lambda i: -self.trajectories[i].quality_score
+            )
 
         # Sort answers by frequency (descending)
         sorted_answers = sorted(answer_freq.items(), key=lambda x: x[1], reverse=True)
@@ -236,7 +254,8 @@ class MemoryCache:
                         return selected
 
         # Fill remaining with any valid trajectories
-        for t in valid:
+        ranked_valid = sorted(valid, key=lambda t: -t.quality_score)
+        for t in ranked_valid:
             if t.index not in selected:
                 selected.append(t.index)
                 if len(selected) >= k:
@@ -245,11 +264,19 @@ class MemoryCache:
         return selected
 
     def _select_max_diversity(self, valid: List[Trajectory], k: int) -> List[int]:
-        """Round-robin selection across different answers for maximum diversity."""
+        """Round-robin selection across different answers for maximum diversity.
+
+        P54-增强-路径3：组内按 quality_score 降序，轮转时优先取各组高分轨迹。
+        """
         # Group by answer
         answer_to_indices: Dict[Optional[str], List[int]] = {}
         for t in valid:
             answer_to_indices.setdefault(t.answer, []).append(t.index)
+        # 组内按质量分降序（路径3）
+        for ans, idxs in answer_to_indices.items():
+            answer_to_indices[ans] = sorted(
+                idxs, key=lambda i: -self.trajectories[i].quality_score
+            )
 
         # Sort groups by frequency (ascending - prioritize diverse answers)
         sorted_groups = sorted(
