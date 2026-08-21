@@ -31,6 +31,11 @@ class LLMResponse:
     latency_seconds: float = 0.0
     raw_response: Optional[Dict[str, Any]] = None
     reasoning_content: str = ""
+    # P54：finish_reason == "length" 表示输出被 max_tokens 硬截断，上游必须显式处理
+    truncated: bool = False
+    # P54：content 为空时回退到 reasoning_content（思维链）——该轨迹没有可靠的
+    # "最终答案"，不应参与共识投票（但仍可作为审议素材）
+    content_fallback: bool = False
 
 
 @dataclass
@@ -153,19 +158,25 @@ class OpenAICompatibleClient:
                 # reasoning models put output in reasoning_content, content may be empty
                 content = message.get("content", "")
                 reasoning = message.get("reasoning_content", "")
-                if not content and reasoning:
+                finish_reason = choice.get("finish_reason")
+                content_fallback = bool(not content and reasoning)
+                if content_fallback:
+                    # P54：思维链当作轨迹 = 没有"最终答案"，标记 content_fallback，
+                    # 上游据此排除其参与共识投票
                     content = reasoning
 
                 return LLMResponse(
                     content=content,
                     model=data.get("model", target_model),
-                    finish_reason=choice.get("finish_reason"),
+                    finish_reason=finish_reason,
                     prompt_tokens=usage.get("prompt_tokens", 0),
                     completion_tokens=usage.get("completion_tokens", 0),
                     total_tokens=usage.get("total_tokens", 0),
                     latency_seconds=latency,
                     raw_response=data,
                     reasoning_content=reasoning,
+                    truncated=(finish_reason == "length"),
+                    content_fallback=content_fallback,
                 )
 
             except httpx.HTTPStatusError as e:

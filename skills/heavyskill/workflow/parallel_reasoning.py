@@ -33,6 +33,11 @@ class ReasoningResult:
     total_latency: float = 0.0
     successful_count: int = 0
     failed_count: int = 0
+    # P54：finish_reason == "length" 的轨迹数——>0 说明输出被 max_tokens 截断，
+    # 消费端必须感知（这些轨迹已从审议/共识中剔除）
+    truncated_count: int = 0
+    # P54：content 为空回退思维链的轨迹数——无可靠"最终答案"，不参与共识投票
+    content_fallback_count: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary."""
@@ -43,6 +48,11 @@ class ReasoningResult:
             "total_latency": self.total_latency,
             "successful_count": self.successful_count,
             "failed_count": self.failed_count,
+            "truncated_count": self.truncated_count,
+            "content_fallback_count": self.content_fallback_count,
+            # P54：逐轨迹截断标记，供消费端精确判断
+            "truncated_flags": [r.truncated for r in self.responses],
+            "finish_reasons": [r.finish_reason for r in self.responses],
         }
 
 
@@ -145,20 +155,36 @@ class ParallelReasoner:
                 from .utils import extract_answer
 
                 answer = extract_answer(response.content)
+                # P54：content 为空回退思维链的轨迹没有可靠"最终答案"，不参与共识投票
+                if response.content_fallback:
+                    answer = None
                 answers.append(answer)
                 total_tokens += response.total_tokens
                 successful += 1
+
+                if response.truncated:
+                    logger.warning(
+                        f"Trajectory {i} TRUNCATED (finish_reason=length, "
+                        f"{len(response.content)} chars) — 已从审议/共识中剔除"
+                    )
 
                 if self.config.verbose:
                     logger.debug(
                         f"Trajectory {i}: answer={answer}, "
                         f"tokens={response.total_tokens}, "
-                        f"latency={response.latency_seconds:.2f}s"
+                        f"latency={response.latency_seconds:.2f}s, "
+                        f"truncated={response.truncated}, "
+                        f"finish_reason={response.finish_reason}"
                     )
+
+        truncated_count = sum(1 for r in responses if r.truncated)
+        content_fallback_count = sum(1 for r in responses if r.content_fallback)
 
         logger.info(
             f"Parallel reasoning complete: {successful}/{k} successful, "
-            f"{failed} failed, {total_tokens} total tokens, "
+            f"{failed} failed, {truncated_count} truncated(length), "
+            f"{content_fallback_count} content_fallback(思维链), "
+            f"{total_tokens} total tokens, "
             f"{total_latency:.2f}s total latency"
         )
 
@@ -170,4 +196,6 @@ class ParallelReasoner:
             total_latency=total_latency,
             successful_count=successful,
             failed_count=failed,
+            truncated_count=truncated_count,
+            content_fallback_count=content_fallback_count,
         )

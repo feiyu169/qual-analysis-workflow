@@ -75,7 +75,11 @@ class HeavySkillConfig:
     # Generation Parameters
     temperature: float = 1.0
     summary_temperature: float = 0.7
-    max_tokens: int = 4096
+    # 推理轨迹单响应预算（P54：默认 4096 太小，长审查输出+推理模型思维链会被硬截断；
+    # 不可盲目拉到 80000——reasoning-model-pitfall 实测 v4-pro K=6×80000 会超时）
+    max_tokens: int = 32768
+    # 审议（Stage 2）单响应预算：与推理分开设置，避免审议结论被截断
+    summary_max_tokens: int = 16384
     token_budget: int = 80000
 
     # Prompt Configuration
@@ -126,6 +130,8 @@ class HeavySkillConfig:
             )
         if self.max_tokens < 1:
             raise ValueError(f"max_tokens must be >= 1, got {self.max_tokens}")
+        if self.summary_max_tokens < 1:
+            raise ValueError(f"summary_max_tokens must be >= 1, got {self.summary_max_tokens}")
         if self.token_budget < 1:
             raise ValueError(f"token_budget must be >= 1, got {self.token_budget}")
 

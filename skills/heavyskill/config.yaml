@@ -2,14 +2,18 @@ api_base: https://api.deepseek.com
 api_key: <YOUR_DEEPSEEK_API_KEY>
 iterations: 1
 language: cn
-max_tokens: 80000
+# P54：max_tokens 从 80000 下调到 32768——推理模型思维链计入预算，
+# 80000 会拖长单条推理导致超时（reasoning-model-pitfall）；4096 又太小会硬截断。
+# 实际值由 run_heavyskill.py 从本文件加载（旧版从未加载，一直用 CLI 默认 4096）。
+max_tokens: 32768
+# P54：审议独立预算（旧版无此配置项，审议复用 4096 导致最终结论被截断）
+summary_max_tokens: 16384
 model: deepseek-v4-pro
 output_dir: /tmp/heavyskill_output
 prompt_type: general
 reason_k: 8
 save_trajectories: false
 summary_k: 4
-summary_max_tokens: 4000
 summary_model: deepseek-v4-pro
 summary_temperature: 0.3
 temperature: 0.7

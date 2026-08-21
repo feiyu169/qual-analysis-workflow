@@ -15,16 +15,17 @@ from typing import Dict, List, Optional, Tuple
 logger = logging.getLogger(__name__)
 
 # Regex patterns for answer extraction across languages and formats
+# 注意：停止符含 \n——答案行后跟换行（无句号）也能正确截断，避免整段吞进 group
 ANSWER_PATTERNS = [
     # English patterns
     re.compile(r"\*\*(?:Final\s+)?Answer[:\s]*\*\*\s*(.+?)(?:\n|$)", re.IGNORECASE),
-    re.compile(r"(?:final|the)\s+answer\s+(?:is|:)\s*(.+?)(?:\.|$)", re.IGNORECASE),
-    re.compile(r"(?:therefore|thus|so|hence),?\s*(?:the\s+answer\s+is\s+)?(.+?)(?:\.|$)", re.IGNORECASE),
-    re.compile(r"answer\s*[:=]\s*(.+?)(?:\.|$)", re.IGNORECASE),
+    re.compile(r"(?:final|the)\s+answer\s+(?:is|:)\s*(.+?)(?:\n|\.|$)", re.IGNORECASE),
+    re.compile(r"(?:therefore|thus|so|hence),?\s*(?:the\s+answer\s+is\s+)?(.+?)(?:\n|\.|$)", re.IGNORECASE),
+    re.compile(r"answer\s*[:=]\s*(.+?)(?:\n|\.|$)", re.IGNORECASE),
     # Chinese patterns
     re.compile(r"\*\*(?:最终)?答案[：:]\s*\*\*\s*(.+?)(?:\n|$)"),
-    re.compile(r"(?:最终)?答案[为是：:]\s*(.+?)(?:。|$)"),
-    re.compile(r"(?:因此|所以|综上),?\s*(.+?)(?:。|$)"),
+    re.compile(r"(?:最终)?答案[为是：:]\s*(.+?)(?:\n|。|$)"),
+    re.compile(r"(?:因此|所以|综上),?\s*(.+?)(?:\n|。|$)"),
     # Box notation (common in math)
     re.compile(r"\\boxed\{(.+?)\}"),
     re.compile(r"\$\$(.+?)\$\$"),
@@ -55,10 +56,53 @@ def estimate_tokens(text: str) -> int:
     return max(1, estimate)
 
 
+# P54：句子终止符——文本被 max_tokens 硬截断时通常没有终止符，
+# 靠它识别"残稿"，避免把断句/思维碎片当成答案
+SENTENCE_TERMINATORS = (
+    "。", "！", "？", "；", "…",
+    ".", "!", "?", ";",
+    "”", '"', "』", "」", "）", ")", "]", "}", ">", "```",
+)
+
+
+def is_terminated(text: str) -> bool:
+    """判断文本是否以句子终止符收尾（未被截断的完整文本通常满足）。"""
+    t = text.strip()
+    return bool(t) and t.endswith(SENTENCE_TERMINATORS)
+
+
+# P54：明显的思考/元话语起始短语——答案开头出现它们说明抓到的是推理过程而非结论。
+# 保守清单：只收录"几乎不可能作为正式答案开头"的元话语，避免误杀"可以合并"这类短裁决。
+_THINKING_STARTS = (
+    "我们", "让我们", "Let", "We need", "I need", "The user", "Need",
+    "需要注意", "用户要求", "要求我们",
+)
+
+
+def _is_fragment(answer: str) -> bool:
+    """判断提取出的答案是否像碎片。
+
+    仅在"最后一行回退"路径使用（该路径抓的是任意末行，风险最高）；
+    正则路径已按答案标记锚定，只额外检查是否仍含答案标记本身。
+    """
+    a = answer.strip()
+    if not a:
+        return True
+    a_lower = a.lower()
+    if "最终答案" in a or "final answer" in a_lower:
+        return True
+    if a.startswith(_THINKING_STARTS):
+        return True
+    return False
+
+
 def extract_answer(text: str) -> Optional[str]:
     """Extract the final answer from a reasoning trajectory.
 
     Tries multiple regex patterns to find the answer in various formats.
+
+    P54 加固：截断残稿（无终止符）不走"最后一行"回退；明显是思维链碎片
+    （以思考短语开头 / 仍含答案标记）的候选被拒绝，避免共识被垃圾污染。
 
     Args:
         text: Full reasoning trajectory text.
@@ -73,17 +117,28 @@ def extract_answer(text: str) -> Optional[str]:
         match = pattern.search(text)
         if match:
             answer = match.group(1).strip()
-            # Clean up common artifacts
-            answer = answer.rstrip("。，、；：！？.,;:!?")
-            if answer and len(answer) < 500:  # Sanity check
+            # Clean up common artifacts (含 markdown 加粗闭合符)
+            answer = answer.rstrip("。，、；：！？.,;:!?*")
+            if not answer or answer.startswith((":", "：")):
+                continue
+            if len(answer) < 500:  # Sanity check
+                # P54：匹配内容仍含答案标记（大小写不敏感）= 抓到标记附近的残段，跳过继续找
+                a_lower = answer.lower()
+                if "最终答案" in answer or "final answer" in a_lower:
+                    continue
                 return answer
 
     # Fallback: try to get the last non-empty line
+    # P54：只在文本"完整收尾"（有终止符）时才信任末行——截断残稿的末行是断句
     lines = [line.strip() for line in text.strip().split("\n") if line.strip()]
-    if lines:
+    if lines and is_terminated(text):
         last_line = lines[-1]
-        # Only use if it looks like an answer (short, no question marks)
-        if len(last_line) < 200 and "?" not in last_line:
+        # Only use if it looks like an answer (short, no question marks, not a fragment)
+        if (
+            len(last_line) < 200
+            and "?" not in last_line
+            and not _is_fragment(last_line)
+        ):
             return last_line
 
     return None

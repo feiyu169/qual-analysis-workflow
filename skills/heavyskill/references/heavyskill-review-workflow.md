@@ -43,13 +43,20 @@ Dayu功能清单：1. xxx 2. xxx 3. xxx
 审查点：1. xxx 2. xxx
 ```
 
-### ⚠️ 审查结果可能被截断
+### ⚠️ 审查结果可能被截断（P54，2026-08-21 已修复+显性化）
 
-HeavySkill的deliberation_response可能被截断。需要读取JSON文件获取完整结果：
+**旧问题**：HeavySkill 的 deliberation_response 可能被截断（max_tokens 默认 4096 + 推理模型
+思维链占预算），且截断静默无标记——必须读 JSON 全文才能拿到完整结论。
+
+**现行为**：预算由 config.yaml 控制（`max_tokens: 32768` / `summary_max_tokens: 16384`，CLI 可覆盖）；
+输出 JSON 带 `truncation` 摘要字段；截断轨迹自动剔除出审议/共识；控制台有 ⚠️ 告警。
+
+**读取完整结果的标准姿势**（先看截断摘要，再取审议全文）：
 ```python
 import json
 with open('/tmp/heavyskill-review.json') as f:
     data = json.load(f)
+print(data['truncation'])   # 全 0/False 才可放心采信
 response = data['deliberation'][0]['deliberation_response']
 ```
 

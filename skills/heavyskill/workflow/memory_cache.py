@@ -38,6 +38,8 @@ class Trajectory:
     latency: float = 0.0
     quality_score: float = 1.0
     is_valid: bool = True
+    # P54：finish_reason=length 硬截断——is_valid 会被置 False，不参与审议/共识
+    truncated: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary."""
@@ -49,6 +51,7 @@ class Trajectory:
             "latency": self.latency,
             "quality_score": self.quality_score,
             "is_valid": self.is_valid,
+            "truncated": self.truncated,
         }
 
 
@@ -72,21 +75,41 @@ class MemoryCache:
     trajectories: List[Trajectory] = field(default_factory=list)
     deliberation_history: List[DeliberationRecord] = field(default_factory=list)
 
-    def add_trajectories(self, contents: List[str], latencies: Optional[List[float]] = None) -> None:
+    def add_trajectories(
+        self,
+        contents: List[str],
+        latencies: Optional[List[float]] = None,
+        truncated: Optional[List[bool]] = None,
+        content_fallback: Optional[List[bool]] = None,
+    ) -> None:
         """Add reasoning trajectories to the cache.
+
+        P54 截断治理：
+        - truncated[i]=True（finish_reason=length）→ is_valid=False，
+          从审议选择与共识投票中剔除；
+        - content_fallback[i]=True（content 为空、回退思维链）→ answer=None，
+          不参与共识投票（思维链没有可靠的"最终答案"），但保留内容作审议素材。
 
         Args:
             contents: List of trajectory text contents.
             latencies: Optional list of response latencies.
+            truncated: Optional per-trajectory truncation flags (parallel to contents).
+            content_fallback: Optional per-trajectory thinking-fallback flags.
         """
         for i, content in enumerate(contents):
             answer = extract_answer(content)
+            is_truncated = bool(truncated and i < len(truncated) and truncated[i])
+            is_fallback = bool(content_fallback and i < len(content_fallback) and content_fallback[i])
+            if is_fallback:
+                answer = None
             trajectory = Trajectory(
                 index=len(self.trajectories),
                 content=content,
                 answer=answer,
                 tokens=len(content) // 4,  # rough estimate
                 latency=latencies[i] if latencies and i < len(latencies) else 0.0,
+                is_valid=not is_truncated,
+                truncated=is_truncated,
             )
             self.trajectories.append(trajectory)
 

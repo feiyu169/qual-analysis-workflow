@@ -10,11 +10,13 @@
     {"p": "P33", "topic": "增量覆盖率", "mechanism": "unit_test incremental_coverage_min"},
     {"p": "P36", "topic": "字段存在≠功能完成", "mechanism": "integration-probe 门禁"},
     {"p": "P50", "topic": "配置字段定义未使用", "mechanism": "L2-L5 证据机制"},
-    {"p": "P53", "topic": "元门禁自律（自审查沉淀）", "mechanism": "self_audit 检查器 + gate_5_3 + 7 测试 + pre-push/CI"}
+    {"p": "P53", "topic": "元门禁自律（自审查沉淀）", "mechanism": "self_audit 检查器 + gate_5_3 + 7 测试 + pre-push/CI"},
+    {"p": "P54", "topic": "审查结果被截断（heavyskill 模式2）", "mechanism": "预算配置打通 + finish_reason 显性化 + 截断轨迹剔除 + JSON truncation 摘要 + 9 单测"}
   ],
   "lessons": [
     {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-self-audit.md", "topic": "failure_log 自锁/baseline 损坏/requirements 伪文件", "p": "P53"},
     {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-productivity-review.md", "topic": "生产力第三方评审：部分具备，短板为自证闭环/门禁自锁/维护成本", "p": "P53"},
-    {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-v34-review.md", "topic": "V3.4 方案代码审查：glob 匹配/伪签名/对照污染/空集合/非原子写 5 处 P0", "p": "P53"}
+    {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-v34-review.md", "topic": "V3.4 方案代码审查：glob 匹配/伪签名/对照污染/空集合/非原子写 5 处 P0", "p": "P53"},
+    {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-heavyskill-mode2-truncation.md", "topic": "heavyskill 模式2 审查结果截断：max_tokens 配置断裂 + finish_reason 不检查 + 思维链污染共识", "p": "P54"}
   ]
 }

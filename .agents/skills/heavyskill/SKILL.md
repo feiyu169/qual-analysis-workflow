@@ -83,11 +83,13 @@ HeavySkill 的核心思想（论文 arXiv:2605.02396）：与其让单个推理�
 
 ## 模式2：Python 流水线
 
-代码在 `skills/heavyskill/`（hermes 导出），依赖 `httpx`（工作区 `tools/finance/.venv` 已含）。
+代码在 `skills/heavyskill/`（hermes 导出），依赖 `httpx`（工作区 `tools/finance/.venv` 若不存在，
+用系统 python，`python -m pip install httpx` 即可）。
 
 ```powershell
-# 用工作区 venv 的 python 运行（含 httpx）
+# 用工作区 venv 的 python 运行（含 httpx）；无 venv 时用系统 python
 $py = "D:\OneDrive\文档\deepseek harness workspace\tools\finance\.venv\Scripts\python.exe"
+if (-not (Test-Path $py)) { $py = "python" }
 cd "D:\OneDrive\文档\deepseek harness workspace\skills\heavyskill"
 
 & $py scripts\run_heavyskill.py `
@@ -102,7 +104,33 @@ cd "D:\OneDrive\文档\deepseek harness workspace\skills\heavyskill"
 - **必须设置命令超时**：K=8 实测 94s+（Stage1≈53s + Stage2≈41s），pwsh 默认超时要给足
   （`timeoutMs: 300000`）。
 - 内容一律内联进 `--query`；`--include-file` 会把文件内容追加进 query（子代理仍读不到文件）。
-- 输出 JSON：`trajectories` 是字符串数组，`consensus_answer` 可能被截断。
+
+### ⚠️ 截断治理（P54，2026-08-21 修复）
+
+**历史问题**：模式2 的审查结果常被截断——`max_tokens` 默认 4096 且 config.yaml 的预算从未被
+CLI 加载（配置断裂）；推理模型（v4-pro）思维链计入预算，占满后可见输出被硬切；`finish_reason`
+从不检查，截断轨迹静默进入审议与共识；`extract_answer` 把思维/断句碎片当答案 → consensus 变垃圾。
+
+**修复后行为**（代码已改，`config.yaml` 生效）：
+- `max_tokens: 32768`（推理）、`summary_max_tokens: 16384`（审议，独立预算）——由
+  `run_heavyskill.py` 从 config.yaml 自动加载；CLI 可用 `--max-tokens` / `--summary-max-tokens` 覆盖。
+- 截断轨迹（finish_reason=length）自动**从审议与共识中剔除**（保留在 JSON 的 trajectories 供查证）；
+  思维链回退轨迹（content 为空）不参与共识投票。
+- 输出 JSON 新增 **`truncation` 摘要字段**：`{reasoning_truncated_count, content_fallback_count, deliberation_truncated}`。
+- 控制台在存在截断时打印 ⚠️ WARNING。
+
+**读取审查结果的正确姿势（勿整读 100KB+ JSON，勿只信控制台摘要）**：
+```python
+# 1) 先看截断摘要
+import json
+d = json.load(open("heavyskill-output.json", encoding="utf-8"))
+print(d["truncation"])   # 全 0/False 才可放心采信
+# 2) 审议结论（最终综合意见）取全文
+print(d["deliberation"][0]["deliberation_response"])
+# 3) 需要逐条轨迹时按关键词切片（如 总体结论/最终答案），不整读
+```
+**若 `truncation` 非零**：增大 `--summary-max-tokens`（审议截断）或 `--max-tokens`（轨迹截断）后重跑；
+或显式标注"部分结果接受"。
 
 ### K 值选择
 

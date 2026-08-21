@@ -33,6 +33,8 @@ class DeliberationResult:
     iteration: int
     tokens: int = 0
     latency: float = 0.0
+    # P54：审议响应被 max_tokens 截断（finish_reason=length）——最终结论不完整
+    truncated: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary."""
@@ -43,6 +45,7 @@ class DeliberationResult:
             "iteration": self.iteration,
             "tokens": self.tokens,
             "latency": self.latency,
+            "truncated": self.truncated,
         }
 
 
@@ -210,15 +213,24 @@ class SequentialDeliberator:
         ]
 
         # Call the deliberation model
+        # P54：审议用独立预算 summary_max_tokens（默认 16384），不再复用推理预算，
+        # 避免审议结论（最关键的输出）被 4096 硬截断
         response = await self.client.deliberation_call(
             messages=messages,
             temperature=self.config.summary_temperature,
-            max_tokens=self.config.max_tokens,
+            max_tokens=self.config.summary_max_tokens,
         )
 
         latency = time.monotonic() - start_time
         deliberation_text = response.content
         final_answer = extract_answer(deliberation_text)
+
+        if response.truncated:
+            logger.warning(
+                f"Deliberation response TRUNCATED (finish_reason=length, "
+                f"{len(deliberation_text)} chars) — 审议结论不完整，"
+                f"请检查输出 JSON 的 deliberation[].truncated 或增大 summary_max_tokens"
+            )
 
         # If no answer extracted from deliberation, check consensus
         if final_answer is None:
@@ -239,7 +251,8 @@ class SequentialDeliberator:
 
         logger.info(
             f"Deliberation complete: answer='{final_answer}', "
-            f"tokens={response.total_tokens}, latency={latency:.2f}s"
+            f"tokens={response.total_tokens}, latency={latency:.2f}s, "
+            f"truncated={response.truncated}"
         )
 
         return DeliberationResult(
@@ -249,4 +262,5 @@ class SequentialDeliberator:
             iteration=iteration,
             tokens=response.total_tokens,
             latency=latency,
+            truncated=response.truncated,
         )

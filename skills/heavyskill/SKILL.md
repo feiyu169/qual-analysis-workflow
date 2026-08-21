@@ -99,6 +99,35 @@ cd ~/.hermes/skills/heavyskill && timeout 180 python3 scripts/run_heavyskill.py 
   --output /tmp/heavyskill-review.json
 ```
 
+## ⚠️ Pitfall: Truncated Review Outputs (P54, fixed 2026-08-21)
+
+**Problem**: Review results were frequently truncated — `max_tokens` defaulted to 4096 and
+`config.yaml` budgets were never loaded by the CLI (config loading gap). Reasoning models
+(v4-pro) count thinking tokens against `max_tokens`, so visible output gets cut; `finish_reason`
+was never checked, so truncated trajectories silently fed deliberation/consensus; and
+`extract_answer` grabbed thinking/sentence fragments as answers, corrupting the consensus.
+
+**Fix (already in code)**:
+- `config.yaml` now controls budgets and is actually loaded: `max_tokens: 32768` (reasoning),
+  `summary_max_tokens: 16384` (deliberation, independent budget). CLI overrides:
+  `--max-tokens`, `--summary-max-tokens`.
+- Truncated trajectories (`finish_reason=length`) are automatically **excluded from deliberation
+  and consensus** (kept in JSON `reasoning.trajectories` for inspection); thinking-fallback
+  trajectories (empty `content`) no longer vote in consensus.
+- Output JSON adds a **`truncation` summary field**:
+  `{reasoning_truncated_count, content_fallback_count, deliberation_truncated}`.
+- Console prints a ⚠️ WARNING whenever truncation occurred.
+
+**How to read review results (don't read the whole 100KB+ JSON, don't trust the console summary)**:
+```python
+import json
+d = json.load(open("heavyskill-output.json", encoding="utf-8"))
+print(d["truncation"])   # must be all 0/False before trusting the result
+print(d["deliberation"][0]["deliberation_response"])  # full synthesis
+```
+If `truncation` is non-zero: re-run with larger `--summary-max-tokens` / `--max-tokens`,
+or explicitly mark the partial result as accepted.
+
 ## Chinese Technical Review Dimensions Template
 
 When user asks to review a technical document with dimensions like "有效性提升、架构简洁、代码质量", use this query pattern:

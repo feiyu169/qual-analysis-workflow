@@ -1,5 +1,32 @@
 # Changelog
 
+## 2026-08-21 — heavyskill 模式2 截断治理（P54，技能代码修复，非 HGF 版本变更）
+
+### 背景
+HGF 工作流会话多次出现"heavyskill 模式2 读取审查结果被截断"。实测
+`output/hgf-productivity-review-result.json`：deliberation 停在"主要分歧 - Attempt 2"、
+traj[3]/traj[4] 断在句中、consensus_answer 为思维链垃圾碎片。根因：
+`max_tokens` 默认 4096 且 config.yaml 预算从未被 CLI 加载（配置断裂）→ 推理模型
+思维链占满预算硬截断；`finish_reason` 从不检查 → 截断静默流入审议/共识；
+content 空回退思维链 + extract_answer 抓碎片 → 共识失真。
+
+### 修复（skills/heavyskill）
+- 预算配置打通：`run_heavyskill.py` 从 config.yaml 加载 `max_tokens`(32768)/
+  `summary_max_tokens`(16384，新增字段与 `--summary-max-tokens` CLI)；审议用独立预算
+- finish_reason 显性化：LLMResponse/ReasoningResult/DeliberationResult 带 `truncated`/
+  `content_fallback` 标记；截断轨迹自动剔除出审议与共识；思维链不投票
+- 输出 JSON 新增 `truncation` 摘要字段；控制台截断 ⚠️ 告警
+- `extract_answer` 加固：截断残稿（无终止符）不走末行回退、答案标记大小写不敏感、
+  正则停止符补 `\n`（修"答案行后无句号即整段吞入"）
+- 单测 `skills/heavyskill/tests/test_truncation.py`：9 项防回归
+
+### 文档
+- 新增 P54（pitfalls-registry.md + pitfalls-summary.json gated 列表）
+- 新档案 `docs/lessons/2026-08-21-heavyskill-mode2-truncation.md` + README 索引
+- `.agents/skills/heavyskill/SKILL.md` 模式2 章节：截断治理说明 + 读取审查结果标准姿势
+- `skills/heavyskill/SKILL.md`、references/heavyskill-review-workflow.md、
+  gate-driven-development/references/heavyskill-integration.md 同步更新
+
 ## 3.3.3 (2026-08-21) — 记忆长效机制（V2 方案，P53 元门禁自律）
 
 ### 背景

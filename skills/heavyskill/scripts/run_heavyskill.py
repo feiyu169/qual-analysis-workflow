@@ -170,8 +170,15 @@ Examples:
     parser.add_argument(
         "--max_tokens",
         type=int,
-        default=4096,
-        help="Max tokens per response (default: 4096).",
+        default=None,
+        help="Max tokens per response (default: from config.yaml, fallback 32768).",
+    )
+    parser.add_argument(
+        "--summary_max_tokens",
+        type=int,
+        default=None,
+        help="Max tokens for deliberation response (default: from config.yaml, fallback 16384). "
+             "P54: 审议结论被截断时增大此值。",
     )
     parser.add_argument(
         "--token_budget",
@@ -221,6 +228,18 @@ async def main() -> int:
     api_key = args.api_key or _defaults.get("api_key", "")
     api_base = args.api_base or _defaults.get("api_base", "https://api.deepseek.com")
     model = args.model or _defaults.get("model", "deepseek-chat")
+    # P54：预算从 config.yaml 加载（CLI > config > 内置默认），
+    # 修复旧版"config.yaml 的 max_tokens=80000 从未生效、实际 4096 硬截断"的配置断裂
+    max_tokens = args.max_tokens or _defaults.get("max_tokens", 32768)
+    summary_max_tokens = args.summary_max_tokens or _defaults.get(
+        "summary_max_tokens", 16384
+    )
+    if max_tokens != (_defaults.get("max_tokens") or 32768) or summary_max_tokens != (
+        _defaults.get("summary_max_tokens") or 16384
+    ):
+        logger.info(
+            f"Token budgets: max_tokens={max_tokens}, summary_max_tokens={summary_max_tokens}"
+        )
 
     # Read and embed files into the query
     query = args.query
@@ -254,7 +273,8 @@ async def main() -> int:
         max_iterations=args.iterations,
         temperature=args.temperature,
         summary_temperature=args.summary_temperature,
-        max_tokens=args.max_tokens,
+        max_tokens=max_tokens,
+        summary_max_tokens=summary_max_tokens,
         token_budget=args.token_budget,
         prompt_type=PromptType(args.prompt_type),
         language=Language(args.language),
@@ -284,6 +304,16 @@ async def main() -> int:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(result.to_json(), encoding="utf-8")
         logger.info(f"Results saved to {output_path}")
+
+    # P54：无论 quiet 与否，截断必须显式告警（输出 JSON 的 truncation 摘要也同步落盘）
+    if result.has_truncation():
+        logger.warning(
+            "⚠️ 本次运行存在截断（见输出 JSON 的 truncation 字段）："
+            "推理轨迹截断 %d 条 / 审议截断 %s。"
+            "处理：增大 --max-tokens / --summary-max-tokens 后重跑，或显式标记接受部分结果。",
+            result.reasoning_result.truncated_count if result.reasoning_result else 0,
+            any(d.truncated for d in result.deliberation_results),
+        )
 
     return 0
 

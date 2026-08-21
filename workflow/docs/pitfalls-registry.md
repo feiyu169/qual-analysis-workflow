@@ -24,6 +24,7 @@ P 库（P0-P52）是 hermes 踩坑纪律库，原始清单在
 | P36 | 字段存在 ≠ 功能完成 | integration-probe 门禁（调用点探针） |
 | P50 | 配置字段定义未使用 | L2-L5 证据机制（`evidence` 必填校验） |
 | P53 | 元门禁自律（V3.3.3 自审查沉淀） | self_audit 检查器（gate_5_3，4 项机械验证）+ 7 防回归测试 + pre-push/CI |
+| P54 | 审查结果被截断（heavyskill 模式2） | 预算配置打通（max_tokens/summary_max_tokens）+ finish_reason 显性化 + 截断轨迹剔除 + 输出 JSON `truncation` 摘要 + `tests/test_truncation.py` 9 项防回归 |
 
 ## 文档纪律（无自动门禁，需 agent 遵守）
 
