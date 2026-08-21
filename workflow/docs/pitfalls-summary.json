@@ -14,6 +14,7 @@
   ],
   "lessons": [
     {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-self-audit.md", "topic": "failure_log 自锁/baseline 损坏/requirements 伪文件", "p": "P53"},
-    {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-productivity-review.md", "topic": "生产力第三方评审：部分具备，短板为自证闭环/门禁自锁/维护成本", "p": "P53"}
+    {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-productivity-review.md", "topic": "生产力第三方评审：部分具备，短板为自证闭环/门禁自锁/维护成本", "p": "P53"},
+    {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-v34-review.md", "topic": "V3.4 方案代码审查：glob 匹配/伪签名/对照污染/空集合/非原子写 5 处 P0", "p": "P53"}
   ]
 }

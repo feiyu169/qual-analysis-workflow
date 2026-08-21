@@ -10,6 +10,7 @@
 |------|------|------|---------|
 | [2026-08-21-self-audit.md](2026-08-21-self-audit.md) | 2026-08-21 | HGF 自审查 3 个 P0 根因（failure_log 自锁 / baseline 损坏 / requirements 伪文件） | P53 |
 | [2026-08-21-productivity-review.md](2026-08-21-productivity-review.md) | 2026-08-21 | HGF 生产力第三方评审（heavyskill K=8）：部分具备生产力，短板为自证闭环/门禁自锁/维护成本 | P53 |
+| [2026-08-21-v34-review.md](2026-08-21-v34-review.md) | 2026-08-21 | V3.4 方案架构+代码审查（K=8）：架构正确但代码 5 处 P0 缺陷（glob 匹配/伪签名/对照污染/空集合/非原子写） | P53 |
 
 ## 沉淀流程
 
