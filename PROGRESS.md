@@ -379,6 +379,14 @@
             - 分析进行中：Wind 加载 ✅ → 3 年报解析 ✅ → Gate0 通过 ✅ → Gate1-8 执行中（shadow 模式，5400s 有界）
             - ⚠️ 会话暂停时后台任务仍运行：下次会话先检查 .pip-tmp/xpev-run-result.json（分析结果）与 output/xpev-9868/（报告）；进程若已结束说明跑完，若还在继续等其有界结束
         - ⏳ **下次会话续接**：① 小鹏分析结果评估（A4 验收：≤60min 有界、Gate 全链跑完即"跑得完"达成）→ ② 阶段 B（B1 章节级财年语义 + 分级阻断，证券专家 Top 10）→ ③ 阶段 C（C0-C5 审查效率）→ ④ 推送新进展到 GitHub
+        - ✅ 2026-08-21 会话二（阶段B B2a 全部完成 + 推送 GitHub）：
+          - **B2a-1 股价动态化**（6ac8967）：run 脚本 ×3 current_price 从 Wind quote 取（删 21.48/46.52）；quality_enhancer 删 41.6/43.0 默认；workflow Step4.5/T11/T12 动态取价
+          - **B2a-2 币种断言**（2b0ab06）：enhance_report_quality 加 market 参数，港股估值注入统一"港元"；修复 Stage4 估值 financials 嵌套读取（原扁平字段取不到→估值 0 假通过）；测试（港股港元/A股元）
+          - **B2a-3 亏损 DCF fail-fast 降级链**（2b0ab06）：compute_dcf 营业利润负→fail-fast（删 0.05 启发式）；full_dcf→PE(盈利)/PS(亏损) 降级；derive_target_prices eps<=0 守卫；4 新测试（小鹏样本数据）
+          - HGF 终检 exit=0 MUST_PASS 全绿；gate5/run_qual_v8/test_quality_enhancer 风格债清理（df9cde0）
+          - **推送 GitHub**：2dbbec8..df9cde0 master（远端已同步）
+          - 测试：66 passed（+5 B2a 测试）；failure_log 9 条闭环
+        - ⏳ **阶段B 剩余**：B2b（财务 100% Wind / fact_extractor 移 financial / Wind 缺失字段处置表 B5-1）→ B3（事实表多财年化）→ B4（运营验证链）→ B5 小包 → 阶段 C（C0-C5）→ 重跑小鹏验证 B 阶段验收
         - ✅ 2026-08-21 会话（A4 验收 + 阶段B B1 实施）：
           - **A4 验收通过**（用户指令：重新使用qual流程分析小鹏集团 2023/24/25 年报）：34.5 分钟有界跑完（Gate0-3 全过，Gate4 fail-closed 判失败无死循环）——「跑得完」达成
           - 注：07:25 首次运行随会话暂停被杀（后台 job 会话级）；恢复后 MinerU 验证可用 + llm-bridge 重建 → 重跑成功（2070s）
