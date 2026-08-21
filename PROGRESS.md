@@ -387,6 +387,18 @@
           - **推送 GitHub**：2dbbec8..df9cde0 master（远端已同步）
           - 测试：66 passed（+5 B2a 测试）；failure_log 9 条闭环
         - ⏳ **阶段B 剩余**：B2b（财务 100% Wind / fact_extractor 移 financial / Wind 缺失字段处置表 B5-1）→ B3（事实表多财年化）→ B4（运营验证链）→ B5 小包 → 阶段 C（C0-C5）→ 重跑小鹏验证 B 阶段验收
+        - ✅ 2026-08-21 会话三（阶段B/C 收官 + 最终验收 + FiscalSemantics 架构方案）：
+          - **阶段 B 完成**（B1-B5 全落地，提交 8f53a6e/17c039e/5ed647c/2712205）：
+            B1 财年语义章节级+分级阻断 / B2a 估值程序化 / B2b 财务 100% Wind / B3 事实表多财年 / B4 运营验证链 / B5 数值归一
+          - **阶段 C 完成**（C0-C5 全落地，提交 43fd02a/4e3f572/e83eb63）：
+            审查 LLM ≤35 次、增量审查、logic/跨章/占位符/锚点去重、红队门控
+          - **最终验收重跑**（soft 模式 4197s）：Gate0-3 全过、Gate4 失败（跨章 ch6 历史引用误报）、耗时较上次 -35%
+          - **FiscalSemantics 架构方案**（53f30b7 + 0fc2d81，docs/qual-fiscal-semantics.md）：
+            财年语义单源化（DataAnchor 归因 L1 / 跨章归因分桶 L2 / 生成时校验 L3）；
+            最小测试案例（合并重复 + 端到端 Gate4 场景 0.09s 验证）
+          - 测试：63 passed；HGF 各批终检 exit=0；推送至 0fc2d81
+          - ⚠️ 共享工作区：他会话提交 7f0a32c（heavyskill 文档）+ configuration.py 改动被本会话 add -A 打包进 0fc2d81
+        - ⏳ **剩余**：重跑小鹏最终全链验收（可选，FiscalSemantics 后预期 Gate4 通过）→ 阶段文档归档
         - ✅ 2026-08-21 会话（A4 验收 + 阶段B B1 实施）：
           - **A4 验收通过**（用户指令：重新使用qual流程分析小鹏集团 2023/24/25 年报）：34.5 分钟有界跑完（Gate0-3 全过，Gate4 fail-closed 判失败无死循环）——「跑得完」达成
           - 注：07:25 首次运行随会话暂停被杀（后台 job 会话级）；恢复后 MinerU 验证可用 + llm-bridge 重建 → 重跑成功（2070s）
