@@ -235,3 +235,13 @@ cd "D:\OneDrive\文档\deepseek harness workspace\workflow"
 - ~~dogfood 继续推进 Phase 3.2-5~~ ✅ 已完成（16/16 gate，见第七节）
 - ~~把狗粮化推进过程沉淀为 hgf 技能的教学示例~~ ✅ 已完成（SKILL.md「教学实例」段，commit f757802）
 
+
+---
+
+## 2026-08-21 qual 三阶段收官（FiscalSemantics 架构方案）
+
+- **阶段 A/B/C 全部完成**（三阶段路线图 v2.1 实施落地）
+- 最终验收重跑：Gate0-3 全过，耗时 -35%（6449→4197s，无墙钟耗尽）
+- **FiscalSemantics**（docs/qual-fiscal-semantics.md）：财年语义单源化——DataAnchor 归因（L1）/ 跨章归因分桶（L2）/ 生成时校验（L3）
+- 最小测试案例：合并重复 + 端到端 Gate4 场景 0.09s 验证（test_fiscal_semantics.py）
+- 测试 63 passed；HGF 各批终检 exit=0；推送 0fc2d81 + 9feb499
