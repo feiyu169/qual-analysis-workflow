@@ -575,6 +575,118 @@ def _check_tdd_evidence(gate: dict, working_dir: str, file_hint: str | None) -> 
         return False, [f"TDD 证据验证失败（需 git 仓库）: {e}"]
 
 
+# ── V3.3.3 P53 元门禁自律（V2 记忆长效机制）────────────────────────────────
+# 背景（2026-08-21 自审查沉淀）：HGF 对自身跑门禁发现 3 个 P0——
+# S1 failure_log 自身失败写入 failures.jsonl 造成自指循环雪崩；
+# S2 baseline.json 损坏导致 --canary 崩溃；S3 requirements-hgf.txt 是
+# Markdown 伪文件导致 pip install -r 失败。
+# P53 原则：约束其他门禁的元门禁，其状态数据/失败行为/文件格式必须同样
+# 受纪律约束。heavyskill K=8 审议修订：gate_5_3 独立（不依赖 gate_5_2，
+# 防被查对象失败导致检查器无法运行）；self_audit 自身失败不写 failures.jsonl
+# （source 隔离，防新自指循环）；S3 用 packaging.Requirement 解析（允许
+# -r/注释/环境标记，不苛求每行含 ==）。
+
+
+def _check_self_audit(gate: dict, working_dir: str, file_hint: str | None) -> tuple:
+    """P53 元门禁自律检查器（V3.3.3 V2 方案，4 项机械验证）。
+
+    1. failures.jsonl 无 failure_log 自身的不完整记录（防 S1 回归）；
+       - 判定：payload.gate == "failure_log" 且缺 root_cause/fix → FAIL
+       - self_audit 自身记录 source 为 "self_audit"，天然隔离
+    2. baseline.json 可 json.loads（防 S2 回归）；
+    3. requirements-hgf.txt 每行用 packaging.requirements.Requirement 解析
+       （跳过空行/注释/- 选项行；直接包约束必须含版本比较符，防 S3 回归）；
+    4. docs/lessons/ 每个 .md 档案必须有 README.md 索引条目（L2 配套，
+       防"档案写了但无索引"的死文档）。
+    """
+    issues = []
+
+    # ── 检查 1：failure_log 自锁（S1）─────────────────────────────────────
+    failures_path = os.path.join(working_dir, ".hgf", "failures.jsonl")
+    self_lock_issues = []
+    if os.path.exists(failures_path):
+        try:
+            with open(failures_path, encoding="utf-8") as f:
+                for line in f:
+                    if not line.strip():
+                        continue
+                    try:
+                        obj = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    payload = obj.get("payload") if isinstance(obj, dict) else obj
+                    if not isinstance(payload, dict):
+                        continue
+                    if payload.get("gate") != "failure_log":
+                        continue
+                    if payload.get("source") == "self_audit":
+                        continue  # 自身记录隔离
+                    if not payload.get("root_cause") or not payload.get("fix"):
+                        self_lock_issues.append(
+                            f"failures.jsonl 存在 failure_log 自身不完整记录"
+                            f"（缺 root_cause/fix，S1 自锁回归）"
+                        )
+                        break
+        except OSError as e:
+            issues.append(f"读取 failures.jsonl 失败: {e}")
+    if self_lock_issues:
+        issues.extend(self_lock_issues)
+
+    # ── 检查 2：baseline.json 可解析（S2）──────────────────────────────────
+    baseline_path = os.path.join(working_dir, ".hgf", "baseline.json")
+    if os.path.exists(baseline_path):
+        try:
+            with open(baseline_path, encoding="utf-8") as f:
+                json.load(f)
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError) as e:
+            issues.append(f"baseline.json 损坏（S2 回归）: {type(e).__name__}: {e}")
+
+    # ── 检查 3：requirements-hgf.txt pip 可解析（S3）───────────────────────
+    req_path = os.path.join(working_dir, "requirements-hgf.txt")
+    if os.path.exists(req_path):
+        try:
+            from packaging.requirements import Requirement
+        except ImportError:
+            issues.append("缺少 packaging 库（pip 自带依赖），无法校验 requirements-hgf.txt")
+            return (len(issues) == 0), issues
+        with open(req_path, encoding="utf-8") as f:
+            for lineno, line in enumerate(f, start=1):
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#") or stripped.startswith("-"):
+                    continue
+                if any(ch in stripped for ch in "=<>~!"):
+                    try:
+                        Requirement(stripped)
+                    except Exception as e:
+                        issues.append(
+                            f"requirements-hgf.txt:{lineno} 无法解析（S3 回归）: {e}"
+                        )
+                else:
+                    # 无版本约束的裸包名 → 未固定版本（HGF pin 纪律）
+                    issues.append(
+                        f"requirements-hgf.txt:{lineno} 依赖未固定版本: {stripped}"
+                    )
+
+    # ── 检查 4：lessons 索引完整性（L2 配套）───────────────────────────────
+    lessons_dir = os.path.join(working_dir, "docs", "lessons")
+    if os.path.isdir(lessons_dir):
+        index_path = os.path.join(lessons_dir, "README.md")
+        if not os.path.exists(index_path):
+            issues.append("docs/lessons/ 存在但缺 README.md 索引（死文档风险）")
+        else:
+            try:
+                index_content = _read_text(index_path)
+            except Exception:
+                index_content = ""
+            for fname in sorted(os.listdir(lessons_dir)):
+                if not fname.endswith(".md") or fname == "README.md":
+                    continue
+                if fname not in index_content:
+                    issues.append(f"docs/lessons/{fname} 无 README.md 索引条目（死文档）")
+
+    return (len(issues) == 0), issues
+
+
 _CHECKERS = {
     "document_generated": _check_document,
     # V3.2.11 Phase 1 诚实化：设计/安全/部署类文档 gate 升级为语义校验
@@ -604,6 +716,7 @@ _CHECKERS = {
     "tdd_evidence": _check_tdd_evidence,  # V3.2.8：git 历史真实验证测试先于实现
     "health_check": _check_health,
     "monitoring_normal": _check_health,
+    "self_audit": _check_self_audit,  # V3.3.3 P53 元门禁自律（V2 方案）
 }
 
 

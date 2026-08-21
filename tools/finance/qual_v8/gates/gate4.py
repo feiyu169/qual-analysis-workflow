@@ -279,7 +279,8 @@ class Gate4AuditRepair(GateBase):
                 # v3.1 P0-B-10：shadow 模式只审不修（workflow 已按 qual_mode 注入）
                 skip_repair=bool(context.get("shadow_skip_repair", False)),
                 # v3.1 P0-B-8：全局墙钟/调用预算透传（与 workflow context 同源）
-                llm_call_budget=context.get("llm_call_budget"),
+                # C4-1：审查子预算 ≤35 次（⊂ v3.1 总预算 200）——超预算 fail-closed（不静默放行）
+                llm_call_budget=min(context.get("llm_call_budget", 200), 35),
                 deadline=context.get("_wall_deadline"),
                 # C1-3：Gate3 跨章结果首轮复用（避免重复静态检查）
                 precomputed_cross_chapter=context.get("gate3_consistency_issues"),

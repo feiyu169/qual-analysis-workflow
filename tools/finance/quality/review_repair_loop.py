@@ -25,6 +25,14 @@ from ..llm_errors import (
 logger = logging.getLogger(__name__)
 
 
+# C2-3：章节依赖图（{依赖章: [被依赖章]}）——章 A 依赖章 B，则 B 变化影响 A
+# ch0 概览依赖全部章节；ch10 决策依赖 1-9 分析章；其余章节无跨章依赖
+CHAPTER_DEPENDENCIES: dict[int, list[int]] = {
+    0: list(range(1, 11)),
+    10: list(range(1, 10)),
+}
+
+
 @dataclass
 class ReviewRepairResult:
     """审查修复结果"""
@@ -261,7 +269,19 @@ def review_and_repair_loop(
         if fixed_count > 0 and not _affected_chapters:
             # 修复计了数但内容未变（异常路径），保守全量
             _affected_chapters = set(chapters.keys())
-        logger.info(f"修复轮受影响章节: {sorted(_affected_chapters) if _affected_chapters else '无'}（C2-2 增量）")
+        # C2-3：受影响集传播——被修改章引用的章节也纳入（修 A 不遗漏引用 A 的 B）
+        if _affected_chapters:
+            try:
+                from .incremental_checker import IncrementalChecker
+                _affected_chapters = IncrementalChecker().get_affected_chapters(
+                    {str(c) for c in _affected_chapters},
+                    {str(k): [str(v) for v in vs] for k, vs in CHAPTER_DEPENDENCIES.items()},
+                )
+                _affected_chapters = {int(c) for c in _affected_chapters}
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"C2-3 受影响集传播失败（保守全量）: {e}")
+                _affected_chapters = set(chapters.keys())
+        logger.info(f"修复轮受影响章节: {sorted(_affected_chapters) if _affected_chapters else '无'}（C2-2/3 增量）")
 
         # 6. 单调守卫（v3.1 P0-A-3：先减后置零 + 原始签名集比较）
         # 修复后全量静态重审（只比较静态检查器，避免 LLM 噪声）

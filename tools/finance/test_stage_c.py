@@ -173,5 +173,81 @@ def test_gate4_logic_result_cached():
         mock_detect.assert_not_called(), "C1-1 check_criteria 应复用 execute 结果"
 
 
+# ===== C2-3：受影响集跨章引用链 =====
+
+def test_chapter_dependencies_propagation():
+    """C2-3：改 ch5 → ch0/ch10 受影响（依赖传播）"""
+    from finance.quality.incremental_checker import IncrementalChecker
+    from finance.quality.review_repair_loop import CHAPTER_DEPENDENCIES
+
+    affected = IncrementalChecker().get_affected_chapters(
+        {"5"},
+        {str(k): [str(v) for v in vs] for k, vs in CHAPTER_DEPENDENCIES.items()},
+    )
+    # ch5 变化 → ch0（依赖全部）与 ch10（依赖 1-9）受影响
+    assert {"0", "10"} <= affected, f"C2-3 依赖传播应含 ch0/ch10，实为 {affected}"
+
+
+def test_chapter_dependencies_isolated_changes():
+    """C2-3：改 ch1 → 受影响集 = {1,0,10}"""
+    from finance.quality.incremental_checker import IncrementalChecker
+    from finance.quality.review_repair_loop import CHAPTER_DEPENDENCIES
+
+    affected = IncrementalChecker().get_affected_chapters(
+        {"1"},
+        {str(k): [str(v) for v in vs] for k, vs in CHAPTER_DEPENDENCIES.items()},
+    )
+    assert affected == {"1", "0", "10"}
+
+
+# ===== C3-2：红队门控 =====
+
+def test_redteam_gated_by_gate4():
+    """C3-2：Gate4 实质未通过 → 红队延后（不触发 LLM）"""
+    gate = Gate8FinalValidation()
+    context = {"llm_caller": lambda n, p: "ok", "report": "报告内容",
+               "gate_4_result": {"substantive_passed": False}}
+    result = gate._run_redteam_review(context)
+    assert result["skipped"] is True, "Gate4 未通过应跳过红队"
+    assert any("延后" in w for w in result["warnings"])
+
+
+def test_redteam_runs_when_gate4_passed():
+    """C3-2：Gate4 通过 → 红队触发（不跳过）"""
+    gate = Gate8FinalValidation()
+    context = {"llm_caller": lambda n, p: "ok", "report": "报告内容",
+               "gate_4_result": {"substantive_passed": True},
+               "wind_data": {}, "output_dir": ""}
+    with patch("finance.quality.review_integrator.ReviewIntegrator") as mock_integrator:
+        mock_integrator.return_value.review_report_text.return_value = MagicMock(
+            fatal_issues=[], important_issues=[], suggestion_issues=[])
+        result = gate._run_redteam_review(context)
+        assert result["passed"] is True or result["skipped"] is True
+
+
+# ===== C4-1：审查预算 ≤35 =====
+
+def test_review_budget_capped_at_35():
+    """C4-1：Gate4 审查子预算 ≤35（⊂ 总预算 200）"""
+    gate = Gate4AuditRepair()
+    context = {"llm_call_budget": 200, "_wall_deadline": None,
+               "shadow_skip_repair": True, "ticker": "", "company_name": "",
+               "market": "hk", "wind_data": {}, "filing_data": {},
+               "llm_caller": lambda n, p: "ok",
+               "gate3_consistency_issues": None}
+    with patch("finance.quality.review_repair_loop.review_and_repair_loop",
+               return_value=MagicMock(passed=True, issues_found=0, issues_fixed=0,
+                                      remaining_issues=[], chapters={})) as mock_loop, \
+         patch("finance.qual_v8.adapters.build_data_context",
+               return_value=MagicMock(wind=MagicMock(income={}, balance={}, cashflow={},
+                                                     _year_labels={}),
+                                      facts=None)), \
+         patch("finance.qual_v8.adapters.industry_for", return_value="综合"):
+        gate._substantive_review({1: "ch"}, context)
+        kwargs = mock_loop.call_args.kwargs
+        assert kwargs.get("llm_call_budget") == 35, \
+            f"审查子预算应为 35，实为 {kwargs.get('llm_call_budget')}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

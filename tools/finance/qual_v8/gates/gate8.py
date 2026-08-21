@@ -301,6 +301,12 @@ class Gate8FinalValidation(GateBase):
             logger.info("Gate8: 无 llm_caller，跳过红队审查（确定性检查已覆盖）")
             return {"passed": True, "errors": [], "warnings": [], "skipped": True}
 
+        # C3-2：Gate4 实质审查通过后才触发红队（Gate4 未过 → 红队延后，避免重复审查投入）
+        g4 = context.get("gate_4_result") or {}
+        if not g4.get("substantive_passed", False):
+            logger.warning("Gate8: Gate4 实质审查未通过，红队延后（C3-2 门控）")
+            return {"passed": True, "errors": [], "warnings": ["Gate4 实质审查未通过，红队延后"], "skipped": True}
+
         report = context.get("report", "")
         if not report:
             logger.warning("Gate8: 报告为空，跳过红队审查")
@@ -404,6 +410,10 @@ class Gate8FinalValidation(GateBase):
             # 致命问题 → Gate8 FAIL（截取前 5 条描述）
             for issue in review_result.fatal_issues[:5]:
                 errors.append(f"红队致命: {issue.description[:150]}")
+            # C3-2：fatal 回流标注（Gate4 限 1 轮修复路径；报告显式标注不静默放行）
+            if errors:
+                context["redteam_fatal_reflow"] = True
+                context["redteam_fatal_count"] = len(errors)
             # 分批补审的致命问题（来自长报告后段）
             for bi in batch_issues[:5]:
                 errors.append(bi)  # noqa: PERF402
