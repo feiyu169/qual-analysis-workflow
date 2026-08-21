@@ -148,9 +148,11 @@ level_gates:
 
   L1_LITE:
     must_pass: ["static_analysis", "secret_scan"]
-    should_pass: []
+    should_pass: ["format_check"]
     optional: []
-    # 单文件小改（<100 行）——静态+密钥，<60s（无全量 pytest）
+    # 单文件小改（<100 行）——静态+密钥+格式（秒级），<60s（无全量 pytest）
+    # V3.4 ROI 提升⑤：format_check 进 L1_LITE——实测 0.19s 拦格式问题，
+    # 成本可忽略（L2 为拦它多花 2000s，ROI 极差；轻量级含它则秒级拦截）
 
   L1:
     must_pass: ["static_analysis", "unit_test", "secret_scan", "test_quality", "failure_log"]

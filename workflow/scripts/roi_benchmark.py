@@ -101,7 +101,12 @@ def count_escaped_defects(workdir: str, task: dict) -> int:
     任务定义 injected_defects: [{file, marker, present}]
     - marker 是缺陷代码的特征串（如 TODO 或错误模式）
     - 若缺陷仍存在于产物文件中 → 逃逸 +1
+
+    V3.4 ROI 提升⑤：expected_escape=true 的任务（如 SHOULD_PASS 门禁的
+    格式问题，拦截但不阻断）不计入逃逸——诚实反映门禁等级语义。
     """
+    if task.get("expected_escape"):
+        return 0  # 预期逃逸（门禁等级语义决定不阻断）
     escaped = 0
     for defect in task.get("injected_defects", []):
         path = os.path.join(workdir, defect["file"])
@@ -139,16 +144,20 @@ def _apply_fixes(task_wd: str, task: dict) -> int:
             continue
         with open(path, encoding="utf-8") as f:
             content = f.read()
-        if fix["marker"] in content:
-            # 幂等保护：replacement 已存在（或 marker 是 replacement 子串且
-            # replacement 已应用）→ 跳过，防 `flask`→`flask==3.0.3`→
-            # `flask==3.0.3==3.0.3` 无限膨胀（V3.4 ROI 提升④）
-            if fix["replacement"] in content:
-                fixed += 0  # 已修复，跳过
+        # 换行归一化：Windows 写文件是 CRLF，marker/replacement 用 \n——
+        # 不归一化则含换行的 marker 匹配失败（V3.4 ROI 提升⑤ 实验发现）
+        content_norm = content.replace("\r\n", "\n")
+        marker = fix["marker"]
+        replacement = fix["replacement"]
+        if marker in content_norm:
+            # 幂等保护：仅当 replacement 非空时才检查"已存在"——空 replacement
+            # （删除型修复）时跳过会误判（"" in content 恒 True，V3.4 ROI 提升⑤）
+            if replacement and replacement in content_norm:
                 continue
-            content = content.replace(fix["marker"], fix["replacement"], 1)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(content)
+            content_norm = content_norm.replace(marker, replacement, 1)
+            # 写回（保持平台换行）
+            with open(path, "w", encoding="utf-8", newline="") as f:
+                f.write(content_norm)
             fixed += 1
     return fixed
 
