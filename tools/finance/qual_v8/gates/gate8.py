@@ -84,6 +84,7 @@ class Gate8FinalValidation(GateBase):
 
         if not human_result["passed"]:
             errors.extend(human_result["errors"])
+        warnings.extend(human_result.get("warnings", []))
 
         # 4. 检查报告格式
         format_result = self._check_report_format(context)
@@ -291,17 +292,21 @@ class Gate8FinalValidation(GateBase):
         }
 
     def _request_human_confirmation(self, context: dict[str, Any]) -> dict[str, Any]:
-        """请求人工确认（保留自动化默认；可被调用方覆盖）"""
+        """请求人工确认（双专家 P1：默认 False——未显式注入人工确认时不得静默放行，
+        run 脚本显式传 human_confirmed=True 保持自动化；报告应标注复核状态）"""
         errors = []
+        warnings = []
 
-        human_confirmed = context.get("human_confirmed", True)
+        human_confirmed = context.get("human_confirmed", False)
 
         if not human_confirmed:
-            errors.append("人工未确认")
+            errors.append("人工未确认（报告未经人工复核，应标注）")
+            warnings.append("⚠️ 本报告未经人工复核——投资结论需人工审阅后再使用")
 
         return {
             "passed": len(errors) == 0,
             "errors": errors,
+            "warnings": warnings,
             "human_confirmed": human_confirmed,
         }
 
@@ -509,5 +514,8 @@ class Gate8FinalValidation(GateBase):
                 "suggestion": suggestion_count,
             }
         except Exception as e:
-            logger.error(f"Gate8 红队审查失败（非阻断）: {e}")
-            return {"passed": True, "errors": [], "warnings": [f"红队审查失败: {e}"]}
+            # 双专家 P1（2026-08-22）：红队失败改 fail-closed（原 passed=True 静默放行——
+            # 红队是 Gate8 最后一道独立审查，失败不得当作"通过"）
+            logger.error(f"Gate8 红队审查失败（fail-closed）: {e}")
+            return {"passed": False, "errors": [f"红队审查失败（fail-closed）: {e}"],
+                    "warnings": [], "fatal": 0, "important": 0, "suggestion": 0}

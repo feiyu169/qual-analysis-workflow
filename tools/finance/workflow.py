@@ -2695,6 +2695,15 @@ def run_analysis(
     # Step 2.5: DCF 参数提取 (v3 修复 B1+B4)
     # ==================================================
     dcf_params = None
+    # 双专家 P1（2026-08-22）：legacy 路径注入全局墙钟（与 v8 对齐 5400s）——
+    # Step 4.7 review loop 的 deadline 依赖它（防 legacy 死循环复发）
+    if not hasattr(ctx, "_wall_deadline") or getattr(ctx, "_wall_deadline", None) is None:
+        import time as _t
+        try:
+            ctx._wall_deadline = _t.monotonic() + 5400
+            ctx.llm_call_budget = 200
+        except Exception:  # noqa: BLE001
+            pass
     try:
         if ctx.wind is not None:
             # WindData → dict 转换
@@ -3093,6 +3102,8 @@ def run_analysis(
         logger.info(f"行业判定: {company_name} → {industry}（B4-3 动态）")
 
         # 执行审查修复循环
+        # 双专家 P1（2026-08-22）：补传预算/墙钟（legacy 路径此前无保护——
+        # 历史"Gate4 卡 6 小时"死循环风险在 legacy 路径可复发）
         review_result = review_and_repair_loop(
             chapters=chapters,
             ctx=ctx,
@@ -3100,6 +3111,8 @@ def run_analysis(
             wind_data=wind_data_for_check,
             max_rounds=3,
             industry=industry,
+            llm_call_budget=getattr(ctx, "llm_call_budget", 200),
+            deadline=getattr(ctx, "_wall_deadline", None),
         )
 
         logger.info(f"Step 4.7 审查修复循环完成: passed={review_result.passed}, rounds={review_result.rounds}")

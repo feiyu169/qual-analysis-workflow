@@ -113,6 +113,23 @@ def test_beta_explicit_degradation_not_silent():
     assert "调用方提供" in joined2, "应标注 β 来源"
 
 
+def test_resolve_financial_fiscal_year_aware():
+    """双专家 P1（2026-08-22）：resolve_financial_from_wind 按目标财年取值——
+    财务填充感知 fiscal_year（防财年标签与数值脱钩）"""
+    # FY2023 营收 = 306.7607（非最新 767.1974）
+    vals, ann = resolve_financial_from_wind(XPENG_WIND, fiscal_year=2023)
+    assert vals["revenue"] == pytest.approx(306.7607), "FY2023 营收应为 306.76"
+    assert vals["net_profit"] == pytest.approx(-103.7578), "FY2023 净利应为 -103.76"
+
+    # 不传财年 → 最新财年
+    vals_latest, _ = resolve_financial_from_wind(XPENG_WIND)
+    assert vals_latest["revenue"] == pytest.approx(767.1974), "默认取最新财年"
+
+    # 目标财年无标签 → 回退最新
+    vals_fallback, _ = resolve_financial_from_wind(XPENG_WIND, fiscal_year=2020)
+    assert vals_fallback["revenue"] == pytest.approx(767.1974), "未知财年回退最新"
+
+
 def test_missing_wind_returns_none_with_annotation():
     """Wind 缺 income/balance → 全部字段 None + 标注"""
     vals, annotations = resolve_financial_from_wind({})

@@ -267,6 +267,20 @@ class DataAnchor:
                 ctx_near = content[max(0, m.start() - 6):m.start()]
                 if re.search(r"(减少|增加|下降|上升|收缩|增长|降低|提高|缩小|扩大|变化|变动|跌幅|涨幅|下滑|回落|回升)$", ctx_near):
                     continue
+                # 双专家 P1（2026-08-22）：子公司/分部/口径限定词 → 排除（防 ADVC 误改
+                # 子公司数据——"子公司总资产31.63亿"命中 prefix_drop 会被错改成 1031.63，
+                # 且自证通过（自证只保证改后无错位值，不保证改对地方））
+                ctx_before_sub = content[max(0, m.start() - 10):m.start()]
+                if re.search(
+                    r"(子公司|子企业|旗下|分部|单独披露|单列|其中境外|境内|境外|"
+                    r"中国内地|中国大陆|香港子公司|集团合并|合并报表|非合并|"
+                    r"母公司|本集团|本公司单独)",
+                    ctx_before_sub + match_text,
+                ):
+                    logger.debug(
+                        f"ADVC 排除子公司/分部口径 span: {metric}={match_text[:40]}"
+                    )
+                    continue
                 try:
                     value = float(m.group(1))
                     unit = m.group(2)

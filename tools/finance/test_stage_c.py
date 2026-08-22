@@ -278,5 +278,43 @@ def test_data_anchor_singleton_content():
     _anchor_cache.clear()
 
 
+# ===== 双专家 P1：评级一致性检查不再空转 =====
+
+def test_gate5_valuation_has_dcf_value():
+    """双专家 P1（2026-08-22）：gate5 写入 dcf_value——gate6 评级一致性检查依赖它，
+    缺失会导致检查被 if dcf_value>0 静默跳过（评级铁律空转）"""
+    from finance.qual_v8.gates.gate5 import Gate5QualityEnhancement
+
+    g = Gate5QualityEnhancement()
+    ctx = {
+        "wind_data": {"income": {"年营业总收入": [300, 400, 700]},
+                      "balance": {}, "cashflow": {}},
+        "ticker": "9868.HK", "company_name": "小鹏集团-W",
+        "shares": 18.87, "current_price": 46.52,
+        "dcf_params": MagicMock(fcf=82.5, wacc=0.10, terminal_growth=0.03),
+    }
+    with patch.object(g, "check_criteria", return_value=True):
+        result = g._calculate_valuation(ctx)
+    val = result.get("valuation") or {}
+    assert "dcf_value" in val, "valuation 必须含 dcf_value（否则 gate6 空转）"
+    assert val["dcf_value"] and val["dcf_value"] > 0, "dcf_value 应为正"
+
+
+def test_gate6_rating_consistency_triggers():
+    """双专家 P1：gate6 评级一致性检查在 dcf_value 存在时真实触发
+    （买入评级但 DCF 无低估 → 报错，不再静默通过）"""
+    from finance.qual_v8.gates.gate6 import Gate6Conclusion
+
+    g = Gate6Conclusion()
+    chapters = {10: "投资评级：买入"}  # 买入要求低估≥30%
+    ctx = {
+        "valuation": {"dcf_value": 40.0},  # vs current_price 46.52 → 低估13.9% < 30%
+        "current_price": 46.52,
+    }
+    r = g._check_rating_valuation_consistency(chapters, ctx)
+    assert not r["passed"], "买入评级但 DCF 低估<30% 应被拦截（评级铁律真实执行）"
+    assert any("低估" in e for e in r["errors"]), "错误应说明低估不足"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

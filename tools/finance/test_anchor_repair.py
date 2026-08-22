@@ -116,5 +116,21 @@ def test_sweep_all_chapters():
     assert "-11.3946" in fixed[3]
 
 
+def test_subsidiary_scope_not_auto_fixed():
+    """双专家 P1（2026-08-22）：子公司/分部口径的数值不得被 ADVC 自动修复——
+    "子公司总资产31.63亿"是真实子公司数据（非错位），排除限定词防误改"""
+    # 母公司口径（正常错位）→ 仍修复
+    content_parent = "公司总资产31.63亿元，规模扩大。"
+    r_parent = repair_chapter_values(6, content_parent, _anchor())
+    assert r_parent.fixes, "母公司口径错位应修复"
+
+    # 子公司口径（限定词）→ 排除，不修复
+    for scope in ("子公司", "旗下", "分部", "境内"):
+        content_sub = f"{scope}总资产31.63亿元，规模扩大。"
+        r_sub = repair_chapter_values(6, content_sub, _anchor())
+        assert not r_sub.fixes, f"[{scope}] 子公司/分部口径不得自动修复（防误改）"
+        assert r_sub.content == content_sub, f"[{scope}] 内容不得被改动"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

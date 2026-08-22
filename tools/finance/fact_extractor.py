@@ -778,7 +778,10 @@ def extract_facts(
     # 5. B2b-1：财务 100% Wind——从 Wind 处置表填充 financial（有源/派生/未披露）
     if wind_data:
         from .wind_field_disposition import resolve_financial_from_wind
-        fin_values, fin_annotations = resolve_financial_from_wind(wind_data)
+        # 双专家 P1：按 facts.fiscal_year 取对应财年值（防财年标签与数值脱钩——
+        # facts.fiscal_year 可能来自 filing 元数据，非 Wind 最新财年）
+        fy = facts.fiscal_year if facts.fiscal_year else None
+        fin_values, fin_annotations = resolve_financial_from_wind(wind_data, fiscal_year=fy)
         for field, val in fin_values.items():
             if hasattr(facts.financial, field):
                 setattr(facts.financial, field, val)
@@ -795,6 +798,19 @@ def extract_facts(
     facts.meta.warnings.extend(chain_violations)
     if chain_violations:
         facts.meta.warnings.append("⚠️ 运营数据存在结构性铁律冲突（B4-1），相关数字需人工复核")
+
+    # 双专家 P1（2026-08-22）：运营字段（DAU/GMV/ARPU/LTV/CAC）无 Wind 锚点——
+    # LLM 提取+启发式修正后直达报告，幻觉可传导至单位经济分析。
+    # 显式标注"未经锚点校验"（不静默，投资者可识别运营数据可信度边界）。
+    if getattr(facts, "operational", None) is not None and any(
+        getattr(facts.operational, f, None) is not None
+        for f in ("dau", "mau", "arpu", "gmv", "ltv", "cac", "paying_users")
+        if hasattr(facts.operational, f)
+    ):
+        facts.meta.warnings.append(
+            "⚠️ 运营数据（DAU/GMV/ARPU/LTV/CAC 等）未经 Wind 锚点校验——"
+            "来源为 LLM 提取+范围校验，仅供方向参考，投资结论勿单独依赖"
+        )
 
     logger.info(
         f"事实提取完成: {llm_calls} 次调用, "

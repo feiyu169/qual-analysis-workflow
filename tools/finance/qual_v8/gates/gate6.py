@@ -253,9 +253,12 @@ class Gate6Conclusion(GateBase):
         current_price = context.get("current_price", 0)
 
         if rating and valuation and current_price > 0:
-            # 计算估值偏差
-            dcf_value = valuation.dcf_value if hasattr(valuation, 'dcf_value') else 0
-            if dcf_value > 0:
+            # 双专家 P1：valuation 可能是 dict（gate5 写入）或对象——兼容读取 dcf_value
+            if isinstance(valuation, dict):
+                dcf_value = valuation.get("dcf_value") or 0
+            else:
+                dcf_value = valuation.dcf_value if hasattr(valuation, 'dcf_value') else 0
+            if dcf_value and dcf_value > 0:
                 deviation = (dcf_value - current_price) / current_price
 
                 # 检查评级与估值是否一致

@@ -441,15 +441,20 @@ class QualWorkflow:
                 logger.warning(f"quick 报告组装失败: {e}")
 
         # v3.1 P0-B-3d：失败报告打"未修复"标记（shadow 语义：显式标注而非静默产出）
+        # 双专家 P1（2026-08-22）：标注从 HTML 注释改为**报告头部可见** markdown 块——
+        # 原 <!-- --> 渲染后不可见，读者看不到"报告未经完整验证"
         _all_passed = all(r["passed"] for r in results.values())
         if not _all_passed:
             _failed = [g for g, r in results.items() if not r["passed"]]
             _marker = (
-                f"\n\n<!-- ⚠️ 质量状态：本报告由 {qual_mode} 模式产出，"
-                f"以下 Gate 未通过：{_failed}。部分章节可能未完成审查/修复，"
-                f"数字未经最终验证。 -->\n"
+                f"\n\n> ⚠️ **质量受限声明**：本报告由 **{qual_mode}** 模式产出，"
+                f"以下 Gate 未通过：{_failed}。\n"
+                f"> 部分章节可能未完成审查/修复，数字未经最终验证。"
+                f"投资结论需人工复核后再使用。\n"
             )
-            context["report"] = (context.get("report") or "") + _marker
+            # 插入报告头部（可见），而非追加文末 HTML 注释
+            _report = context.get("report") or ""
+            context["report"] = _marker + "\n" + _report
             context["quality_degraded"] = True
 
         # 转换工作流状态

@@ -146,6 +146,23 @@ class Gate5QualityEnhancement(GateBase):
                 "ps_ttm": getattr(base_val, "ps_ttm", None),
                 "market_cap": getattr(base_val, "market_cap", None),
             }
+            # 双专家 P1（2026-08-22）：补 dcf_value——gate6 评级一致性检查依赖它，
+            # 缺失导致 "if dcf_value > 0" 静默跳过（评级铁律空转）。
+            # 简化 DCF：per-share = Σ FCF/(1+wacc)^n + TV/(1+wacc)^N 的每股值（近似）。
+            try:
+                _dcf_p = context.get("dcf_params")
+                _shares = context.get("shares")
+                if _dcf_p is not None and _shares:
+                    _fcf = getattr(_dcf_p, "fcf", None) or 0
+                    _wacc = getattr(_dcf_p, "wacc", 0.10) or 0.10
+                    _g = getattr(_dcf_p, "terminal_growth", 0.03) or 0.03
+                    if _fcf and _wacc > _g and _shares > 0:
+                        # 简化永续增长 DCF：V = FCF1/(wacc-g)，per-share = V/shares
+                        dcf_value = (_fcf / (_wacc - _g)) / _shares
+                        valuation["dcf_value"] = round(dcf_value, 2)
+                        logger.info(f"Gate5 DCF per-share: {dcf_value:.2f}（简化永续模型）")
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Gate5 DCF per-share 计算失败（非阻断）: {e}")
             context["valuation"] = valuation
 
             # 估值偏差范围检查

@@ -51,8 +51,15 @@ FINANCIAL_FIELD_DISPOSITION: dict[str, dict] = {
 }
 
 
-def resolve_financial_from_wind(wind_data: dict) -> tuple[dict, list[str]]:
+def resolve_financial_from_wind(wind_data: dict,
+                                fiscal_year: int | None = None) -> tuple[dict, list[str]]:
     """按处置表从 Wind 解析全部 FinancialFacts 字段。
+
+    Args:
+        wind_data: Wind 三表 dict
+        fiscal_year: 目标财年（双专家 P1：facts.fiscal_year 可能来自 filing 元数据，
+                    与 Wind 最新财年不同——按目标财年取值防财年标签与数值脱钩；
+                    None=取最新财年）
 
     Returns:
         (字段值 dict {field: float|None}, 标注列表)
@@ -62,11 +69,19 @@ def resolve_financial_from_wind(wind_data: dict) -> tuple[dict, list[str]]:
     values: dict = {}
     annotations: list[str] = []
 
+    def _pick(series, fy: int | None):
+        """按财年取序列值：fy 在 labels 中 → 对应值；否则取最新"""
+        if not series or not isinstance(series, list) or not series:
+            return None
+        if fy is not None:
+            labels = ((wind_data or {}).get("_year_labels") or {}).get("财年") or []
+            for i, lab in enumerate(labels):
+                if lab == fy and i < len(series):
+                    return series[i]
+        return series[-1]
+
     def _latest(canonical: str):
-        series = get_series(wind_data, canonical)
-        if series and isinstance(series, list) and series:
-            return series[-1]
-        return None
+        return _pick(get_series(wind_data, canonical), fiscal_year)
 
     for field, disp in FINANCIAL_FIELD_DISPOSITION.items():
         kind = disp["kind"]
