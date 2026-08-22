@@ -176,10 +176,18 @@ class Gate8FinalValidation(GateBase):
                 )
             # PGNB（docs/qual-pgnb-architecture.md）：终局占位符回填（防 LLM 占位符逃逸到报告）
             try:
-                from ..numeric_binder import bind_bare_numbers, bind_placeholders
+                from ..numeric_binder import bind_bare_numbers, bind_fuzzy_dates, bind_placeholders
                 _anchor = get_data_anchor(wind_data)
                 for _ch_num in list(chapters.keys()):
                     _ch_content = chapters.get(_ch_num, "")
+                    # 日期语义终局绑定（阶段 2）：残留模糊时间词→FY 标注
+                    _ch_content, _date_fixes = bind_fuzzy_dates(
+                        _ch_content, wind_data, _ch_num,
+                    )
+                    if _date_fixes:
+                        logger.info(
+                            f"Gate8 日期语义绑定 第{_ch_num}章 {len(_date_fixes)} 处"
+                        )
                     # PGNB v4（2026-08-22）：终局裸数字程序替换——审查修复循环回滚后
                     # 残留的幻觉数字（第6章归母净资产=59.6 等）在此一次性替换为锚点值
                     _ch_content, _bbn_fixes = bind_bare_numbers(

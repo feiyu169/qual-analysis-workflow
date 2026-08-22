@@ -1279,6 +1279,22 @@ def _generate_chapter(
                         f"（digit_typo，不阻断）"
                     )
 
+                # 阶段 2（2026-08-22）：日期语义程序绑定——财务语境"当前/目前/近期"
+                # → "FY{latest_fy}"；非财务语境（宏观/行业/政策）豁免。
+                # 在单调性守卫前运行，减少日期锚点检查失败导致的无效回滚。
+                try:
+                    from .qual_v8.numeric_binder import bind_fuzzy_dates as _bfd
+                    _wind_dict4 = _wind_to_dict(ctx.wind) if ctx.wind else {}
+                    if _wind_dict4:
+                        content, _bfd_fixes = _bfd(content, _wind_dict4, chapter_num)
+                        if _bfd_fixes:
+                            logger.info(
+                                f"{chapter_name} 日期语义绑定 {len(_bfd_fixes)} 处"
+                                f"（模糊时间词→FY 标注）"
+                            )
+                except Exception as e:
+                    logger.warning(f"日期语义绑定失败（非阻断）: {e}")
+
                 # PGNB 升级③（2026-08-22 实测驱动）：裸数字程序绑定——LLM 未用占位符
                 # 直接写财务数字 → 程序替换为占位符（随后 bind_placeholders 按锚点回填）。
                 # 目的：拦截后不再依赖 LLM 重写（重试引导"删数字"→ 空壳章死循环）；

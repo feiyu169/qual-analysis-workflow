@@ -14,6 +14,7 @@ import pytest
 from finance.qual_v8.data_anchor import _anchor_cache, get_data_anchor
 from finance.qual_v8.numeric_binder import (
     bind_bare_numbers,
+    bind_fuzzy_dates,
     bind_placeholders,
     validate_bare_numbers,
 )
@@ -315,6 +316,52 @@ def test_bind_bare_numbers_capex_no_anchor():
     bound, fixes = bind_bare_numbers(content, _anchor(), 6)
     assert not fixes, f"无锚点指标不应替换: {fixes}"
     assert "85" in bound
+
+
+# ====================================================================
+# 阶段 2：日期语义治理——bind_fuzzy_dates 上下文感知
+# ====================================================================
+
+def test_bind_fuzzy_dates_financial_context():
+    """阶段 2：财务语境"当前营收" → "FY2025 营收"（上下文含财务关键词）"""
+    content = "当前营收增长强劲，归因于新车型放量。"
+    bound, fixes = bind_fuzzy_dates(content, XPENG_WIND, 5)
+    assert fixes, f"财务语境应触发替换: {fixes}"
+    assert "FY2025" in bound, f"应替换为 FY2025: {bound}"
+    assert "当前" not in bound
+
+
+def test_bind_fuzzy_dates_non_financial_exempt():
+    """阶段 2：非财务语境"当前宏观环境" → 保留（豁免）"""
+    content = "当前宏观环境面临不确定性，行业竞争加剧。"
+    bound, fixes = bind_fuzzy_dates(content, XPENG_WIND, 5)
+    assert not fixes, f"非财务语境不应替换: {fixes}"
+    assert "当前" in bound
+
+
+def test_bind_fuzzy_dates_no_wind_data():
+    """阶段 2：无 Wind 数据 → 保留原文"""
+    content = "当前业绩表现亮眼。"
+    bound, fixes = bind_fuzzy_dates(content, {}, 5)
+    assert not fixes
+    assert bound == content
+
+
+def test_bind_fuzzy_dates_mixed_context():
+    """阶段 2：混合语境——财务部分替换，非财务保留"""
+    content = "当前营收767亿元创历史新高，但当前行业竞争日趋激烈。"
+    bound, fixes = bind_fuzzy_dates(content, XPENG_WIND, 5)
+    assert len(fixes) == 1, f"应只替换财务语境的'当前': {fixes}"
+    assert "FY2025" in bound
+    assert "当前行业" in bound  # 非财务语境保留
+
+
+def test_bind_fuzzy_dates_recently():
+    """阶段 2："近年来"在财务语境 → 替换"""
+    content = "近年来净利润持续改善，亏损收窄趋势明确。"
+    bound, fixes = bind_fuzzy_dates(content, XPENG_WIND, 5)
+    assert fixes, f"财务语境'近年来'应替换: {fixes}"
+    assert "FY2025" in bound
 
 
 if __name__ == "__main__":

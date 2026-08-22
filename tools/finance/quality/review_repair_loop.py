@@ -617,6 +617,21 @@ def _repair_chapters(
                 logger.info(
                     f"ADVC sweep: {len(_advc_hints)} 处弱签名（digit_typo）仅提示不阻断"
                 )
+            # 日期语义绑定（阶段 2）：审查修复循环中 LLM patch 可能引入"当前/目前"
+            # 模糊时间词 → 日期锚点检查失败 → 单调性守卫回滚 → 死循环。
+            # 在 patch 前运行 bind_fuzzy_dates（上下文感知：仅财务语境替换）。
+            try:
+                from ..qual_v8.numeric_binder import bind_fuzzy_dates
+                for _ch_num in list(chapters.keys()):
+                    _ch_content = chapters.get(_ch_num, "")
+                    _bound, _fixes = bind_fuzzy_dates(_ch_content, wind_data, _ch_num)
+                    if _fixes:
+                        chapters[_ch_num] = _bound
+                        logger.info(
+                            f"日期语义绑定 第{_ch_num}章 {len(_fixes)} 处"
+                        )
+            except Exception as _e:  # noqa: BLE001
+                logger.warning(f"日期语义绑定失败（非阻断）: {_e}")
             # PGNB（docs/qual-pgnb-architecture.md）：占位符回填——修复后 LLM 可能写占位符
             try:
                 from ..qual_v8.numeric_binder import bind_placeholders

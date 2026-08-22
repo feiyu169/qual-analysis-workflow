@@ -161,6 +161,91 @@ def bind_placeholders(content: str, anchor, chapter_num: int,
 
 
 # ====================================================================
+# 阶段 2：日期语义治理——bind_fuzzy_dates（上下文感知，2026-08-22）
+# ====================================================================
+
+# 财务业绩语境词——出现这些词时"当前/目前/近期"才触发替换
+_FINANCIAL_CONTEXT_WORDS = [
+    "营收", "收入", "利润", "净利", "亏损", "盈利", "毛利", "营业",
+    "资产", "负债", "权益", "现金流", "ROE", "ROIC", "EBITDA",
+    "交付", "销量", "出货", "用户", "MAU", "DAU", "GMV", "ARPU",
+    "业绩", "财务", "经营", "增长", "下降", "同比", "环比", "改善",
+    "表现", "数据", "指标", "规模", "水平", "趋势",
+]
+
+# 非财务语境词——出现这些词时豁免（"当前宏观环境"不能改）
+_NON_FINANCIAL_EXEMPT = [
+    "宏观", "行业", "市场", "政策", "监管", "竞争", "格局", "环境",
+    "前景", "预期", "展望", "情绪", "信心", "氛围",
+]
+
+# 模糊时间词 pattern（长匹配优先：近年来→近年，今年以来→今年）
+_FUZZY_DATE_RE = re.compile(r"(当前|目前|近期|近年来|近年|今年以来)")
+
+
+def bind_fuzzy_dates(
+    content: str,
+    wind_data: dict,
+    chapter_num: int,
+) -> tuple[str, list[str]]:
+    """日期语义程序绑定（方案 A，heavyskill 审查通过）：财务业绩语境中的
+    "当前/目前/近期" → "FY{latest_fy}"；非财务语境（宏观/行业/政策等）豁免。
+
+    执行位置：Gate3 生成后 / patch 后 / Gate8 终局前（单调性守卫前运行减少无效回滚）。
+
+    Args:
+        content: 章节内容
+        wind_data: Wind 数据（含 _year_labels）
+        chapter_num: 章节号
+
+    Returns:
+        (替换后内容, 替换记录列表)
+    """
+    if not content or not wind_data:
+        return content, []
+
+    labels = (wind_data.get("_year_labels") or {}).get("财年") or []
+    if not labels:
+        return content, []
+    latest_fy = labels[-1]
+    replacement = f"FY{latest_fy}"
+
+    fixes: list[str] = []
+
+    def _repl(m: re.Match) -> str:
+        word = m.group(1)
+        pos = m.start()
+        # 上下文窗口：前 30 字符 + 后到下一个句号/逗号（避免跨句污染）
+        ctx_before = content[max(0, pos - 30):pos]
+        end_search = min(len(content), pos + len(word) + 60)
+        ctx_after_raw = content[pos + len(word):end_search]
+        # 截断到最近的句号/逗号/分号（找最小 idx，不是第一个匹配的 sep）
+        min_idx = len(ctx_after_raw)
+        for sep in ("。", "，", "；", ".", ",", ";"):
+            idx = ctx_after_raw.find(sep)
+            if 0 <= idx < min_idx:
+                min_idx = idx
+        if min_idx < len(ctx_after_raw):
+            ctx_after_raw = ctx_after_raw[:min_idx]
+        ctx_full = ctx_before + word + ctx_after_raw
+
+        # 非财务语境豁免
+        if any(kw in ctx_full for kw in _NON_FINANCIAL_EXEMPT):
+            return word
+
+        # 财务业绩语境——必须有至少一个财务关键词
+        if any(kw in ctx_full for kw in _FINANCIAL_CONTEXT_WORDS):
+            fixes.append(f"'{word}' → '{replacement}'（财务语境，第{chapter_num}章）")
+            return replacement
+
+        # 无法判断语境→保留原文（宁可不改不误改）
+        return word
+
+    new_content = _FUZZY_DATE_RE.sub(_repl, content)
+    return new_content, fixes
+
+
+# ====================================================================
 # heavyskill 升级③：裸数字程序绑定（2026-08-22 实测驱动——拦截即替换，零 LLM 重写依赖）
 # ====================================================================
 
