@@ -4,6 +4,10 @@
 > HeavySkill K=8 多轨迹评审 + 审议（交叉验证双专家结论并纠错）
 > 评审维度：简洁性 / 有效性 / 数据一致性 + 多轮真实 E2E 测试问题根治评估
 > 评分汇总：**代码专家 6.5/10 → 投资专家 6.0/10 → HeavySkill 综合 5.5/10**
+>
+> **修复状态（2026-08-22 同日实施完成，commit d19615b/c232baf/ce28482）**：
+> P0 七项 + P1 六项 + P2 六项全部落地，测试 416 passed + 32 skipped（新增 10 个回归测试），
+> 聚合入口 258 passed。详见 §八 实施记录。
 
 ---
 
@@ -126,3 +130,45 @@
 | 本报告 | 三方综合 + 最终修复清单 |
 
 **一句话结论**：qual 的"数据真实性"防线（Wind 唯一源 + ADVC + 财年归因）已是生产级水准，但"投资结论"防线（估值参数、评级映射、过程诚信）仍有 4 个 P0 硬伤 + 1 个 P1 审查完整性漏洞；当前输出定位应为"数据可信、结论需人工复核"的研究草稿，修复 P0 七项后可升级为可落仓的买方报告。
+
+---
+
+## 八、P0/P1/P2 实施记录（2026-08-22 同日完成）
+
+### P0 七项（commit d19615b）
+| 项 | 修复内容 | 验证 |
+|----|---------|------|
+| P0-1 review_incomplete 静默通过 | review_repair_loop passed 分支加 `not review_incomplete`；Gate4 显式读取 + passed 强制 | test_review_incomplete_fail_closed |
+| P0-2 T9-T14 硬编码阅文值 | 改从 ctx.wind 真实取值（营收/净利/ROIC），无源跳过不硬编码 | 32 passed |
+| P0-3 毛利率=营业利润率 | gross_margin 改 unavailable（Wind 无列→未披露），禁用营业利润率顶替 | test_gross_margin_not_masqueraded |
+| P0-4 净负债启发式 | 弃用总负债近似+×0.3，net_debt=None + 显式标注 | test_net_debt_no_heuristic_backfill |
+| P0-5 β=1.2 硬编码 | 支持调用方传 β；无源显式降级标注 + 敏感性提示 | test_beta_explicit_degradation |
+| P0-6 可比写死含迪士尼 | 移除迪士尼；静态池标 static_snapshot=True；格式输出标注 | test_comparables_no_disney |
+
+### P1 六项（commit c232baf）
+| 项 | 修复内容 | 验证 |
+|----|---------|------|
+| P1-1 ADVC 误改子公司 | extract_data_spans 排除子公司/分部/旗下/境内等限定词 span | test_subsidiary_scope_not_auto_fixed |
+| P1-2 fact_extractor 财年脱钩 | resolve_financial_from_wind 支持 fiscal_year 参数，按目标财年取值 | test_resolve_financial_fiscal_year_aware |
+| P1-3 评级一致性空转 | gate5 写 dcf_value（简化永续 DCF）；gate6 dict/对象兼容读取 | test_gate5_valuation_has_dcf_value |
+| P1-4 legacy 无预算墙钟 | run_analysis 注入 _wall_deadline/llm_call_budget；Step 4.7 补传 | 动态属性验证 |
+| P1-5 pct/运营无锚点 | 运营字段（DAU/GMV/ARPU）报告显式标注"未经锚点校验" | 12 passed |
+| P1-6 流程防护弱化 | 人工确认默认 False+标注；质量标注改头部可见；红队 fail-closed | 46 passed |
+
+### P2 六项（commit ce28482）
+| 项 | 修复内容 |
+|----|---------|
+| P2-4 财年校验异常被吞 | validate_fiscal_references 异常→显式记 issues（不静默） |
+| P2-5 汇率 0.92 | exchange_rate=None 时默认+显式标注 ±8-10% 偏差 |
+| P2-3 Wind 验 Wind 退化 | _check_value_deviation 增运营一致性抽检（DAU×ARPU vs 营收、GMV vs 营收） |
+| P2-2 声称数字 | PROJECT_RECORD 修正为实测 416+32（448） |
+| P2-6 SOTP 未接入 | compute_full_valuation docstring 显式标注未接入（不声称 SOTP 结果） |
+| P2-1 架构收敛 | 删死 HAS_CIRCUIT_BREAKER/HAS_STAGE_MANAGER；v3/__init__ 补聚合导出；run_analysis 标 deprecated |
+
+### 修复后门禁验证
+- `pytest tools/finance`：**416 passed + 32 skipped**（新增 10 回归测试，0 失败）
+- `pytest tests/`（HGF 聚合）：**258 passed + 17 skipped**
+- ModuleLoader 启动自检：PASS
+- ruff：改动文件仅剩预先存在的历史 lint（E501/PERF/B007），无新增
+
+**遗留（诚实标注）**：32 个 SKIP 测试（hermes 契约未迁移，已显式标注）；架构收敛为持续过程（三路径→v8 迁移未完成，run_analysis 已标 deprecated）；审计日志/监控探针未做网络 L3 实测。
