@@ -51,20 +51,30 @@ def _default_base_url() -> str:
 
 
 def _call_bridge(payload: dict, base_url: str, timeout: int) -> dict:
+    """调用 llm-bridge（带 socket 级超时——urlopen timeout 对流式响应不保证，
+    宿主 LLM 流中断会无限挂起；用 socket.setdefaulttimeout 兜底防长挂）"""
+    import socket as _socket
     req = urllib.request.Request(
         base_url.rstrip("/") + "/api/llm-bridge",
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode("utf-8"))
+    # 双专家 P2（2026-08-22）：socket 级超时兜底——urlopen 的 timeout 对已开始
+    # 的流式响应不生效（读超时），宿主 LLM 流中断会无限挂起（实测 run 卡 8 分钟）
+    old_timeout = _socket.getdefaulttimeout()
+    _socket.setdefaulttimeout(timeout)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8"))
+    finally:
+        _socket.setdefaulttimeout(old_timeout)
 
 
 def create_harness_caller(
     base_url: str = None,
     model: str = None,
     provider: str = None,
-    timeout: int = 300,
+    timeout: int = 120,
     max_retries: int = 2,
     temperature: float = 0.2,
     max_tokens: int = 12000,
