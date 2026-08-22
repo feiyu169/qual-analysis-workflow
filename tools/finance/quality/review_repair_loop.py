@@ -766,6 +766,44 @@ def _repair_chapters(
                 validators=[_structural, _consistency, _numeric],
             )
 
+            # PGNB v4（2026-08-22）：patch 应用后、校验前——程序替换 patch 引入的
+            # 幻觉数字为锚点值（LLM patch 写"营业利润=-55.2"→ 程序替换为 [{{营业利润}}]
+            # 并回填 -44.16）。根因：LLM patch 数字写错 → 校验失败 → 整轮回滚 →
+            # 原文幻觉残留 → 下轮重复 → 审查修复层死循环（第5/6/7章实测）。
+            if result.ok and result.applied and wind_data:
+                try:
+                    from ..qual_v8.data_anchor import get_data_anchor as _gd_r
+                    from ..qual_v8.numeric_binder import (
+                        bind_bare_numbers as _bbn_r,
+                        bind_placeholders as _bind_r,
+                    )
+                    _anchor_r = _gd_r(wind_data)
+                    _patched_content, _bbn_fixes_r = _bbn_r(
+                        result.content, _anchor_r, ch_num,
+                    )
+                    if _bbn_fixes_r:
+                        _patched_content, _unres_r = _bind_r(
+                            _patched_content, _anchor_r, ch_num,
+                        )
+                        if _patched_content != result.content:
+                            result.content = _patched_content
+                            logger.info(
+                                f"第{ch_num}章 PGNB 程序替换 {len(_bbn_fixes_r)} 处"
+                                f"patch 数字为锚点值（零 LLM 重写）"
+                            )
+                            # 替换后重跑数字锚点校验（保证校验闭环一致性）
+                            _errs_after = _anchor_r.validate_chapter_any_fy(ch_num, _patched_content)
+                            if _errs_after:
+                                logger.warning(
+                                    f"第{ch_num}章 PGNB 替换后仍有数字问题: {_errs_after[:2]}"
+                                )
+                            else:
+                                result.ok = True
+                                result.rollback = False
+                                result.validation = {"passed": True, "issues": []}
+                except Exception as _e:  # noqa: BLE001
+                    logger.warning(f"第{ch_num}章 PGNB patch 兜底失败（非阻断）: {_e}")
+
             if result.ok and result.applied:
                 chapters[ch_num] = result.content
                 fixed_count += 1

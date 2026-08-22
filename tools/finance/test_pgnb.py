@@ -28,6 +28,7 @@ XPENG_WIND = {
         "总资产": [841.6254, 827.0611, 1031.6263],
         "年负债合计": [478.3401, 514.3132, 727.9404],
         "年所有者权益合计": [363.2853, 312.7479, 303.6859],
+        "归母净资产": [363.2853, 312.7479, 303.6859],
     },
     "cashflow": {"经营活动现金流量净额": [9.5616, -20.1234, 82.5853]},
     "_year_labels": {"财年": [2023, 2024, 2025]},
@@ -294,6 +295,26 @@ def test_bind_bare_numbers_end_to_end_no_empty_chapter():
     bound2, unresolved = bind_placeholders(bound, _anchor(), 5)
     assert not unresolved
     assert not _anchor().validate_chapter_any_fy(5, bound2), "回填后必须零错误"
+
+
+def test_bind_bare_numbers_equity_hallucination():
+    """v4：归母净资产幻觉（59.6 vs 锚点 303.69）→ 替换（regex 补全：2026-08-22
+    第6章该指标因 regex 缺项未被拦截的回归用例）"""
+    content = "归母净资产=59.6亿元，同比下降。"
+    bound, fixes = bind_bare_numbers(content, _anchor(), 6)
+    assert fixes, f"归母净资产幻觉必须被替换: {fixes}"
+    assert "归母净资产=[{{归母净资产}}]" in bound, f"应替换为占位符: {bound}"
+    bound2, _ = bind_placeholders(bound, _anchor(), 6)
+    assert "FY2025 303.69" in bound2, f"应回填锚点值: {bound2}"
+    assert not _anchor().validate_chapter_any_fy(6, bound2), "回填后必须通过校验器"
+
+
+def test_bind_bare_numbers_capex_no_anchor():
+    """v4：购建固定资产（Wind 无该列→无锚点）→ 保留原文（不猜测）"""
+    content = "购建固定资产、无形资产和其他长期资产支付的现金约85亿元。"
+    bound, fixes = bind_bare_numbers(content, _anchor(), 6)
+    assert not fixes, f"无锚点指标不应替换: {fixes}"
+    assert "85" in bound
 
 
 if __name__ == "__main__":
