@@ -292,8 +292,15 @@ class Gate4AuditRepair(GateBase):
                 for issue in (result.remaining_issues or [])[:5]:
                     errors.append(f"审查未修复: {issue}")
 
+            # 双专家 P0：显式检查 review_incomplete（审查链不完整 → fail-closed，
+            # 即使 passed 为 True 也不得放行——防御性双保险）
+            if getattr(result, "review_incomplete", False):
+                errors.append(
+                    "实质审查不完整（部分检查器异常），按 fail-closed 判定失败"
+                )
+
             return {
-                "passed": result.passed,
+                "passed": result.passed and not getattr(result, "review_incomplete", False),
                 "errors": errors,
                 "issues_found": getattr(result, "issues_found", 0),
                 "issues_fixed": getattr(result, "issues_fixed", 0),

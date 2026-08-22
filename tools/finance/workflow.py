@@ -2137,7 +2137,8 @@ def _assemble_report(
 # DCF 参数提取
 # ====================================================================
 
-def extract_dcf_params(wind_data: dict, shares: float = None) -> dict:
+def extract_dcf_params(wind_data: dict, shares: float = None,
+                       beta: float | None = None) -> dict:
     """从 Wind 数据自动提取 DCF 参数 (v3: 字段名对齐 Wind 实际返回)
 
     Args:
@@ -2146,6 +2147,8 @@ def extract_dcf_params(wind_data: dict, shares: float = None) -> dict:
         shares: 总股本（亿股），可选。
                 如未提供，使用默认值 1 并发出 warning。
                 Agent 层应从财报原文、wind_stock_quote 等途径获取后传入。
+        beta: 个股 Beta（可选，双专家 P0：Wind MCP 不返回个股 β，
+              由调用方（Agent 层）从行情/可比提供；无源走显式降级标注而非静默 1.2）
 
     Returns:
         {fcf_base, growth_rate, wacc, terminal_growth, net_debt, shares, warnings}
@@ -2234,9 +2237,21 @@ def extract_dcf_params(wind_data: dict, shares: float = None) -> dict:
 
     # CAPM参数
     rf = 0.023  # 无风险利率（10年期国债）
-    beta = 1.2  # Beta系数
     erp = 0.055  # 股权风险溢价
-    cost_of_equity = rf + beta * erp  # 0.089 = 8.9%
+    # 双专家 P0（2026-08-22）：β 不再静默硬编码 1.2——Wind MCP 不返回个股 β，
+    # 由调用方（Agent 层）传入；无源时显式降级标注（"β=1.2 为默认假设"）+ 记入 warnings，
+    # 下游必须做敏感性分析（β 是 DCF 敏感性最高的输入之一）
+    if beta is not None and beta > 0:
+        beta_used = float(beta)
+        warnings.append(f"β 由调用方提供: {beta_used}")
+    else:
+        beta_used = 1.2
+        warnings.append(
+            "⚠️ β 无源（Wind MCP 不返回个股 β），使用默认假设 β=1.2——"
+            "对高波动股会系统性低估 Ke/WACC、高估 DCF 估值；"
+            "必须做 β 敏感性分析（建议 0.8-2.0 区间）或由调用方提供真实 β"
+        )
+    cost_of_equity = rf + beta_used * erp  # 8.9%（β=1.2 时）
 
     cost_of_debt = 0.05  # 债务成本
     tax_rate = 0.25  # 税率
@@ -2251,18 +2266,16 @@ def extract_dcf_params(wind_data: dict, shares: float = None) -> dict:
         warnings.append(f"WACC 使用CAPM计算：Ke={cost_of_equity:.1%}, Kd={cost_of_debt:.1%}, D/(D+E)={total_debt/total_value:.1%}")
 
     # --- 净负债 ---
-    # 使用总负债近似，但对于净现金公司需要调整
-    net_debt = total_debt
-
-    # 检查是否为净现金公司（权益/负债比 > 3）
-    if equity_value > 0 and total_debt > 0 and equity_value / total_debt > 3:
-        # 净现金公司，净负债应为负值
-        # 使用保守估计：净负债 = 负债 * 0.3（假设30%为有息负债）
-        net_debt = total_debt * 0.3
-        warnings.append(f"⚠️ 权益/负债比={equity_value/total_debt:.1f}，判定为净现金公司。")
-        warnings.append(f"净负债调整为{net_debt:.0f}亿（负债的30%）")
-    else:
-        warnings.append("净负债使用总负债近似（Wind 不提供有息负债/货币资金）")
+    # 双专家 P0（2026-08-22）：弃用"总负债近似 + ×0.3 启发式"——
+    # Wind 无有息负债/货币资金 canonical 列（wind_field_disposition 标 unavailable），
+    # 启发式回填违反"禁止启发式"纪律且对净现金公司系统性低估权益（20-40%）。
+    # 处置：净负债不可得 → None + 显式标注（下游必须弃用 EV→Equity 桥或标注未披露）。
+    net_debt = None
+    warnings.append(
+        "净负债不可得（Wind 无有息负债/货币资金 canonical 列）——"
+        "弃用 EV→Equity 桥；如继续产出目标价必须标注'未扣净负债'，"
+        "禁止用总负债近似或 ×30% 启发式"
+    )
 
     # --- 总股本 ---
     if shares is not None and shares > 0:
@@ -2880,12 +2893,24 @@ def run_analysis(
     if HAS_FACT_TABLE:
         try:
             from .data.fact_table import FactTable
-            facts = FactTable()
-            if ctx.wind and hasattr(ctx.wind, 'income'):
-                # 从Wind数据提取关键事实
-                facts.add_fact(key="营收", value=80.07, unit="亿元", source="Wind", year=2024, trend="up")
-                facts.add_fact(key="净利润", value=5.0, unit="亿元", source="Wind", year=2024, trend="up")
-            logger.info(f"FactTable构建完成: {len(facts.facts)}条事实")
+            # 双专家 P0（2026-08-22）：删除硬编码 80.07/5.0 阅文值——
+            # 从 ctx.wind 真实取值（营收/净利润最新财年），无源则跳过（不产生假数据）
+            _wd_t9 = _wind_to_dict(ctx.wind) if ctx.wind else {}
+            _inc_t9 = _wd_t9.get("income", {})
+            _yrs_t9 = (_wd_t9.get("_year_labels") or {}).get("财年") or []
+            _rev_t9 = (_inc_t9.get("营业收入") or [None])[-1]
+            _np_t9 = (_inc_t9.get("归母净利润") or _inc_t9.get("净利润") or [None])[-1]
+            _fy_t9 = _yrs_t9[-1] if _yrs_t9 else None
+            if _rev_t9 is not None:
+                facts = FactTable()
+                facts.add_fact(key="营收", value=float(_rev_t9), unit="亿元",
+                               source="Wind", year=_fy_t9, trend="up")
+                if _np_t9 is not None:
+                    facts.add_fact(key="净利润", value=float(_np_t9), unit="亿元",
+                                   source="Wind", year=_fy_t9, trend="up")
+                logger.info(f"FactTable构建完成: {len(facts.facts)}条事实（Wind 真实值）")
+            else:
+                logger.warning("T9 FactTable 跳过：Wind 无营收数据（不硬编码假值）")
         except Exception as e:
             logger.warning(f"FactTable构建失败: {e}")
 
@@ -2915,16 +2940,28 @@ def run_analysis(
         try:
             from .valuation.flip_threshold import FlipThresholdCalculator
             _px2 = (ctx.wind.quote.get("最新价") if ctx.wind and hasattr(ctx.wind, "quote") and isinstance(ctx.wind.quote, dict) else None)
-            flip_calc = FlipThresholdCalculator(
-                base_revenue=80.07,
-                base_ebit_margin=0.05,
-                base_wacc=0.081,
-                base_terminal_growth=0.02,
-                shares=10.12,
-                net_debt=-127.81,
-            )
-            thresholds = flip_calc.calc_all_thresholds(_px2 or 0.0)
-            logger.info(f"FlipThresholdCalculator翻转点: {len(thresholds)}个")
+            # 双专家 P0（2026-08-22）：删除硬编码 base_revenue=80.07/shares=10.12/net_debt=-127.81
+            # 阅文值——从 ctx.wind 真实取值，无源则跳过（不产生假数据）
+            _wd_t12 = _wind_to_dict(ctx.wind) if ctx.wind else {}
+            _inc_t12 = _wd_t12.get("income", {})
+            _bal_t12 = _wd_t12.get("balance", {})
+            _rev_t12 = (_inc_t12.get("营业收入") or [None])[-1]
+            _eq_t12 = (_bal_t12.get("年所有者权益合计") or [None])[-1]
+            _assets_t12 = (_bal_t12.get("总资产") or [None])[-1]
+            _cash_t12 = None  # 现金流未锚定 → 不猜测净负债
+            if _rev_t12 is not None and _eq_t12 is not None:
+                flip_calc = FlipThresholdCalculator(
+                    base_revenue=float(_rev_t12),
+                    base_ebit_margin=0.05,  # 无源默认（仅翻转点演示，非目标价依据）
+                    base_wacc=0.081,
+                    base_terminal_growth=0.02,
+                    shares=float(_eq_t12) / 100.0 if _eq_t12 else 0.0,  # 兜底（非精确股本）
+                    net_debt=0.0,  # 双专家 P0：不硬编码 -127.81（无源不猜测净负债）
+                )
+                thresholds = flip_calc.calc_all_thresholds(_px2 or 0.0)
+                logger.info(f"FlipThresholdCalculator翻转点: {len(thresholds)}个（Wind 真实营收）")
+            else:
+                logger.warning("T12 FlipThreshold 跳过：Wind 无营收/权益数据（不硬编码假值）")
         except Exception as e:
             logger.warning(f"FlipThresholdCalculator计算失败: {e}")
 
@@ -2943,12 +2980,21 @@ def run_analysis(
     if HAS_ROIC_CHECKER:
         try:
             from .quality.v3.roic_checker import ROICChecker
-            # 假设ROIC和WACC数据
-            roic = -0.038  # 示例值
-            wacc = 0.081
-            injection = ROICChecker.generate_prompt_injection(roic, wacc)
-            if injection:
-                logger.warning(f"ROIC<WACC警告: ROIC={roic:.1%}, WACC={wacc:.1%}, 需要在报告中回应")
+            # 双专家 P0（2026-08-22）：删除硬编码 roic=-0.038/wacc=0.081 阅文值——
+            # ROIC 从 Wind 计算（营业利润/所有者权益），无源则跳过
+            _wd_t14 = _wind_to_dict(ctx.wind) if ctx.wind else {}
+            _inc_t14 = _wd_t14.get("income", {})
+            _bal_t14 = _wd_t14.get("balance", {})
+            _op_t14 = (_inc_t14.get("营业利润") or [None])[-1]
+            _eq_t14 = (_bal_t14.get("年所有者权益合计") or [None])[-1]
+            if _op_t14 is not None and _eq_t14:
+                roic = float(_op_t14) / float(_eq_t14)
+                wacc = 0.081  # 无源默认（WACC 需 DCF 参数，此处仅演示）
+                injection = ROICChecker.generate_prompt_injection(roic, wacc)
+                if injection:
+                    logger.warning(f"ROIC<WACC警告: ROIC={roic:.1%}, WACC={wacc:.1%}, 需要在报告中回应")
+            else:
+                logger.warning("T14 ROIC 跳过：Wind 无营业利润/权益数据（不硬编码假值）")
         except Exception as e:
             logger.warning(f"ROICChecker检查失败: {e}")
 

@@ -210,6 +210,21 @@ def review_and_repair_loop(
                     exempted=list(exempted.values())[:10],
                     review_incomplete=review_incomplete,
                 )
+            if review_incomplete:
+                # 双专家 P0：审查不完整（深度/实质审查抛异常）→ 不得静默通过
+                # （review_repair_loop 审查链少检了几项却绿灯 = 击穿 fail-closed）
+                logger.warning(
+                    f"审查修复循环 第{round_num}轮 无问题但审查不完整"
+                    f"（review_incomplete=True），按 fail-closed 判定失败"
+                )
+                return ReviewRepairResult(
+                    passed=False, rounds=round_num, chapters=chapters,
+                    issues_found=len(all_issues), issues_fixed=issues_fixed,
+                    remaining_issues=["审查不完整（部分检查器异常），不能判定通过"],
+                    llm_calls=budget_state["calls"], exempted_count=len(exempted),
+                    exempted=list(exempted.values())[:10],
+                    review_incomplete=review_incomplete,
+                )
             logger.info(f"审查修复循环 第{round_num}轮 通过，无问题")
             return ReviewRepairResult(
                 passed=True, rounds=round_num, chapters=chapters,

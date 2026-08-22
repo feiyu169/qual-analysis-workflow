@@ -253,5 +253,35 @@ def test_shadow_skip_repair(monkeypatch):
     assert result.remaining_issues, "未修复问题应留在 remaining_issues"
 
 
+# ============ 双专家 P0：review_incomplete 不得静默通过 ============
+
+def test_review_incomplete_fail_closed(monkeypatch):
+    """双专家 P0（2026-08-22）：审查不完整（检查器异常 → review_incomplete=True）
+    时，即使无新问题也不得 passed=True——击穿 fail-closed 的漏洞修复"""
+    import finance.quality.review_repair_loop as m
+
+    def fake_caller(name, prompt):
+        return '{"patches": []}'
+
+    # 深度审查抛异常 → 置 review_incomplete=True（真实路径：cross_chapter/fact_checker 崩溃）
+    def crashing_deep_review(ch, wd):
+        raise RuntimeError("检查器崩溃")
+
+    monkeypatch.setattr(m, "_run_deep_review", crashing_deep_review)
+    monkeypatch.setattr(m, "_run_substantive_review", lambda *a, **k: [])
+
+    result = review_and_repair_loop(
+        chapters={1: "第1章内容"},
+        ctx=MagicMock(),
+        llm_caller=fake_caller,
+        max_rounds=2,
+    )
+
+    # 审查不完整 → 必须 fail-closed（不得静默通过）
+    assert result.review_incomplete is True, "异常应置 review_incomplete"
+    assert result.passed is False, "审查不完整不得 passed=True（双专家 P0 修复）"
+    assert result.remaining_issues, "应记录审查不完整原因"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

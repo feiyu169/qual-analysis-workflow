@@ -24,9 +24,11 @@ FINANCIAL_FIELD_DISPOSITION: dict[str, dict] = {
     "total_liabilities": {"kind": "source", "canonical": "年负债合计"},
     "equity": {"kind": "source", "canonical": "年所有者权益合计"},
     "gross_margin": {
-        "kind": "derived",
-        "formula": "营业利润 / 营业收入（最新财年；毛利率口径近似，标注派生）",
-        "deps": ["营业利润", "营业收入"],
+        # 双专家 P0（2026-08-22）：原"营业利润/营业收入（毛利率口径近似）"是错误——
+        # 毛利率=毛利/营收（毛利=营收-营业成本），营业利润率是另一指标，两者不可混用。
+        # Wind canonical 无毛利率列 → 标注未披露（禁止用营业利润率顶替，防误导）
+        "kind": "unavailable",
+        "reason": "Wind canonical 无销售毛利率列；禁用营业利润率顶替（口径不同，亏损/高研发公司偏差巨大）→ 标注未披露",
     },
     "operating_margin": {
         "kind": "derived",

@@ -951,7 +951,8 @@ def format_facts_as_context(facts: ExtractedFacts) -> str:
     fin_fields = [
         ("营业收入", "IFRS", fin.revenue, "亿元"),
         ("净利润", "IFRS归母", fin.net_profit, "亿元"),
-        ("毛利率", "派生", fin.gross_margin, "%"),
+        # 双专家 P0（2026-08-22）：毛利率 Wind 无 canonical 列 → 未披露（禁用营业利润率顶替）
+        ("毛利率", "Wind无列", fin.gross_margin, "%"),
         ("经营现金流", "IFRS", fin.operating_cashflow, "亿元"),
         ("总资产", "IFRS", fin.total_assets, "亿元"),
         ("现金及等价物", "IFRS", fin.cash_and_equivalents, "亿元"),

@@ -70,5 +70,36 @@ def test_profit_company_full_valuation_dcf_primary():
     assert not r.degraded, "盈利公司不应标记降级"
 
 
+# ============ 双专家 P0：可比公司 ============
+
+def test_comparables_no_disney_and_static_snapshot_flag():
+    """双专家 P0（2026-08-22）：
+    - 迪士尼（行业错配）已从补充可比池移除
+    - 静态池使用标记 comparables_static_snapshot=True（报告应标注静态快照）"""
+    from finance.valuation_engine import SUPPLEMENTARY_COMPARABLES, build_comparable_analysis
+
+    # 迪士尼移除
+    assert "迪士尼" not in SUPPLEMENTARY_COMPARABLES, "迪士尼（流媒体巨头）不得混入在线阅读可比"
+    names = list(SUPPLEMENTARY_COMPARABLES.keys())
+    assert all("迪士尼" != n for n in names)
+
+    # 静态快照标记
+    companies, medians = build_comparable_analysis()
+    assert medians.get("static_snapshot") is True, "默认池应标记 static_snapshot=True"
+    # 调用方传实时可比 → static_snapshot=False
+    _, medians2 = build_comparable_analysis(
+        core_comps={"腾讯": {"ticker": "0700.HK", "pe": 20.0}},
+        supplementary_comps={},
+    )
+    assert medians2.get("static_snapshot") is False, "实时可比应标记 static_snapshot=False"
+
+
+def test_full_valuation_surfaces_static_snapshot():
+    """compute_full_valuation 应携带 comparables_static_snapshot 标记"""
+    r = compute_full_valuation("1024.HK", "盈利公司", PROFIT_FINANCIALS, shares=10.0, current_price=12.0)
+    assert getattr(r, "comparables_static_snapshot", True) is True, "默认池应标记静态快照"
+    assert "静态快照" in str(r.warnings) or getattr(r, "comparables_static_snapshot", None) is not None
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

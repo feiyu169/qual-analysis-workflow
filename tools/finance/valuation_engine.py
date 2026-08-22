@@ -77,6 +77,8 @@ class ValuationResult:
     comparable_median_pe: float | None = None
     comparable_median_pb: float | None = None
     comparable_median_ps: float | None = None
+    # 双专家 P0：可比数据是否为静态快照（True=默认静态池，报告应标注）
+    comparables_static_snapshot: bool = True
 
     # 目标价
     target_price_bull: float | None = None
@@ -98,17 +100,19 @@ class ValuationResult:
 # ====================================================================
 
 # 核心可比公司（在线阅读/数字内容行业）
+# 双专家 P0（2026-08-22）：静态池保留但显式标注"静态快照"（非实时行情）；
+# 调用方可传实时可比（core_comps/supplementary_comps 参数）
 CORE_COMPARABLES = {
     "掌阅科技": {"ticker": "603533.SH", "pe": 25.0, "pb": 2.5, "ps": 3.0},
     "中文在线": {"ticker": "300364.SZ", "pe": 30.0, "pb": 3.0, "ps": 4.0},
     "阅文集团": {"ticker": "00772.HK", "pe": None, "pb": 1.17, "ps": 2.78},
 }
 
-# 补充可比公司（内容平台/流媒体）
+# 补充可比公司（内容平台）
+# 双专家 P0：移除迪士尼（行业错配——流媒体巨头非在线阅读可比，混入会扭曲 PE/PS 中位数）
 SUPPLEMENTARY_COMPARABLES = {
     "B站": {"ticker": "9626.HK", "pe": None, "pb": 2.0, "ps": 2.5},
     "爱奇艺": {"ticker": "IQ", "pe": None, "pb": 1.5, "ps": 1.0},
-    "迪士尼": {"ticker": "DIS", "pe": 35.0, "pb": 2.5, "ps": 3.0},
 }
 
 
@@ -334,9 +338,13 @@ def build_comparable_analysis(
     构建可比公司分析。
 
     Returns:
-        (可比公司列表, 中位数字典)
+        (可比公司列表, 中位数字典)——中位数含 static_snapshot 标记：
+        使用默认静态池 → True（报告应标注"可比数据为静态快照"）；
+        调用方传入实时可比 → False
     """
     companies = []
+    # 双专家 P0：静态池使用标记（无实时行情时诚实标注，不冒充实时估值）
+    use_static = (core_comps is None) and (supplementary_comps is None)
 
     # 核心可比
     comp_data = core_comps or CORE_COMPARABLES
@@ -372,6 +380,7 @@ def build_comparable_analysis(
         medians['pb'] = sorted(pb_values)[len(pb_values) // 2]
     if ps_values:
         medians['ps'] = sorted(ps_values)[len(ps_values) // 2]
+    medians['static_snapshot'] = use_static
 
     return companies, medians
 
@@ -461,6 +470,7 @@ def compute_full_valuation(
         result.comparable_median_pe = medians.get('pe')
         result.comparable_median_pb = medians.get('pb')
         result.comparable_median_ps = medians.get('ps')
+        result.comparables_static_snapshot = medians.get('static_snapshot', True)
 
         income = financials.get('income', {})
         np_list = income.get('年净利润', [])
@@ -546,6 +556,11 @@ def format_valuation_for_report(vr: ValuationResult) -> str:
             lines.append(f"| {comp.name} | {pe} | {pb} | {ps} |")
         if vr.comparable_median_pe:
             lines.append(f"| **中位数** | **{vr.comparable_median_pe:.1f}x** | **{vr.comparable_median_pb:.1f}x** | **{vr.comparable_median_ps:.1f}x** |")
+        # 双专家 P0：静态快照显式标注（不冒充实时行情）
+        if getattr(vr, "comparables_static_snapshot", True):
+            lines.append("")
+            lines.append("> ⚠️ 可比公司倍数为**静态快照**（非实时行情），仅作方向参考；"
+                         "实时估值应由 Wind MCP 提供可比倍数后更新")
         lines.append("")
 
     # 目标价
