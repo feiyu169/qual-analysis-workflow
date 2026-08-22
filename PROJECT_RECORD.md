@@ -306,13 +306,17 @@ cd "D:\OneDrive\文档\deepseek harness workspace\workflow"
 
 ### 四、下会话恢复要点（快速上手）
 
-1. **当前状态**：master = b5596cd（2026-08-22）；工作区干净；测试 406+32（tools/finance 单跑）/ 248+17（tests/ 聚合）
-2. **优先任务**：按最终修复清单 P0 7 项实施（估值链口径 → review_incomplete → T9-T14）
-3. **关键文件地图**：workflow.py（3282 行 legacy 生成服务，被 v8 下沉复用）/ qual_v8/（编排层 Gate0-8）/ quality/（69 平铺 + 27 shim + 6 _legacy）/ docs/qual-*（44 篇）
-4. **测试入口**：`pytest tests/`（HGF 聚合 248+17）/ `pytest tools/finance --ignore=tools/finance/.venv`（全量 406+32）
-5. **lint**：`python -m ruff check tools/finance --exclude .venv --exclude _legacy`（435 处历史债务）
-6. **heavyskill 模式2**：key 在 config/.env（DEEPSEEK_API_KEY）；`python skills/heavyskill/scripts/run_heavyskill.py --query "..." --reason_k 8 --summary_k 4 --api_key $key --accept-partial`
-7. **推送**：SSH 用 `$env:GIT_SSH_COMMAND = "ssh -i '...id_ed25519' -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile='...ssh_known_hosts'"`
+1. **当前状态**：master = 6f03fb6 + 分阶段测试脚本（run_qual_staged_test.py）；测试 416+32（单跑）/ 258+17（聚合）；**P0/P1/P2 全部实施完成**
+2. **优先任务**：按分阶段测试模式迭代（`python run_qual_staged_test.py`，18s）定位问题→修复→重跑；分阶段全绿后再全流程重跑（`run_xpev_full.py`）
+3. **分阶段测试模式**（run_qual_staged_test.py）：
+   - `--stage N` 单阶段 / `--skip N` 跳过 / 默认全跑（18s，5 阶段）
+   - S1 数据层（Wind 锚点/财务处置/facts）/ S2 写作层（ADVC/财年标注）/ S3 审查层（review loop）/ S4 估值层（DCF/可比/评级）/ S5 验证层（Gate8/流程防护）
+   - 依赖 .pip-tmp/xpev-wind.json（Wind 缓存）
+4. **关键文件地图**：workflow.py（3282 行 legacy，run_analysis 已标 deprecated）/ qual_v8/（编排层 Gate0-8）/ quality/（69 平铺 + 27 shim + 6 _legacy + v3 聚合导出）/ docs/qual-*（44 篇）
+5. **测试入口**：`pytest tests/`（HGF 聚合 258+17）/ `pytest tools/finance --ignore=tools/finance/.venv`（全量 416+32）/ `run_qual_staged_test.py`（分阶段 18s）
+6. **lint**：`python -m ruff check tools/finance --exclude .venv --exclude _legacy`（历史债务）
+7. **heavyskill 模式2**：key 在 config/.env（DEEPSEEK_API_KEY）；`python skills/heavyskill/scripts/run_heavyskill.py --query "..." --reason_k 8 --summary_k 4 --api_key $key --accept-partial`
+8. **推送**：SSH 用 `$env:GIT_SSH_COMMAND = "ssh -i '...id_ed25519' -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile='...ssh_known_hosts'"`
 
 ### 五、会话教训（沉淀）
 
