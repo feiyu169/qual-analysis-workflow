@@ -80,7 +80,22 @@ def fetch_multi_annuals(ticker="9868.HK", market="hk", max_annuals=3):
         try:
             pdf_path = downloader.download_filing(filing)
             log(f"年报 {i+1}/{len(annuals)}: {pdf_path}")
-            parsed = _parse_pdf(pdf_path)
+            # MinerU 间歇性故障（服务端"parsing failed, please try again later"——
+            # 实测单次成功但 run 时偶发失败）：解析重试最多 3 次，间隔 60s 等恢复
+            parsed = None
+            for _attempt in range(3):
+                try:
+                    parsed = _parse_pdf(pdf_path)
+                    break
+                except Exception as pe:  # noqa: BLE001
+                    log(f"  [RETRY {_attempt+1}/3] 解析失败: {str(pe)[:100]}，60s 后重试")
+                    if _attempt < 2:
+                        time.sleep(60)
+                    else:
+                        raise
+            if parsed is None:
+                log(f"  [WARN] 年报 {i+1} 解析失败（3 次尝试后）")
+                continue
             if not parsed["text"] and not parsed["sections"]:
                 log(f"  [WARN] 年报 {i+1} 解析为空，跳过")
                 continue
