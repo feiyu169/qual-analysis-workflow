@@ -104,7 +104,7 @@ def compute_base_valuation(
     wind_valuation: dict | None = None,
     wind_financials: dict | None = None,
     shares: float | None = None,
-    exchange_rate: float = 0.92,  # HKD/CNY
+    exchange_rate: float | None = None,  # HKD/CNY（双专家 P2：None=未提供，默认 0.92 并标注）
 ) -> BaseValuation:
     """
     计算基础估值。
@@ -115,12 +115,19 @@ def compute_base_valuation(
         wind_valuation: Wind估值API返回的数据
         wind_financials: Wind财务数据
         shares: 总股本（亿股）
-        exchange_rate: HKD/CNY汇率
+        exchange_rate: HKD/CNY汇率（None=调用方未提供，用默认 0.92 并显式标注——
+                       双专家 P2：硬编码 0.92 对港股目标价系统性偏差 8-10%，应传实时汇率）
 
     Returns:
         BaseValuation 估值快照
     """
     bv = BaseValuation(ticker=ticker, company_name=company_name)
+
+    # 双专家 P2：汇率未提供 → 显式标注默认假设（不静默）
+    if exchange_rate is None:
+        exchange_rate = 0.92
+        bv.warnings.append("⚠️ 汇率未提供，使用默认假设 HKD/CNY=0.92——"
+                           "对港股估值存在 ±8-10% 系统性偏差，应传入实时汇率")
 
     # === 从Wind估值API获取数据 ===
     if wind_valuation and isinstance(wind_valuation, dict):

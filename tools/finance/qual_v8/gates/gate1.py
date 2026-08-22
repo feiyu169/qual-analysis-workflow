@@ -273,7 +273,15 @@ class Gate1TypeInference(GateBase):
         return missing
 
     def _check_value_deviation(self, facts: dict[str, Any], wind_data: dict[str, Any]) -> float:
-        """检查数值偏差（真实：与 Wind canonical 最新值比对；兼容 ExtractedFacts 对象/dict）"""
+        """检查数值偏差（真实：与 Wind canonical 最新值比对；兼容 ExtractedFacts 对象/dict）
+
+        双专家 P2（2026-08-22）：财务字段已被 Wind 覆盖（fact_extractor Step5）→
+        财务比对恒 0（"Wind 验 Wind"退化）。补充**运营字段一致性抽检**——
+        运营数据（LLM 提取、无 Wind 锚点）与财务钩稽：
+        - DAU × ARPU × 12 ≈ 年收入（量级 3 倍内）
+        - GMV 与收入量级一致
+        命中显著不一致 → 计入偏差（防运营幻觉直达报告）。
+        """
         if not wind_data:
             return 0.0
 
@@ -299,6 +307,30 @@ class Gate1TypeInference(GateBase):
             if wind_value is None or wind_value == 0:
                 continue
             deviations.append(abs(fact_value - wind_value) / abs(wind_value))
+
+        # 运营一致性抽检（P2-3：LLM 提取的运营数据 vs 财务钩稽，防"Wind 验 Wind"退化）
+        try:
+            rev = fd.get("revenue") or 0
+            ops = fd.get("operational") or {}
+            dau = ops.get("dau") if isinstance(ops, dict) else None
+            arpu = ops.get("arpu") if isinstance(ops, dict) else None
+            gmv = ops.get("gmv") if isinstance(ops, dict) else None
+            if rev and dau and arpu:
+                # 年收入 ≈ DAU × ARPU × 12（月 ARPU → 年）——3 倍内合理，超 10 倍记偏差
+                implied = dau * arpu * 12
+                if implied > 0 and (implied / rev > 10 or rev / implied > 10):
+                    deviations.append(1.0)  # 运营-财务显著矛盾（≥10 倍）
+                    logger.warning(
+                        f"Gate1 运营一致性异常: DAU={dau}×ARPU={arpu}×12={implied:.0f}"
+                        f" vs 营收={rev}（≥10 倍矛盾，运营数据需人工复核）"
+                    )
+            if rev and gmv and gmv > 0 and (gmv / rev > 10 or rev / gmv > 10):
+                deviations.append(1.0)
+                logger.warning(
+                    f"Gate1 GMV-营收一致性异常: GMV={gmv} vs 营收={rev}（≥10 倍矛盾）"
+                )
+        except Exception as e:
+            logger.warning(f"Gate1 运营一致性抽检异常（非阻断）: {e}")
 
         return sum(deviations) / len(deviations) if deviations else 0.0
 

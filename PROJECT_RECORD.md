@@ -275,7 +275,7 @@ cd "D:\OneDrive\文档\deepseek harness workspace\workflow"
 - 20 个 v3 shim（`quality/v3/*.py` re-export）+ quality/__init__.py 顶层 27 符号 re-export（DegradationLevel 从 types 导出，修复两枚举冲突）+ 7 个模块 17 处相对导入修复（`..X`→`.X`）+ 测试路径契约对齐（hermes_tools.finance→finance、quality→finance.quality）
 - 契约判定三态：一致→接入聚合；本地真实缺陷→修复（capm 补 CAPMConfig/calculate_ke/beta/alpha/formula/mrp）；hermes 版 API 未随迁→显式 skip 标注（downloaders 3 类、config_validator 整文件等）
 - ModuleLoader 候选路径指向平铺真实模块，gate_checks 降级非必需
-- **结果**：`pytest tools/finance` 从 27 不可收集 → **406 passed + 32 skipped，0 失败**；HGF 聚合入口 `pytest tests/` 88 → **248 passed + 17 skipped**（654 为含 tests/ 合并跑口径，实测单跑 tools/finance=438）
+- **结果**：`pytest tools/finance` 从 27 不可收集 → **406 passed + 32 skipped，0 失败**；HGF 聚合入口 `pytest tests/` 88 → **248 passed + 17 skipped**（654 为含 tests/ 合并跑口径，实测单跑 tools/finance=438）。**2026-08-22 P0/P1 修复后**：单跑 **416 passed + 32 skipped（448）**，聚合 `pytest tests/` 同步增加
 
 **遗留项处理**（8ab3f27）：
 - filing_service 断裂修复：filing_downloader 补模块级 list_filings；移除 get_downloader 死导入；download_with_cache 改走真实 downloader

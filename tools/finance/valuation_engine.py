@@ -442,6 +442,10 @@ def compute_full_valuation(
     执行完整估值流程（带降级链）。
 
     降级链: full_dcf → comparable_only → pe_multiple
+
+    注（双专家 P2，2026-08-22）：SOTP 分部估值（quality/sotp_valuation.py）引擎存在且
+    有测试，但**未接入本主流程**——需要分部财务数据（Wind 无分部粒度）。
+    多业务公司如需分部估值，应另行调用 sotp_valuation（当前报告不声称 SOTP 结果）。
     """
     result = ValuationResult(ticker=ticker, company_name=company_name)
 

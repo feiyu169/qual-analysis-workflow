@@ -124,19 +124,9 @@ try:
 except ImportError:
     HAS_DECISION_AGGREGATOR = False
 
-
-# 可选组件: CircuitBreaker 和 StageManager (v2 整改)
-try:
-    from .circuit_breaker import CircuitBreaker
-    HAS_CIRCUIT_BREAKER = True
-except ImportError:
-    HAS_CIRCUIT_BREAKER = False
-
-try:
-    from .stage_manager import StageManager
-    HAS_STAGE_MANAGER = True
-except ImportError:
-    HAS_STAGE_MANAGER = False
+# 双专家 P2（2026-08-22）：删除死导入 HAS_CIRCUIT_BREAKER/HAS_STAGE_MANAGER——
+# 定义后全文件无使用（HGF"HAS_* 只证明能导入、不证明已接入"反例）；
+# v8 用 qual_v8/core/circuit_breaker.py（独立实现）
 
 logger = logging.getLogger(__name__)
 
@@ -2467,7 +2457,8 @@ def run_analysis(
     output_dir: Path | None = None,
     shares: float | None = None,
 ) -> dict:
-    """投资分析工作流主入口
+    """投资分析工作流主入口（双专家 P2：**deprecated**——legacy 旧编排路径，
+    建议改用 qual_v8 Gate0-8 状态机；本函数保留用于回退/兼容）
 
     完整执行 6 步工作流:
     1. 类型推断 (infer_market + infer_facets)

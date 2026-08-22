@@ -113,7 +113,7 @@ class Gate5QualityEnhancement(GateBase):
 
         # 检查组件集成
         gate5 = context.get("gate_5_result", {})
-        if not gate5.get("integration_passed", False):  # noqa: SIM103
+        if not gate5.get("integration_passed", False):
             return False
 
         return True
@@ -161,7 +161,7 @@ class Gate5QualityEnhancement(GateBase):
                         dcf_value = (_fcf / (_wacc - _g)) / _shares
                         valuation["dcf_value"] = round(dcf_value, 2)
                         logger.info(f"Gate5 DCF per-share: {dcf_value:.2f}（简化永续模型）")
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning(f"Gate5 DCF per-share 计算失败（非阻断）: {e}")
             context["valuation"] = valuation
 

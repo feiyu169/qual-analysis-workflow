@@ -479,6 +479,11 @@ def validate_fiscal_references(chapter_num: int, content: str,
         checker._extract_financial_data(content, chapter_num)
         for w in checker.unattributed_historical:
             issues.append(f"第{chapter_num}章 历史财年引用未标注（应带 FY 标注或对比语境）: {w}")
-    except Exception:
-        pass
+    except Exception as e:
+        # 双专家 P2（2026-08-22）：异常不再静默吞掉（fail-open→漏标无告警）——
+        # 显式记入 issues，由调用方作为"财年校验不完整"处理
+        logger.warning(f"validate_fiscal_references 异常（财年校验不完整）: {e}")
+        issues.append(
+            f"第{chapter_num}章 财年校验异常（校验不完整，历史引用未全面核查）: {type(e).__name__}"
+        )
     return issues
