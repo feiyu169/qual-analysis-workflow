@@ -145,66 +145,65 @@ class CrossChapterConsistencyChecker:
     def _extract_financial_data(self, content: str, ch_num: int) -> dict[str, list]:
         """从章节内容中提取财务数据（多财年感知：按财年分组）
 
-        三财年报告（FY2023/24/25）中，同一章节会合法引用多个财年的值
-        （如营业收入 306.76/408.66/767.20 亿）。旧实现只取第一个匹配，
-        导致不同章节"第一个匹配"落在不同财年 → 假冲突（108 项假阳性）。
-        现改为提取 {indicator: [(fy, value), ...]}，由调用方按财年对齐比较。
+        2026-08-22 P5 诊断修复：统一使用 DataAnchor.extract_data_spans 提取，
+        消除自建 regex 的 3 类假阳性：
+        ① 不排除子公司/分部口径限定词（ADVC 已修，此处未同步）→ "子公司总资产31.63亿"
+           误与合并口径 1031.63 冲突
+        ② "净亏损+11.39" vs "净利润-11.39" 符号翻转→fatal
+        ③ _year_before 只看前 150 字符→跨财年误归因
         """
+        if self._anchor is None:
+            return {}
+
         data: dict[str, list] = {}
 
-        def _year_before(pos: int) -> int | None:
-            """数字所属财年：先看数字后紧跟的 '20XX年'（如 "841.63亿元（2023年）"），
-            再看数字前 150 字符内最近的 '20XX年'；都没有则用 DataAnchor 归因
-            （值命中历史财年锚点 → 该财年；未命中 → None 视为最新财年引用）。"""
-            # 数字后紧跟年份（更具体，如 "总资产841.63亿元（2023年）"）
+        # 统一提取（含子公司/分部排除、语境过滤、单位归一）
+        spans = self._anchor.extract_data_spans(content)
+
+        # 按 canonical 指标分组，每指标每财年取最新值（避免同指标多次出现的冲突）
+        seen: dict[str, dict[int | None, float]] = {}  # {metric: {fy: value}}
+        for item in spans:
+            if item["unit"] == "%":
+                continue  # 百分比不参与跨章数值比较
+            metric = item["metric_key"]
+            if metric.startswith("pct:"):
+                continue
+            value = item["value"]
+
+            # 财年归因：先看 span 前后的年份标注，再用 DataAnchor
+            pos = item["span"][0]
+            fy = None
             after = content[pos:pos + 30]
             m2 = re.search(r"(?:亿元|亿|万元|万)?[（(]?\s*(20\d{2})\s*年", after)
             if m2:
-                return int(m2.group(1))
-            ctx = content[max(0, pos - 150):pos]
-            years = re.findall(r"(?:FY\s*)?(20\d{2})(?:\s*年)?", ctx)
-            if years:
-                return int(years[-1])  # 取最近的（最后一个）年份
-            return None
+                fy = int(m2.group(1))
+            else:
+                ctx = content[max(0, pos - 150):pos]
+                years = re.findall(r"(?:FY\s*)?(20\d{2})(?:\s*年)?", ctx)
+                if years:
+                    fy = int(years[-1])
+                else:
+                    # DataAnchor 归因（命中任一财年锚点→该财年；未命中→None）
+                    try:
+                        attr = self._anchor.attribute_text_value(metric, value)
+                        fy = attr["fiscal_year"]
+                        if attr["is_historical"] and fy is not None:
+                            # 历史引用未标注 → 记 warning（FiscalSemantics 收集）
+                            self.unattributed_historical.append(
+                                f"{metric}={value} 命中 FY{fy} 锚点但未标注财年"
+                            )
+                    except Exception:
+                        fy = None
 
-        # 归因：indicator 无年份标注的引用按锚点值定位财年（FiscalSemantics）
-        def _attributed_fy(indicator: str, value: float) -> int | None:
-            if self._anchor is None:
-                return None
-            try:
-                attr = self._anchor.attribute_text_value(indicator, value)
-                if attr["is_historical"]:
-                    # 历史引用未标注 → 记 warning（写作遵从度提示，供生成时校验升级）
-                    self.unattributed_historical.append(
-                        f"{indicator}={value} 命中 FY{attr['fiscal_year']} 锚点但未标注财年"
-                    )
-                    return attr["fiscal_year"]
-                return attr["fiscal_year"]
-            except Exception:
-                return None
+            # 每指标每财年只保留最新值（同一 span 后出现的覆盖）
+            if metric not in seen:
+                seen[metric] = {}
+            if fy not in seen[metric]:
+                seen[metric][fy] = value
 
-        for indicator, patterns in self.financial_patterns.items():
-            for pattern in patterns:
-                # 只处理带数值的模式（跳过"转正/为负"等结论模式）
-                if r"(\d" not in pattern and r"(-?\d" not in pattern:
-                    continue
-                try:
-                    for m in re.finditer(pattern, content):
-                        try:
-                            value = float(m.group(1))
-                        except (ValueError, IndexError):
-                            continue
-                        fy = _year_before(m.start())
-                        if fy is None:
-                            fy = _attributed_fy(indicator, value)
-                        if indicator not in data:
-                            data[indicator] = []
-                        data[indicator].append((fy, value))
-                except Exception:  # noqa: S112 —— 单值解析失败跳过（正则边界）
-                    continue
-                # 一个 indicator 取全量匹配后不再重复模式（同 indicator 多模式仅兜底）
-                if data.get(indicator):
-                    break
+        # 转为旧格式 {metric: [(fy, value), ...]}
+        for metric, fy_vals in seen.items():
+            data[metric] = [(fy, val) for fy, val in fy_vals.items()]
 
         return data
 

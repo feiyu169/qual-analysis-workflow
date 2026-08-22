@@ -498,14 +498,19 @@ def _run_substantive_review(
     if llm_caller is not None and budget_state is not None:
         review_caller = _build_review_caller(llm_caller, budget_state, deadline, llm_call_budget)
 
-    # 1. 事实核查
+    # 1. 事实核查（P6 诊断 2026-08-22：退役 fact_checker——单财年假设跑三财年报告，
+    # matches[0] vs Wind 最新值 → 全量 fatal 假阳性。替换为 DataAnchor 多财年验证，
+    # 命中任一财年锚点即通过，与 PGNB/Gate4 共用同一锚点源）
     try:
-        from .fact_checker import check_facts
-        result = check_facts(chapters, wind_data or {})
-        if not result.passed:
-            issues.extend([f"[事实核查] {issue.description}" for issue in result.issues])
+        from ..qual_v8.data_anchor import get_data_anchor
+        if wind_data:
+            _anchor_fc = get_data_anchor(wind_data)
+            for _ch_num, _ch_content in chapters.items():
+                _errs = _anchor_fc.validate_chapter_any_fy(_ch_num, _ch_content)
+                for _e in _errs:
+                    issues.append(f"[事实核查/DataAnchor] {_e}")
     except Exception as e:
-        logger.warning(f"事实核查失败: {e}")
+        logger.warning(f"DataAnchor 事实核查失败: {e}")
 
     # 2. 分析深度审查（注入 Wind 锚点）
     try:

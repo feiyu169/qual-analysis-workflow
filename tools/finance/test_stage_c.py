@@ -83,16 +83,23 @@ def test_no_precomputed_runs_deep_review(monkeypatch):
 
 def test_substantive_review_only_chapters():
     """C2-2：only_chapters 过滤——只审指定章节"""
-    # 直接验证 only_chapters 过滤逻辑：构造受监控的检查器
+    # 2026-08-22 P6 修复：事实核查改为 DataAnchor（退役 fact_checker），
+    # 测试改为验证 DataAnchor 路径收到过滤后的章节子集
     captured = {}
 
-    def fake_fact_checker(chapters, wd):
-        captured["chapters"] = chapters
-        from finance.quality.fact_checker import FactCheckResult
-        return FactCheckResult(passed=True, issues=[])
+    # Mock DataAnchor 的 validate_chapter_any_fy 来捕获调用
+    original_check = None
+
+    class FakeAnchor:
+        def validate_chapter_any_fy(self, ch_num, content):
+            captured.setdefault("chapters", {})[ch_num] = content
+            return []
+
+    def fake_get_data_anchor(wd):
+        return FakeAnchor()
 
     monkeypatch_obj = pytest.MonkeyPatch()
-    monkeypatch_obj.setattr("finance.quality.fact_checker.check_facts", fake_fact_checker)
+    monkeypatch_obj.setattr("finance.qual_v8.data_anchor.get_data_anchor", fake_get_data_anchor)
 
     try:
         # depth/conclusion 等检查器全部 pass（避免真实 LLM）
@@ -110,12 +117,12 @@ def test_substantive_review_only_chapters():
         _run_substantive_review(
             {1: "ch1", 2: "ch2", 5: "ch5"},
             lambda n, p: "ok",
-            {},
+            {"income": {}, "balance": {}, "cashflow": {}, "_year_labels": {"财年": [2023, 2024, 2025]}},
             "综合",
             budget_state={"calls": 0, "wall_clock_exceeded": False, "budget_exceeded": False},
             only_chapters={2, 5},
         )
-        # 事实核查收到的应是过滤后子集
+        # DataAnchor 收到的应是过滤后子集
         assert set(captured["chapters"].keys()) == {2, 5}, \
             f"C2-2 增量应只审受影响章节，实为 {list(captured['chapters'].keys())}"
     finally:

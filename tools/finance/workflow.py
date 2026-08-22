@@ -3176,58 +3176,11 @@ def run_analysis(
     # ==================================================
     # Step 4.7: 深度审查 + 实质性审查（审查修复循环）
     # ==================================================
-    logger.info("Step 4.7: 深度审查 + 实质性审查（审查修复循环）")
-
-    try:
-        from .quality.v3.review_repair_loop import review_and_repair_loop
-
-        # 准备Wind数据
-        wind_data_for_check = {}
-        if ctx.wind:
-            wind_data_for_check = {
-                "income": ctx.wind.income if hasattr(ctx.wind, 'income') and isinstance(ctx.wind.income, dict) else {},
-                "balance": ctx.wind.balance if hasattr(ctx.wind, 'balance') and isinstance(ctx.wind.balance, dict) else {},
-                "cashflow": ctx.wind.cashflow if hasattr(ctx.wind, 'cashflow') and isinstance(ctx.wind.cashflow, dict) else {},
-            }
-
-        # 确定行业类型（B4-3：动态映射——复用 v8 adapters.industry_for，替代硬编码"新能源汽车"默认）
-        try:
-            from .qual_v8.adapters import industry_for as _industry_for
-            industry = _industry_for(company_name)
-        except Exception:
-            industry = "综合"
-        logger.info(f"行业判定: {company_name} → {industry}（B4-3 动态）")
-
-        # 执行审查修复循环
-        # 双专家 P1（2026-08-22）：补传预算/墙钟（legacy 路径此前无保护——
-        # 历史"Gate4 卡 6 小时"死循环风险在 legacy 路径可复发）
-        review_result = review_and_repair_loop(
-            chapters=chapters,
-            ctx=ctx,
-            llm_caller=llm_caller,
-            wind_data=wind_data_for_check,
-            max_rounds=3,
-            industry=industry,
-            llm_call_budget=getattr(ctx, "llm_call_budget", 200),
-            deadline=getattr(ctx, "_wall_deadline", None),
-        )
-
-        logger.info(f"Step 4.7 审查修复循环完成: passed={review_result.passed}, rounds={review_result.rounds}")
-        logger.info(f"  发现问题: {review_result.issues_found}个")
-        logger.info(f"  修复问题: {review_result.issues_fixed}个")
-
-        if not review_result.passed:
-            quality_degraded = True
-            degradation_reasons.append(f"审查修复循环未通过: {len(review_result.remaining_issues)}个问题未修复")
-            logger.warning("Step 4.7 审查修复循环未通过:")
-            for issue in review_result.remaining_issues[:5]:
-                logger.warning(f"  - {issue}")
-            if len(review_result.remaining_issues) > 5:
-                logger.warning(f"  ... 还有{len(review_result.remaining_issues) - 5}个问题")
-        else:
-            logger.info("Step 4.7 审查修复循环通过")
-    except Exception as e:
-        logger.warning(f"Step 4.7 审查修复循环失败（非阻断）: {e}")
+    # 2026-08-22 P5/P11 诊断：此步与 gate4._execute 内部的 review_and_repair_loop
+    # **重复调用**——Step 4.6 Gate Checks 已包含 gate4 实质审查修复循环（max_rounds=3），
+    # 此处再调一次导致"收敛早停→Gate4 形式审查→再收敛早停"的双循环。
+    # 修复：删除重复调用，审查修复循环统一由 gate4._execute 管理。
+    logger.info("Step 4.7: 审查修复循环已由 Gate4（Step 4.6）统一执行，跳过重复调用")
 
     # ==================================================
     # Step 5: 综合结论 + 决策章 + 概览章

@@ -49,10 +49,12 @@ class GateResult:
 
 # 空章阈值：去空白后最小有效字符数
 MIN_CHAPTER_CHARS = 800
-# 空壳阈值：财务章(ch6)至少应有 N 个小数数字（如 18.2、73.66）
-MIN_FINANCIAL_NUMBERS = 3
 # 财务章编号
 FINANCIAL_CHAPTERS = {5, 6}
+# 空壳阈值分级（P12 诊断 2026-08-22：ch5 是运营章（交付量/门店），财务小数天然少；
+# ch6 纯财务章，小数数字应充足）
+MIN_FINANCIAL_NUMBERS_BY_CH = {5: 1, 6: 3}  # ch5≥1, ch6≥3
+MIN_FINANCIAL_NUMBERS = 3  # 默认值（向后兼容）
 # 估值章编号
 VALUATION_CHAPTERS = {7}
 # 财年铁律章节（B1-1 修订：ch5 经营表现 / ch7 估值 从严——当期锚断言）
@@ -84,6 +86,12 @@ WHITELIST_CONTEXT = [
     r"市场规模|行业规模|全产业链|产业链产值|市场空间|行业产值|总规模|市场规模达",
     # 比例/示例/倍数（如"100万次阅读比10万次多1倍"中的 0.01/0.001）
     r"倍$|次$|比例|示例|举例|每\S{0,4}就|相当于|约为.{0,4}倍",
+    # 小额科目/非锚点财务项（P12 诊断 2026-08-22：0.1-1.14 亿数字被判"无同量级锚点"
+    # 导致 gate_issues=1 不消——减值/拨备/补助/汇兑/回购/分红/少数股东/利息等）
+    r"减值|拨备|补助|补贴|奖励|汇兑|利息|回购|分红|派息|股利|少数股东|少数权益|"
+    r"政府补助|递延收益|商誉|无形资产|使用权资产|租赁负债|股份支付|股权激励|"
+    r"员工持股|期权|认股权|信托|理财|存款|保证金|押金|预付款|预收款|应收|应付|"
+    r"递延|摊销|折旧|资本化|研发投入|研发费用|管理费用|销售费用|财务费用",
 ]
 
 # 币值关键词
@@ -201,16 +209,18 @@ class NumericGuard:
         result = GateResult(passed=True)
         if chapter_num not in FINANCIAL_CHAPTERS:
             return result
+        # 分级阈值：ch5 运营章≥1，ch6 纯财务章≥3
+        min_numbers = MIN_FINANCIAL_NUMBERS_BY_CH.get(chapter_num, MIN_FINANCIAL_NUMBERS)
         stripped = re.sub(r"\s", "", content or "")
         if len(stripped) >= MIN_CHAPTER_CHARS:
             decimals = re.findall(r"\d+\.\d+", content)
-            if len(decimals) < MIN_FINANCIAL_NUMBERS:
+            if len(decimals) < min_numbers:
                 result.passed = False
                 result.violations.append(GateViolation(
                     gate="shell", chapter=chapter_num,
                     message=(
                         f"空壳章：长度 {len(stripped)} 达标但仅 {len(decimals)} 个小数数字"
-                        f"（财务章须 ≥{MIN_FINANCIAL_NUMBERS} 个，如 73.66/-7.76）"
+                        f"（第{chapter_num}章须 ≥{min_numbers} 个，如 73.66/-7.76）"
                     ),
                 ))
         return result
