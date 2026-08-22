@@ -3189,14 +3189,53 @@ def run_analysis(
         degradation_reasons.append(f"Gate Checks失败: {e}")
         logger.warning(f"Step 4.6 Gate Checks失败（非阻断）: {e}")
 
-    # ==================================================
-    # Step 4.7: 深度审查 + 实质性审查（审查修复循环）
-    # ==================================================
-    # 2026-08-22 P5/P11 诊断：此步与 gate4._execute 内部的 review_and_repair_loop
-    # **重复调用**——Step 4.6 Gate Checks 已包含 gate4 实质审查修复循环（max_rounds=3），
-    # 此处再调一次导致"收敛早停→Gate4 形式审查→再收敛早停"的双循环。
-    # 修复：删除重复调用，审查修复循环统一由 gate4._execute 管理。
-    logger.info("Step 4.7: 审查修复循环已由 Gate4（Step 4.6）统一执行，跳过重复调用")
+    # Step 4.7: Gate 8 终局 sweep（即使 Gate 4 失败也运行——最后防线）
+    # 2026-08-22：Gate 4 失败 → Gate 5-8 级联跳过 → Gate 8 终局 sweep 不运行 →
+    # 占位符残留/裸数字幻觉/模糊时间词逃逸到最终报告。
+    # 修复：在 Step 4.7 独立运行终局 sweep（ADVC + PGNB + 日期绑定），
+    # 不依赖 Gate 5-7 前置通过。
+    logger.info("Step 4.7: 终局 rescue sweep（独立于 Gate 4 结果）")
+    try:
+        from .qual_v8.anchor_repair import sweep_all_chapters
+        from .qual_v8.data_anchor import get_data_anchor
+        from .qual_v8.numeric_binder import (
+            bind_bare_numbers, bind_fuzzy_dates, bind_placeholders,
+        )
+        _wind_dict_sweep = {}
+        if ctx.wind:
+            _wind_dict_sweep = {
+                "income": ctx.wind.income if isinstance(ctx.wind.income, dict) else {},
+                "balance": ctx.wind.balance if isinstance(ctx.wind.balance, dict) else {},
+                "cashflow": ctx.wind.cashflow if isinstance(ctx.wind.cashflow, dict) else {},
+                "_year_labels": getattr(ctx.wind, "_year_labels", None) or {},
+            }
+        if _wind_dict_sweep:
+            _anchor_sw = get_data_anchor(_wind_dict_sweep)
+            # ADVC sweep
+            _fixed, _fixes, _unresolved, _hints = sweep_all_chapters(chapters, _anchor_sw)
+            if _fixes:
+                chapters.clear()
+                chapters.update(_fixed)
+                logger.info(f"终局 ADVC sweep: 修复 {len(_fixes)} 处")
+            # 日期语义绑定 + 裸数字替换 + 占位符回填（逐章）
+            _total_date = _total_bbn = _total_bind = 0
+            for _ch_num in list(chapters.keys()):
+                _c = chapters.get(_ch_num, "")
+                _c, _df = bind_fuzzy_dates(_c, _wind_dict_sweep, _ch_num)
+                _total_date += len(_df)
+                _c, _bf = bind_bare_numbers(_c, _anchor_sw, _ch_num)
+                _total_bbn += len(_bf)
+                if "[{{" in _c:
+                    _c, _ur = bind_placeholders(_c, _anchor_sw, _ch_num)
+                    _total_bind += len(_ur)
+                chapters[_ch_num] = _c
+            if _total_date or _total_bbn or _total_bind:
+                logger.info(
+                    f"终局 sweep: 日期绑定 {_total_date} 处, "
+                    f"裸数字替换 {_total_bbn} 处, 占位符回填 {_total_bind} 处"
+                )
+    except Exception as e:
+        logger.warning(f"终局 sweep 失败（非阻断）: {e}")
 
     # ==================================================
     # Step 5: 综合结论 + 决策章 + 概览章
