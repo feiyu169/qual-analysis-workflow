@@ -681,7 +681,8 @@ def _verify_company_identity(sections: dict[str, str], company_name: str, ticker
     for title, content in sections.items():
         search_text += title + "\n" + content + "\n"
 
-    # 公司名变体：简体/繁体/英文
+    # 公司名变体：简体/繁体/英文/带"-W"后缀（2026-08-22：小鹏港股年报用
+    # "小鹏汽车-W"/"小鹏汽车－W"（繁体全角横线）而非"小鹏汽车"，导致误告警）
     name_variants = [company_name]
     _tc_map = {
         "阅": "閱", "文": "文", "集": "集", "团": "團",
@@ -690,6 +691,15 @@ def _verify_company_identity(sections: dict[str, str], company_name: str, ticker
         name_variants += ["閱文集團", "阅文集團", "閱文集团", "China Literature"]
     if "集团" in company_name:
         name_variants.append(company_name.replace("集团", "集團"))
+    # 通用变体：去"-W"/"－W"后缀 + 全角横线替换（港股同股不同权标记，非公司名一部分）
+    _base = company_name.replace("-W", "").replace("－W", "").replace("－", "-")
+    if _base != company_name:
+        name_variants.append(_base)
+    # 英文名兜底：取中文名中非中文部分（如"XPeng"），或常见英文简写
+    import re as _re
+    _en = _re.sub(r"[\u4e00-\u9fff\-—－·]", "", company_name).strip()
+    if _en and len(_en) >= 3:
+        name_variants.append(_en)
     name_found = any(v in search_text for v in name_variants if v)
     # 股票代码（含 0772 / 00772 / 0772.HK）
     code_found = any(c in search_text for c in (ticker_code, "0" + ticker_code, ticker, "0772", "00772"))
