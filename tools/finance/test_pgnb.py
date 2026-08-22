@@ -12,7 +12,11 @@ sys.path.insert(0, str(ROOT / "tools"))
 import pytest
 
 from finance.qual_v8.data_anchor import _anchor_cache, get_data_anchor
-from finance.qual_v8.numeric_binder import bind_placeholders, validate_bare_numbers
+from finance.qual_v8.numeric_binder import (
+    bind_bare_numbers,
+    bind_placeholders,
+    validate_bare_numbers,
+)
 
 XPENG_WIND = {
     "income": {
@@ -210,6 +214,86 @@ def test_validate_bare_numbers_year_exemption():
     problems = validate_bare_numbers(content, _anchor(), 3)
     # 2024.0 是年份 → 豁免；无其他裸数字（767.20 未写）
     assert not problems, f"年份数字应豁免: {problems}"
+
+
+# ====================================================================
+# v4（2026-08-22 实测驱动）：裸数字程序绑定——拦截即替换，零 LLM 重写依赖
+# ====================================================================
+
+def test_bind_bare_numbers_replaces_hallucination():
+    """v4：LLM 直接写幻觉数字（营业利润=12.5 vs 锚点 -44.16）→ 程序替换为占位符
+    （随后 bind_placeholders 回填锚点值——不再触发 LLM 重写/空壳章）"""
+    content = "公司营业利润=12.5亿元，亏损收窄。"
+    bound, fixes = bind_bare_numbers(content, _anchor(), 5)
+    assert fixes, f"幻觉数字必须被替换: {fixes}"
+    assert "营业利润=[{{营业利润}}]" in bound, f"应替换为占位符: {bound}"
+
+    # 回填后 → 锚点值 -44.16，且通过校验器（零幻觉闭环）
+    bound2, unresolved = bind_placeholders(bound, _anchor(), 5)
+    assert not unresolved, f"替换后占位符应可回填: {unresolved}"
+    assert "FY2025 -44.16" in bound2, f"应回填锚点值: {bound2}"
+    assert not _anchor().validate_chapter_any_fy(5, bound2), "回填后必须通过校验器"
+
+
+def test_bind_bare_numbers_keeps_anchored():
+    """v4：命中锚点的裸数字（总资产1031.63=FY2025）→ 保留（不误改）"""
+    content = "公司总资产1031.63亿元。"
+    bound, fixes = bind_bare_numbers(content, _anchor(), 6)
+    assert not fixes, f"命中锚点不应替换: {fixes}"
+    assert bound == content
+
+
+def test_bind_bare_numbers_keeps_historical():
+    """v4：命中历史财年锚点（总资产827.06=FY2024）→ 保留（多财年兼容）"""
+    content = "FY2024 总资产827.06亿元，较上年下降。"
+    bound, fixes = bind_bare_numbers(content, _anchor(), 6)
+    assert not fixes, f"历史财年合法引用不应替换: {fixes}"
+    assert bound == content
+
+
+def test_bind_bare_numbers_keeps_no_anchor():
+    """v4：无锚点指标（毛利率等）→ 保留原文（不猜测，validate 收口）"""
+    content = "公司毛利率约12.5%。"
+    bound, fixes = bind_bare_numbers(content, _anchor(), 5)
+    assert not fixes, f"无锚点指标不应替换: {fixes}"
+    assert "12.5" in bound
+
+
+def test_bind_bare_numbers_year_exemption():
+    """v4：年份豁免——'营业收入2024.0亿元' 的 2024.0 是年份 → 不替换"""
+    content = "FY2024 营业收入2024.0亿元（年份误写，实际[{{营业收入:2024}}]）。"
+    bound, fixes = bind_bare_numbers(content, _anchor(), 5)
+    assert not fixes, f"年份数字不应替换: {fixes}"
+    assert "2024.0" in bound
+
+
+def test_bind_bare_numbers_derived_pct():
+    """v4：派生百分比幻觉（净利率5.0% vs 程序计算 -1.49%）→ 替换为占位符"""
+    content = "公司净利率5.0%，盈利改善。"
+    bound, fixes = bind_bare_numbers(content, _anchor(), 5)
+    assert fixes, f"净利率幻觉应替换: {fixes}"
+    assert "净利率[{{净利率}}]" in bound, f"应替换为占位符: {bound}"
+    bound2, _ = bind_placeholders(bound, _anchor(), 5)
+    assert "-1.49%" in bound2, f"回填后应为程序计算值: {bound2}"
+
+
+def test_bind_bare_numbers_end_to_end_no_empty_chapter():
+    """v4 端到端：复现 2026-08-22 第5章死循环——4 处幻觉数字一次替换，
+    不进入 LLM 重写（对比：旧流程重试 3 次后空壳章 0 数字）"""
+    content = (
+        "公司营业利润=12.5亿元，总资产0.79亿元，资产负债率合理，"
+        "营收767.20亿元（命中锚点）。"
+    )
+    bound, fixes = bind_bare_numbers(content, _anchor(), 5)
+    assert len(fixes) == 2, f"应替换 2 处幻觉（营业利润/总资产）: {fixes}"
+    assert "营业利润=[{{营业利润}}]" in bound
+    assert "总资产[{{总资产}}]" in bound
+    assert "767.20" in bound  # 命中锚点的营收保留
+
+    # 回填后全部来自锚点 → 校验器零问题（无空壳章、无重试）
+    bound2, unresolved = bind_placeholders(bound, _anchor(), 5)
+    assert not unresolved
+    assert not _anchor().validate_chapter_any_fy(5, bound2), "回填后必须零错误"
 
 
 if __name__ == "__main__":

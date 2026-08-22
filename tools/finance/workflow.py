@@ -1172,7 +1172,7 @@ def _build_gate_fix_prompt(chapter_num: int, chapter_title: str, issues: List[st
 {chr(10).join('- ' + i for i in issues[:6])}
 
 修正要求：
-1. **删除任何与 Wind 锚点量级不符的数值**（如营收写成 1427 亿而实际 73 亿）——模板残留必须清除，改用本报告 Wind 锚点值
+1. **数值必须来自 Wind 锚点表或占位符**：与锚点量级不符的数值（如营收写成 1427 亿而实际 73 亿）必须改为**本报告 Wind 锚点值**或 **[{{指标}}] 占位符**——**禁止删除数值**（财务章至少保留 3 个小数数字，删光数值=空壳章=重写失败）
 2. **删除所有 `# 开头` 的 H1 标题**——你只输出正文，章节标题由系统统一添加
 3. **严格使用小节标题（H2）**：## 结论要点 / ## 详细情况 / ## 证据与出处
 4. **补全内容**：若章节过短/无数值，用 Wind 锚点数据 + 事实表充实到完整分析
@@ -1278,6 +1278,25 @@ def _generate_chapter(
                         f"{chapter_name} ADVC 弱签名提示 {len(_advc_hints)} 处"
                         f"（digit_typo，不阻断）"
                     )
+
+                # PGNB 升级③（2026-08-22 实测驱动）：裸数字程序绑定——LLM 未用占位符
+                # 直接写财务数字 → 程序替换为占位符（随后 bind_placeholders 按锚点回填）。
+                # 目的：拦截后不再依赖 LLM 重写（重试引导"删数字"→ 空壳章死循环）；
+                # 数字 100% 来自锚点，LLM 无法靠删数字逃避校验。
+                _bbn_fixes: list[str] = []
+                try:
+                    from .qual_v8.data_anchor import get_data_anchor as _gd3
+                    from .qual_v8.numeric_binder import bind_bare_numbers as _bbn
+                    _wind_dict3 = _wind_to_dict(ctx.wind) if ctx.wind else {}
+                    if _wind_dict3:
+                        content, _bbn_fixes = _bbn(content, _gd3(_wind_dict3), chapter_num)
+                        if _bbn_fixes:
+                            logger.info(
+                                f"{chapter_name} PGNB 程序替换 {len(_bbn_fixes)} 处裸数字"
+                                f"为占位符（数字 100% 锚点，零 LLM 重写依赖）"
+                            )
+                except Exception as e:
+                    logger.warning(f"PGNB 裸数字程序绑定失败（非阻断）: {e}")
 
                 # PGNB（docs/qual-pgnb-architecture.md）：占位符回填——LLM 写 [{{指标}}]，
                 # 程序按锚点回填（幻觉数字从源头消失；无锚点保留 [数据待核] 不静默）

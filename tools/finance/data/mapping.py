@@ -160,17 +160,27 @@ class DataMappingRegistry:
         """验证schema"""
         errors = []
 
+        # 2026-08-22 实测修复：Wind 数据是分层结构（quote/valuation/income/balance/
+        # cashflow 子 dict），直接校验顶层会永久误报"缺少必需字段: 营业利润/归母净利润"。
+        # 展开子 dict 后校验（含 income/balance/cashflow 三表的财务字段）。
+        flat = {}
+        for section in ("income", "balance", "cashflow"):
+            sub = data.get(section)
+            if isinstance(sub, dict):
+                flat.update(sub)
+        flat.update({k: v for k, v in data.items() if not isinstance(v, dict)})
+
         # 检查必需字段（双专家 P2：用 canonical 键——canonical 化后"营业总收入"已归一为
         # "营业收入"、年净利润→归母净利润，按旧键名校验会永久误报"缺少必需字段"）
         required_fields = ["营业收入", "营业利润", "归母净利润"]
         for field in required_fields:
-            if field not in data:
+            if field not in flat:
                 # 检查别名
                 mapping = cls.FIELD_MAPPINGS.get(field)
                 if mapping:
                     found = False
                     for alias in mapping.aliases:
-                        if alias in data:
+                        if alias in flat:
                             found = True
                             break
                     if not found:

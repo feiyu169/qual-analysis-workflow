@@ -161,6 +161,87 @@ def bind_placeholders(content: str, anchor, chapter_num: int,
 
 
 # ====================================================================
+# heavyskill 升级③：裸数字程序绑定（2026-08-22 实测驱动——拦截即替换，零 LLM 重写依赖）
+# ====================================================================
+
+
+def bind_bare_numbers(content: str, anchor, chapter_num: int) -> tuple[str, list[str]]:
+    """裸数字程序绑定：LLM 未用占位符直接写财务数字时，若该指标有锚点且值不匹配
+    任一财年 → **程序把数字替换为 [{{指标}}] 占位符**（占位符随后由 bind_placeholders
+    按锚点回填，数字 100% 来自锚点）；命中锚点/无锚点/年份 → 原样保留。
+
+    实测背景（2026-08-22 小鹏全流程）：第5章 LLM 写"营业利润=12.5"（锚点 -44.16）、
+    "总资产=0.79"（锚点 1031.63），validate_bare_numbers 拦截后依赖 LLM 重写，
+    而重试引导"删除不符数值"→ LLM 删光所有数字 → 空壳章（0 小数）。
+    修复：拦截即程序替换为占位符，不进入重试循环——LLM 无法靠"删数字"逃避校验。
+
+    Returns:
+        (替换后内容, fixes 列表)——无法判定的（无锚点）保留原文，由 validate_bare_numbers 收口
+    """
+    if not content or not anchor:
+        return content, []
+
+    fixes: list[str] = []
+    pts_dict: dict[str, list] = {}
+    try:
+        all_anchors = anchor.get_all_anchors() if hasattr(anchor, "get_all_anchors") else {}
+        for k, pts in all_anchors.items():
+            pts_dict[k] = list(pts)
+    except Exception:
+        pts_dict = {}
+
+    def _repl(m: re.Match) -> str:
+        metric = m.group(1)
+        try:
+            value = float(m.group(2))
+        except (TypeError, ValueError):
+            return m.group(0)
+        # 4 位年份豁免（2023.0/2024.0 误写为财务值——年份非财务数字）
+        if 2020 <= value <= 2035 and value == int(value) and len(m.group(2).split(".")[0]) == 4:
+            return m.group(0)
+        unit = m.group(3) or "亿"
+        v = value
+        if unit in ("万元", "万"):
+            v = value / 10000.0
+
+        # 百分比指标：派生可计算 → 程序比对；不可计算 → 保留（语义检测兜底）
+        if unit == "%":
+            if metric in DERIVED_METRICS and DERIVED_METRICS[metric]["available"]:
+                calc = _calc_derived(metric, pts_dict, None)
+                if calc is not None and abs((v / 100.0) - calc) <= 0.01:
+                    return m.group(0)  # 命中派生计算值 → 合法
+                if calc is not None:
+                    head = m.group(0)[: m.start(2) - m.start(0)]
+                    tail = m.group(0)[m.end(2) - m.start(0):]
+                    fixes.append(f"{metric}: {value}% → 占位符（程序计算 {calc:.2%}）")
+                    return head + f"[{{{{{metric}}}}}]" + tail
+            return m.group(0)
+
+        # 绝对额指标
+        pts = anchor.get_metric_points(metric)
+        if not pts:
+            return m.group(0)  # 无锚点（毛利率/运营数据）→ 保留，不猜测
+        if any(
+            dp.value is not None
+            and abs(v - dp.value) / max(abs(dp.value), 1e-9) <= 0.01
+            for dp in pts
+        ):
+            return m.group(0)  # 命中任一财年锚点 → 合法
+
+        # 幻觉数字 → 替换为占位符（保留指标名与单位，数字位置换占位符）
+        head = m.group(0)[: m.start(2) - m.start(0)]
+        tail = m.group(0)[m.end(2) - m.start(0):]
+        latest = pts[-1]
+        fixes.append(
+            f"{metric}: {value} → 占位符（锚点 FY{latest.fiscal_year}={latest.value:.2f}）"
+        )
+        return head + f"[{{{{{metric}}}}}]" + tail
+
+    new_content = _METRIC_NUM_RE.sub(_repl, content)
+    return new_content, fixes
+
+
+# ====================================================================
 # heavyskill 升级②：裸财务数字硬拦截（不依赖 prompt 配合）
 # ====================================================================
 

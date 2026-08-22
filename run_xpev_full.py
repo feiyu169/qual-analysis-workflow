@@ -150,7 +150,11 @@ def main():
     with open(os.path.join(TMP, "xpev-wind.json"), encoding="utf-8") as f:
         bundle = json.load(f)
     wind_data, shares = bundle["wind_data"], bundle["shares"]
-    company = bundle.get("company_name") or "小鹏集团-W"
+    # 2026-08-22：小鹏港股正式简称"小鹏汽车-W"/"小鹏汽车"（非"小鹏集团-W"）——
+    # 错误名称导致公司身份核验"全文未找到公司名"误告警
+    company = bundle.get("company_name") or "小鹏汽车"
+    if company in ("", "小鹏集团-W"):
+        company = "小鹏汽车"
     log(f"Wind 数据就绪: shares={shares}亿股, 键={list(wind_data.keys())}")
 
     # B2a-1：current_price 从 Wind quote 动态取（删 46.52 硬编码）
