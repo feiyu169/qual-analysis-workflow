@@ -14,6 +14,7 @@
 | [2026-08-21-heavyskill-mode2-truncation.md](2026-08-21-heavyskill-mode2-truncation.md) | 2026-08-21 | heavyskill 模式2 审查结果被截断：max_tokens 配置断裂 + finish_reason 不检查 + 思维链回退污染共识（已修复+9 单测） | P54 |
 | [2026-08-21-heavyskill-p54-hgf-review.md](2026-08-21-heavyskill-p54-hgf-review.md) | 2026-08-21 | HGF 审查 P54 修复：裁决 FAIL——CLI 标志断裂/冒号守卫误杀/审议截断无保护（3×P1 实证），修复清单 R1-R7 | P54 |
 | [2026-08-21-roi-benchmark.md](2026-08-21-roi-benchmark.md) | 2026-08-21 | ROI 对照实验：HGF 净拦截 2 缺陷（逃逸 2 vs 4），首次通过率 +50%；修复循环是实验必要组件 | P53 |
+| [2026-08-22-invisible-tests-ruff-mask.md](2026-08-22-invisible-tests-ruff-mask.md) | 2026-08-22 | qual 隐形测试：27 文件长期不可收集（v3 路径断裂）被门禁掩盖；ruff --fix 静默删断裂 import；声称-现实漂移 | P55 |
 
 ## 沉淀流程
 

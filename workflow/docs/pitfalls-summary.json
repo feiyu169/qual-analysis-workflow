@@ -1,7 +1,7 @@
 {
   "schema_version": "hgf.v1",
   "kind": "pitfalls-summary",
-  "updated": "2026-08-21",
+  "updated": "2026-08-22",
   "purpose": "L1 启动协议的轻量经验索引（agent 会话启动时读此文件，不读 registry 全文以省 token）。与 docs/pitfalls-registry.md 同步维护。",
   "gated": [
     {"p": "P0", "topic": "文件存在≠能用", "mechanism": "fail-loud 解析器 + lifecycle 准出检查器"},
@@ -11,7 +11,8 @@
     {"p": "P36", "topic": "字段存在≠功能完成", "mechanism": "integration-probe 门禁"},
     {"p": "P50", "topic": "配置字段定义未使用", "mechanism": "L2-L5 证据机制"},
     {"p": "P53", "topic": "元门禁自律（自审查沉淀）", "mechanism": "self_audit 检查器 + gate_5_3 + 7 测试 + pre-push/CI"},
-    {"p": "P54", "topic": "审查结果被截断（heavyskill 模式2）", "mechanism": "预算配置打通 + finish_reason 显性化 + 截断轨迹剔除 + JSON truncation 摘要 + 9 单测"}
+    {"p": "P54", "topic": "审查结果被截断（heavyskill 模式2）", "mechanism": "预算配置打通 + finish_reason 显性化 + 截断轨迹剔除 + JSON truncation 摘要 + 9 单测"},
+    {"p": "P55", "topic": "隐形测试 + ruff 自动修复掩盖断裂（qual 2026-08-22）", "mechanism": "建议门禁化：unit_test 全目录收集验证 + ruff --fix 前 grep 目标符号 + 声称数字实测复现"}
   ],
   "lessons": [
     {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-self-audit.md", "topic": "failure_log 自锁/baseline 损坏/requirements 伪文件", "p": "P53"},
@@ -19,6 +20,7 @@
     {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-v34-review.md", "topic": "V3.4 方案代码审查：glob 匹配/伪签名/对照污染/空集合/非原子写 5 处 P0", "p": "P53"},
     {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-heavyskill-mode2-truncation.md", "topic": "heavyskill 模式2 审查结果截断：max_tokens 配置断裂 + finish_reason 不检查 + 思维链污染共识", "p": "P54"},
     {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-heavyskill-p54-hgf-review.md", "topic": "HGF 审查 P54：裁决 FAIL（CLI 标志断裂/冒号守卫误杀/审议截断无保护），修复清单 R1-R7", "p": "P54"},
-    {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-roi-benchmark.md", "topic": "ROI 对照实验：HGF 净拦截 2 缺陷，修复循环是实验必要组件", "p": "P53"}
+    {"date": "2026-08-21", "file": "docs/lessons/2026-08-21-roi-benchmark.md", "topic": "ROI 对照实验：HGF 净拦截 2 缺陷，修复循环是实验必要组件", "p": "P53"},
+    {"date": "2026-08-22", "file": "docs/lessons/2026-08-22-invisible-tests-ruff-mask.md", "topic": "qual 隐形测试：27 文件长期不可收集被门禁掩盖 + ruff --fix 静默删断裂 import + 声称-现实漂移", "p": "P55"}
   ]
 }
