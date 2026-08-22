@@ -1,6 +1,7 @@
-"""PGNB 数字回填器测试（docs/qual-pgnb-architecture.md）
+"""PGNB 数字回填器测试（docs/qual-pgnb-architecture.md + heavyskill K8 审查升级 v2）
 
-验证：LLM 占位符 → 程序按锚点回填（零幻觉）；无锚点 → [数据待核]；FY 标注正确。
+验证：LLM 占位符 → 程序按锚点回填（零幻觉）；无锚点 → [数据待核]；FY 标注正确；
+v2：派生指标程序计算（净利率/ROE/同比）+ 裸数字硬拦截。
 """
 import sys
 from pathlib import Path
@@ -11,7 +12,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 import pytest
 
 from finance.qual_v8.data_anchor import _anchor_cache, get_data_anchor
-from finance.qual_v8.numeric_binder import bind_placeholders
+from finance.qual_v8.numeric_binder import bind_placeholders, validate_bare_numbers
 
 XPENG_WIND = {
     "income": {
@@ -96,6 +97,67 @@ def test_bind_no_hallucination_when_llm_compliant():
     assert "767.20" in bound
     errors_after = _anchor().validate_chapter_any_fy(3, bound)
     assert not errors_after, f"PGNB 回填后必须通过校验器: {errors_after}"
+
+
+# ====================================================================
+# heavyskill K8 升级 v2：派生指标程序计算 + 裸数字硬拦截
+# ====================================================================
+
+def test_bind_derived_net_margin():
+    """v2 派生指标：净利率 = 归母净利润/营业收入（程序计算，LLM 不自算）"""
+    content = "公司[{{净利率}}]，盈利改善。"
+    bound, unresolved = bind_placeholders(content, _anchor(), 3)
+    assert not unresolved, f"净利率应有锚点可算: {unresolved}"
+    # FY2025: -11.3946/767.1974 = -1.49%
+    assert "-1.49%" in bound, f"应回填净利率: {bound}"
+
+
+def test_bind_derived_roe():
+    """v2 派生指标：ROE = 归母净利润/年所有者权益合计"""
+    content = "ROE[{{ROE}}]。"
+    bound, _ = bind_placeholders(content, _anchor(), 3)
+    # FY2025: -11.3946/303.6859 = -3.75%
+    assert "-3.75%" in bound, f"应回填 ROE: {bound}"
+
+
+def test_bind_derived_yoy():
+    """v2 派生指标：营收同比 = (FY2025-FY2024)/FY2024"""
+    content = "营收同比[{{营收同比}}]。"
+    bound, unresolved = bind_placeholders(content, _anchor(), 5)
+    assert not unresolved, f"营收同比应有数据可算: {unresolved}"
+    # (767.1974-408.6631)/408.6631 = 87.73%
+    assert "87.73%" in bound, f"应回填营收同比: {bound}"
+
+
+def test_bind_derived_unavailable_margin():
+    """v2：毛利率无锚点（毛利不可得）→ [数据待核]（不编造）"""
+    content = "毛利率[{{毛利率}}]。"
+    bound, unresolved = bind_placeholders(content, _anchor(), 3)
+    assert "[数据待核:毛利率]" in bound, "毛利率不可派生应数据待核"
+    assert unresolved
+
+
+def test_validate_bare_numbers_catches_hallucination():
+    """v2 裸数字硬拦截：LLM 直接写幻觉数字 14.0 → 检出（不依赖 prompt 配合）"""
+    content = "公司营业收入14.0亿元。"
+    problems = validate_bare_numbers(content, _anchor(), 3)
+    assert problems, "裸数字幻觉必须被检出"
+    assert "14.0" in problems[0]
+
+
+def test_validate_bare_numbers_allows_anchored():
+    """v2 裸数字：命中锚点（767.20=实际值）→ 不报（合法）"""
+    content = "公司营业收入767.20亿元。"
+    problems = validate_bare_numbers(content, _anchor(), 3)
+    assert not problems, f"命中锚点不应报: {problems}"
+
+
+def test_validate_bare_numbers_derived_caught():
+    """v2 裸数字：净利率幻觉（5.0% vs 实际 -1.49%）→ 检出（百分比类）"""
+    content = "公司净利率5.0%，盈利改善。"
+    problems = validate_bare_numbers(content, _anchor(), 3)
+    # 净利率是派生指标，validate_bare_numbers 的 regex 含净利率 → 检出
+    assert problems, "净利率幻觉应被检出"
 
 
 if __name__ == "__main__":

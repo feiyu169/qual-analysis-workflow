@@ -43,6 +43,8 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # __init__.py 模块级 re-export 惯例（E402：import 在 docstring/常量之后）
 "quality/__init__.py" = ["E402"]
+# numeric_binder.py：DERIVED_METRICS 配置表长行是合理例外（指标公式+依赖描述）
+"qual_v8/numeric_binder.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"

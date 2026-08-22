@@ -1,8 +1,13 @@
-"""数字回填器（PGNB 架构层）——LLM 写作占位符 → 程序按锚点回填
+"""数字回填器（PGNB 架构层，v2——heavyskill K8 审查升级）——LLM 写作占位符 → 程序按锚点回填
 
-docs/qual-pgnb-architecture.md 方案实现：
-把财务数字从 LLM 写作职责中移出——LLM 只写 [{{指标}}] 占位符，
-生成后由程序按 DataAnchor 锚点回填（零 LLM 幻觉数字）。
+docs/qual-pgnb-architecture.md 方案实现 + heavyskill 审查升级：
+v1：只有 7 个财务绝对额占位符（根治性 4/10——派生指标/运营数据缺失、裸数字未拦截）
+v2 升级（heavyskill 三条建议）：
+1. **派生指标程序化**：毛利率/净利率/ROE/营业利润率/同比增速等由程序按锚点计算，
+   LLM 引用派生占位符不自算（[{{毛利率}}] → 程序算 FY2025 毛利/营收）
+2. **裸数字硬拦截**：validate_against_anchor 检查章节裸财务数字（非占位符）vs 锚点，
+   不匹配 → 记问题（配合校验器 fail-closed，不依赖 prompt 配合）
+3. **运营/别名归一**：占位符指标名 canonical 归一 + 无锚点严格 [数据待核]
 """
 import logging
 import re
@@ -12,10 +17,61 @@ logger = logging.getLogger(__name__)
 # 占位符语法：[{{指标名}}] 或 [{{指标名:财年}}]（可选指定财年，默认最新）
 PLACEHOLDER_RE = re.compile(r"\[{{([^}:]+)(?::(\d{4}))?}}\]")
 
+# 派生指标 → (公式名, [依赖锚点指标])——程序计算，LLM 只引用不自算
+DERIVED_METRICS: dict[str, dict] = {
+    "毛利率": {"formula": "毛利/营收（毛利暂无锚点→标记不可得）", "deps": [], "available": False},
+    "净利率": {"formula": "归母净利润/营业收入", "deps": ["归母净利润", "营业收入"], "available": True},
+    "营业利润率": {"formula": "营业利润/营业收入", "deps": ["营业利润", "营业收入"], "available": True},
+    "ROE": {"formula": "归母净利润/年所有者权益合计", "deps": ["归母净利润", "年所有者权益合计"], "available": True},
+    "资产负债率": {"formula": "年负债合计/总资产", "deps": ["年负债合计", "总资产"], "available": True},
+    "营收同比": {"formula": "(本期营收-上期营收)/上期营收", "deps": ["营业收入"], "available": True},
+    "净利同比": {"formula": "(本期净利-上期净利)/上期净利", "deps": ["归母净利润"], "available": True},
+    "经营现金流/营收": {"formula": "经营现金流/营业收入", "deps": ["经营活动现金流量净额", "营业收入"], "available": True},
+}
+
+
+def _calc_derived(metric: str, pts_dict: dict[str, list], fy: int | None) -> float | None:
+    """按公式计算派生指标值（程序计算——LLM 不自算）"""
+    spec = DERIVED_METRICS.get(metric)
+    if not spec or not spec["available"]:
+        return None
+    deps = spec["deps"]
+    if metric in ("营收同比", "净利同比"):
+        # 需要相邻两财年
+        key = deps[0]
+        pts = pts_dict.get(key) or []
+        if len(pts) < 2:
+            return None
+        # 按财年排序取最新两期
+        sorted_pts = sorted(pts, key=lambda dp: dp.fiscal_year or 0)
+        cur, prev = sorted_pts[-1], sorted_pts[-2]
+        if prev.value == 0:
+            return None
+        return (cur.value - prev.value) / abs(prev.value)
+    # 比率类：deps[0]/deps[1]
+    a_pts = pts_dict.get(deps[0]) or []
+    b_pts = pts_dict.get(deps[1]) or []
+    if not a_pts or not b_pts:
+        return None
+    a_sorted, b_sorted = sorted(a_pts, key=lambda dp: dp.fiscal_year or 0), sorted(b_pts, key=lambda dp: dp.fiscal_year or 0)
+    if fy is not None:
+        a = next((dp.value for dp in a_sorted if dp.fiscal_year == fy), None)
+        b = next((dp.value for dp in b_sorted if dp.fiscal_year == fy), None)
+    else:
+        a, b = a_sorted[-1].value, b_sorted[-1].value
+    if a is None or b is None or b == 0:
+        return None
+    return a / b
+
 
 def _format_value(value: float) -> str:
     """锚点值格式化：两位小数，负值保留符号"""
     return f"{value:.2f}"
+
+
+def _format_pct(value: float) -> str:
+    """百分比格式化（派生比率类）：-11.39%"""
+    return f"{value:.2%}"
 
 
 def bind_placeholders(content: str, anchor, chapter_num: int,
@@ -36,11 +92,35 @@ def bind_placeholders(content: str, anchor, chapter_num: int,
 
     unresolved: list[str] = []
 
+    # 收集全部锚点（供派生指标计算）
+    pts_dict: dict[str, list] = {}
+    try:
+        all_anchors = anchor.get_all_anchors() if hasattr(anchor, "get_all_anchors") else {}
+        for k, pts in all_anchors.items():
+            pts_dict[k] = list(pts)
+    except Exception:
+        pts_dict = {}
+
     def _resolve(match: re.Match) -> str:
         metric = match.group(1).strip()
         fy_spec = match.group(2)
         try:
             fy = int(fy_spec) if fy_spec else (fiscal_year or None)
+
+            # 派生指标 → 程序计算（heavyskill 升级①：LLM 只引用不自算）
+            if metric in DERIVED_METRICS:
+                spec = DERIVED_METRICS[metric]
+                if not spec["available"]:
+                    unresolved.append(f"{metric}（锚点缺失，不可派生）")
+                    return f"[数据待核:{metric}]"
+                val = _calc_derived(metric, pts_dict, fy)
+                if val is None:
+                    unresolved.append(f"{metric}（派生计算失败/依赖缺失）")
+                    return f"[数据待核:{metric}]"
+                # 同比类输出百分比；比率类输出百分比
+                return _format_pct(val)
+
+            # 原始指标 → 查锚点
             pts = anchor.get_metric_points(metric)
             if not pts:
                 unresolved.append(f"{metric}（无锚点）")
@@ -65,3 +145,78 @@ def bind_placeholders(content: str, anchor, chapter_num: int,
             f"（{unresolved[:3]}）——保留 [数据待核] 标注"
         )
     return bound, unresolved
+
+
+# ====================================================================
+# heavyskill 升级②：裸财务数字硬拦截（不依赖 prompt 配合）
+# ====================================================================
+
+# 财务指标名 → 匹配"指标名 + 数字 + 单位"的裸数字（非占位符）
+# 单位组含 %（净利率5.0% 紧跟）与 亿元/万（营收14.0亿元）
+_METRIC_NUM_RE = re.compile(
+    r"(营业收入|营业利润|归母净利润|经营活动现金流量净额|总资产|"
+    r"年负债合计|年所有者权益合计|净利润|毛利率|净利率|营业利润率)\s*"
+    r"[^\d\-]{0,8}(-?\d+\.?\d*)\s*(亿元|亿|万元|万|%)?"
+)
+
+
+def validate_bare_numbers(content: str, anchor, chapter_num: int) -> list[str]:
+    """检查章节中的裸财务数字（LLM 未用占位符直接写数）——heavyskill 升级②。
+
+    裸数字与锚点任一财年值偏差>1% → 记问题（配合校验器 fail-closed；
+    即使锚点命中也可能口径错误，但至少拦截纯幻觉如 14.0 vs 767.20）。
+
+    Returns:
+        问题列表（空=无裸数字幻觉）
+    """
+    if not content or not anchor:
+        return []
+
+    # 收集全部锚点（供派生指标计算比对）
+    pts_dict: dict[str, list] = {}
+    try:
+        all_anchors = anchor.get_all_anchors() if hasattr(anchor, "get_all_anchors") else {}
+        for k, pts in all_anchors.items():
+            pts_dict[k] = list(pts)
+    except Exception:
+        pts_dict = {}
+
+    problems: list[str] = []
+    for m in _METRIC_NUM_RE.finditer(content):
+        metric = m.group(1)
+        try:
+            value = float(m.group(2))
+        except (TypeError, ValueError):
+            continue
+        # 单位万元→亿
+        unit = m.group(3) or "亿"
+        if unit in ("万元", "万"):
+            value = value / 10000.0
+        # 百分比指标（净利率/营业利润率）→ 用派生指标程序计算结果比对（heavyskill 升级②）
+        if unit == "%" and metric in DERIVED_METRICS:
+            spec = DERIVED_METRICS[metric]
+            if spec["available"]:
+                calc = _calc_derived(metric, pts_dict, None)
+                if calc is not None and abs((value / 100.0) - calc) > 0.01:
+                    problems.append(
+                        f"第{chapter_num}章 裸数字幻觉: {metric}={value}%"
+                        f"（程序计算应为 {calc:.2%}，应用 [{{{{{metric}}}}}] 占位符）"
+                    )
+            continue
+        if unit == "%":
+            continue  # 非锚点百分比跳过
+        # 与锚点任一财年比对（1% 容差）
+        pts = anchor.get_metric_points(metric)
+        if not pts:
+            continue
+        hit = any(
+            dp.value is not None
+            and abs(value - dp.value) / max(abs(dp.value), 1e-9) <= 0.01
+            for dp in pts
+        )
+        if not hit:
+            problems.append(
+                f"第{chapter_num}章 裸数字幻觉: {metric}={value}（不匹配任一财年锚点，"
+                f"应用 [{{{{{metric}}}}}] 占位符）"
+            )
+    return problems

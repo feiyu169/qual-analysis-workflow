@@ -1055,6 +1055,8 @@ def _build_chapter_prompt(
 **禁止直接写出任何财务数字**。需要引用 Wind 锚点表中的指标时，用**占位符**：
 - 最新财年值：`[{{营业收入}}]`（系统自动回填为 FY2025 767.20 亿元）
 - 指定财年：`[{{总资产:2023}}]`（系统回填为 FY2023 841.63 亿元）
+- **派生指标（程序计算，禁止自算）**：`[{{净利率}}]`/`[{{营业利润率}}]`/`[{{ROE}}]`/
+  `[{{资产负债率}}]`/`[{{营收同比}}]`/`[{{净利同比}}]`（系统按锚点计算百分比）
 - 可用的指标名（Wind 锚点表键）：营业收入 / 营业利润 / 归母净利润 /
   经营活动现金流量净额 / 总资产 / 年负债合计 / 年所有者权益合计
 - **正负号由系统按锚点保留**（如亏损 `[{{归母净利润}}]` 会回填为负值，你不得自行写正/负）
@@ -1063,6 +1065,8 @@ def _build_chapter_prompt(
 
 > 反例（禁止）："公司营业收入14.0亿元" → 应写 "公司营业收入[{{营业收入}}]亿元"
 > 正例："公司营业收入[{{营业收入}}]亿元，较上年增长显著。"
+> 派生指标正例："公司[{{净利率}}]改善" → 系统回填 "-1.49%"
+> 同比正例："营收同比[{{营收同比}}]" → 系统按 FY2025 vs FY2024 计算
 
 ## 📅 时间表述铁律（R7-⑤，违反即重写）
 **禁止使用模糊时间词**：当前 / 目前 / 最近 / 近期 / 近年 / 本年度（单独使用）。
@@ -1287,6 +1291,17 @@ def _generate_chapter(
                 except Exception as e:
                     logger.warning(f"PGNB 回填失败（非阻断）: {e}")
 
+                # PGNB 升级②（heavyskill）：裸财务数字硬拦截——LLM 未用占位符直接写
+                # 幻觉数字（如 14.0 vs 767.20）→ 记问题触发重试（不依赖 prompt 配合）
+                _bare_problems: list[str] = []
+                try:
+                    from .qual_v8.numeric_binder import validate_bare_numbers as _vbn
+                    _wind_dict3 = _wind_to_dict(ctx.wind) if ctx.wind else {}
+                    if _wind_dict3:
+                        _bare_problems = _vbn(content, _gd(_wind_dict3), chapter_num)
+                except Exception as e:
+                    logger.warning(f"PGNB 裸数字拦截失败（非阻断）: {e}")
+
                 # 格式验证
                 check_result = structural_check(f"ch{chapter_num}", content)
 
@@ -1317,10 +1332,15 @@ def _generate_chapter(
                 except Exception as e:
                     logger.warning(f"财年校验失败（非阻断）: {e}")
 
-                all_issues = list(check_result.issues) + gate_issues + fiscal_issues
+                all_issues = list(check_result.issues) + gate_issues + fiscal_issues + _bare_problems
+                if _bare_problems:
+                    logger.warning(
+                        f"{chapter_name} PGNB 裸数字幻觉 {len(_bare_problems)} 处"
+                        f"（{_bare_problems[0][:80]}）——触发重试"
+                    )
 
-                if check_result.passed and not gate_issues and not fiscal_issues:
-                    logger.info(f"{chapter_name} 生成完成: {len(content)} 字符, 格式+闸门+财年验证通过")
+                if check_result.passed and not gate_issues and not fiscal_issues and not _bare_problems:
+                    logger.info(f"{chapter_name} 生成完成: {len(content)} 字符, 格式+闸门+财年+PGNB验证通过")
                     return content
                 elif attempt < max_format_retries:
                     # 格式或闸门失败 → 重试
