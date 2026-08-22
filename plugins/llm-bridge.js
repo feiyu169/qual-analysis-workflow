@@ -1,12 +1,21 @@
-// llm-bridge 动态插件（Host 半部源码）
+// llm-bridge 动态插件（Host 半部源码，v3）
 // 用途：在宿主 web 服务器注册 POST /api/llm-bridge，Python 侧工作流经它调用宿主 llm 服务。
 // 重建：用 cordis_define(kind new, idPrefix 'lbr', code.host = 本文件内容) + cordis_run。
 // 注意：动态插件进程级，DSH 重启后需重建（本预设启动指令会自动检查并重建）。
+//
+// v3 修复（2026-08-22，Gate4 修复循环挂起根因）：
+// 1. inject: ['timer']——沙箱无 Node 定时器全局，Host guard 要求声明 timer 服务注入
+//    （否则 rejectGuard 拒绝运行时代码）
+// 2. 180s 流式总超时（Promise.race）——宿主 LLM stream 卡住时 HTTP 响应永不返回
+//    （socket 超时管不到服务端处理中），加总超时返回 504，Python 侧重试不挂死
 return {
+  inject: ['timer'],
   apply(ctx) {
     const llm = ctx.get('llm')
     const webServer = ctx.get('webServer')
     if (llm === undefined || webServer === undefined) return
+
+    const TOTAL_TIMEOUT_MS = 180000 // 180s 总超时（流式调用含服务端处理）
 
     const dispose = webServer.register({
       kind: 'exact',
@@ -50,7 +59,8 @@ return {
           source: { kind: 'user' },
         }))
 
-        try {
+        // 流式收集（带总超时——Promise.race 防宿主 stream 无限挂起）
+        const collect = (async () => {
           let text = ''
           let ok = false
           let finishReason = null
@@ -61,9 +71,17 @@ return {
               ok = finishReason === 'stop'
             }
           }
-          return send(200, { ok, text, provider, model, finishReason })
+          return { text, ok, finishReason }
+        })()
+
+        const timeoutPromise = new Promise((_, reject) => {
+          ctx.timer.setTimeout(() => reject(new Error('llm-bridge total timeout')), TOTAL_TIMEOUT_MS)
+        })
+        try {
+          const result = await Promise.race([collect, timeoutPromise])
+          return send(200, { ok: result.ok, text: result.text, provider, model, finishReason: result.finishReason })
         } catch (e) {
-          return send(500, { ok: false, error: (e && e.message) || String(e) })
+          return send(504, { ok: false, error: (e && e.message) || String(e) })
         }
       },
     })
