@@ -333,6 +333,57 @@ def robust_json_parse(llm_output: str) -> tuple[dict | None, list[str]]:
     return None, warnings
 
 
+def extract_operational_from_filings(sections: dict[str, str]) -> dict:
+    """v3（用户原则：Wind 没有的由财报提供）：程序化运营提取——不依赖 LLM。
+
+    从财报 sections 用模式匹配提取常见运营指标（交付量/门店数/毛利率等），
+    作为 LLM 提取的补充通道（双通道防漏/防编造——数字直接来自原文）。
+
+    Returns:
+        {字段名: {"value": float, "source": 章节名, "unit": str}}
+    """
+    if not sections:
+        return {}
+
+    # 模式表：指标 → (regex, 单位换算说明, 目标字段)
+    # 单位统一：亿元（财务口径）；运营计数保留原单位
+    patterns = [
+        # 汽车交付量：全年交付 388,000 辆 / 交付 38.9万辆
+        ("deliveries", r"(?:全年|年度|共|累计)?交付[^\d]{0,6}([\d,]+\.?\d*)\s*(万辆|辆)"),
+        # 门店数：门店 500 家 / 门店数 520
+        ("stores", r"门店[^\d]{0,4}([\d,]+\.?\d*)\s*家"),
+        # 毛利率：毛利率 14.5%
+        ("gross_margin", r"毛利率[^\d\-]{0,6}(-?\d+\.?\d*)\s*%"),
+        # 付费用户：付费用户 1.2 亿
+        ("paying_users", r"付费用户[^\d]{0,6}([\d,]+\.?\d*)\s*(亿|万)?人"),
+    ]
+
+    result: dict = {}
+    for _field, pattern in patterns:
+        for title, content in sections.items():
+            import re as _re
+            m = _re.search(pattern, content)
+            if m:
+                try:
+                    value = float(m.group(1).replace(",", ""))
+                    unit = m.group(2) if len(m.groups()) > 1 else ""
+                    # 单位换算：万辆→辆（×10000）；亿人→万人（×10000，保亿）
+                    if unit == "万辆":
+                        value = value * 10000
+                        unit = "辆"
+                    elif unit == "万" and _field == "paying_users":
+                        value = value * 10000
+                        unit = "人"
+                    elif _field == "gross_margin":
+                        value = value / 100.0  # % → 小数
+                        unit = ""
+                    result[_field] = {"value": value, "source": title[:30], "unit": unit}
+                except (TypeError, ValueError):
+                    continue
+                break  # 每字段取第一个匹配章节
+    return result
+
+
 def validate_numerical_ranges(data: dict) -> list[str]:
     """数值合理性校验"""
     warnings = []
@@ -539,8 +590,15 @@ EXTRACTION_PROMPT = """你是一个财务数据提取专家。请从以下财报
 }}"""
 
 
-def _parse_chunk_response(llm_output: str, chunk_idx: int) -> tuple[dict | None, list[str]]:
-    """解析单批次的 LLM 输出"""
+def _parse_chunk_response(llm_output: str, chunk_idx: int,
+                          sections: dict[str, str] | None = None) -> tuple[dict | None, list[str]]:
+    """解析单批次的 LLM 输出
+
+    v3（用户原则：Wind 没有的由财报提供）：sections=财报原文章节，
+    对运营字段做**原文核对**——LLM 提取值必须能在其标注的 source 章节原文中找到
+    （verify_value_against_source，B5-2 接线），否则标 confidence=low + warning
+    （防 LLM 提取时编造运营数字——源必须是财报）。
+    """
     data, warnings = robust_json_parse(llm_output)
 
     if data is None:
@@ -552,6 +610,7 @@ def _parse_chunk_response(llm_output: str, chunk_idx: int) -> tuple[dict | None,
     for section in ['operational', 'financial', 'management']:
         if section in data:
             normalized[section] = {}
+
             for key, val in data[section].items():
                 if isinstance(val, dict) and 'value' in val:
                     normalized[section][key] = val['value']
@@ -560,6 +619,32 @@ def _parse_chunk_response(llm_output: str, chunk_idx: int) -> tuple[dict | None,
                     if 'sources' not in normalized:
                         normalized['sources'] = {}
                     normalized['sources'][source_key] = val.get('source', '')
+
+                    # v3：运营字段原文核对（Wind 没有的 → 财报提供——LLM 提取值必须能在原文找到）
+                    if section == 'operational':
+                        _src_name = val.get('source', '')
+                        _src_text = ""
+                        if _src_name and sections:
+                            # 在 sections 里找标注的章节
+                            for _t, _c in sections.items():
+                                if _src_name in _t or _src_name in _c[:50]:
+                                    _src_text = _c
+                                    break
+                        if _src_text:
+                            try:
+                                from .normalize_values import verify_value_against_source
+                                _conf = verify_value_against_source(_src_text, float(val['value']))
+                                if _conf == "low":
+                                    warnings.append(
+                                        f"批次 {chunk_idx} 运营字段 {key}={val['value']} 未在财报原文"
+                                        f"章节'{_src_name}'中找到（B5-2 原文核对失败，防编造）——"
+                                        f"标 confidence=low，报告需人工核对该数字"
+                                    )
+                                    if 'confidences' not in normalized:
+                                        normalized['confidences'] = {}
+                                    normalized['confidences'][source_key] = "low"
+                            except Exception as _e:
+                                warnings.append(f"批次 {chunk_idx} {key} 原文核对异常: {_e}")
                 else:
                     normalized[section][key] = val
     if 'business' in data:
@@ -742,7 +827,7 @@ def extract_facts(
             try:
                 output = llm_caller(f"事实提取_批次{i+1}", prompt)
                 llm_calls += 1
-                data, warnings = _parse_chunk_response(output, i)
+                data, warnings = _parse_chunk_response(output, i, sections)
                 all_warnings.extend(warnings)
                 if data:
                     chunk_data = data
@@ -799,17 +884,37 @@ def extract_facts(
     if chain_violations:
         facts.meta.warnings.append("⚠️ 运营数据存在结构性铁律冲突（B4-1），相关数字需人工复核")
 
-    # 双专家 P1（2026-08-22）：运营字段（DAU/GMV/ARPU/LTV/CAC）无 Wind 锚点——
-    # LLM 提取+启发式修正后直达报告，幻觉可传导至单位经济分析。
-    # 显式标注"未经锚点校验"（不静默，投资者可识别运营数据可信度边界）。
+    # v3（用户原则：Wind 没有的由财报提供）：程序化运营提取补充——
+    # 从财报 sections 用模式匹配提取交付量/门店数/毛利率等（不依赖 LLM，双通道防漏）
+    try:
+        _prog_ops = extract_operational_from_filings(sections)
+        if _prog_ops:
+            _filled = 0
+            for _k, _v in _prog_ops.items():
+                if hasattr(facts.operational, _k) and getattr(facts.operational, _k, None) is None:
+                    setattr(facts.operational, _k, _v["value"])
+                    _filled += 1
+            if _filled:
+                _ops_names = list(_prog_ops.keys())[:_filled][:4]
+                facts.meta.warnings.append(
+                    f"运营数据补充：程序化财报提取 {_filled} 项"
+                    f"（{_ops_names}，源=财报原文）"
+                )
+                logger.info(f"程序化运营提取补充 {_filled} 项")
+    except Exception as _e:
+        logger.warning(f"程序化运营提取失败（非阻断）: {_e}")
+
+    # v3（用户原则）：运营数据源=财报（LLM 提取经原文核对 + 程序化提取补充）——
+    # 标注更新：不再"未经锚点校验"，而是"经财报原文核对（非 Wind）"
     if getattr(facts, "operational", None) is not None and any(
         getattr(facts.operational, f, None) is not None
-        for f in ("dau", "mau", "arpu", "gmv", "ltv", "cac", "paying_users")
+        for f in ("dau", "mau", "arpu", "gmv", "ltv", "cac", "paying_users",
+                  "deliveries", "stores")
         if hasattr(facts.operational, f)
     ):
         facts.meta.warnings.append(
-            "⚠️ 运营数据（DAU/GMV/ARPU/LTV/CAC 等）未经 Wind 锚点校验——"
-            "来源为 LLM 提取+范围校验，仅供方向参考，投资结论勿单独依赖"
+            "运营数据来源=财报原文（LLM 提取经原文核对/程序化提取），"
+            "非 Wind 锚点——仅供方向参考，投资结论勿单独依赖"
         )
 
     logger.info(

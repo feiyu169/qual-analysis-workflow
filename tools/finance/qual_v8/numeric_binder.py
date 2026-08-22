@@ -75,14 +75,17 @@ def _format_pct(value: float) -> str:
 
 
 def bind_placeholders(content: str, anchor, chapter_num: int,
-                      fiscal_year: int | None = None) -> tuple[str, list[str]]:
+                      fiscal_year: int | None = None,
+                      ops_data: dict | None = None) -> tuple[str, list[str]]:
     """回填章节中的占位符。
 
     Args:
         content: LLM 生成内容（含 [{{指标}}] 占位符）
-        anchor: DataAnchor（锚点单一事实来源）
+        anchor: DataAnchor（财务锚点单一事实来源）
         chapter_num: 章节号
         fiscal_year: 默认回填财年（None=最新）
+        ops_data: 运营数据锚点（v3：财报提取的 DAU/GMV/交付量等——
+                  {指标名: {value, source}}，由 fact_extractor 提供，源=财报）
 
     Returns:
         (回填后内容, 未解析占位符列表)——未解析的保留 [数据待核] + 记 warning（不静默）
@@ -106,6 +109,16 @@ def bind_placeholders(content: str, anchor, chapter_num: int,
         fy_spec = match.group(2)
         try:
             fy = int(fy_spec) if fy_spec else (fiscal_year or None)
+
+            # v3：运营数据锚点（财报提取——用户原则：Wind 没有的由财报提供）
+            if ops_data and metric in ops_data:
+                _ops = ops_data[metric]
+                if isinstance(_ops, dict) and _ops.get("value") is not None:
+                    _v = _ops["value"]
+                    _src = _ops.get("source", "")
+                    return f"{_v}{_ops.get('unit', '')}{('（' + _src + '）') if _src else ''}"
+                unresolved.append(f"{metric}（运营数据缺失）")
+                return f"[数据待核:{metric}]"
 
             # 派生指标 → 程序计算（heavyskill 升级①：LLM 只引用不自算）
             if metric in DERIVED_METRICS:
@@ -219,4 +232,49 @@ def validate_bare_numbers(content: str, anchor, chapter_num: int) -> list[str]:
                 f"第{chapter_num}章 裸数字幻觉: {metric}={value}（不匹配任一财年锚点，"
                 f"应用 [{{{{{metric}}}}}] 占位符）"
             )
+    return problems
+
+
+# ====================================================================
+# v3：占位符语义错配检测（heavyskill 建议③——[{{毛利率}}] 误用等）
+# ====================================================================
+
+# 占位符上下文关键词 → 期望指标（检测 LLM 用错占位符：如写"毛利率[{{营业收入}}]"）
+_PLACEHOLDER_CONTEXT_HINTS: dict[str, str] = {
+    "毛利率": "毛利率",
+    "净利率": "净利率",
+    "净利": "归母净利润",
+    "利润": "营业利润",
+    "营收": "营业收入",
+    "收入": "营业收入",
+    "现金": "经营活动现金流量净额",
+    "资产": "总资产",
+    "负债": "年负债合计",
+    "权益": "年所有者权益合计",
+}
+
+
+def validate_placeholder_semantics(content: str) -> list[str]:
+    """检测占位符语义错配——LLM 写了 [{{指标}}] 但上下文暗示另一指标。
+
+    例："毛利率[{{营业收入}}]" → 应写 [{{毛利率}}]（净利率是派生指标）。
+    规则：占位符前 15 字符内出现关键指标词，且与该占位符指标不匹配 → 问题。
+
+    Returns:
+        问题列表（空=无错配）
+    """
+    if not content:
+        return []
+
+    problems: list[str] = []
+    for m in PLACEHOLDER_RE.finditer(content):
+        metric = m.group(1).strip()
+        ctx_before = content[max(0, m.start() - 15):m.start()]
+        for kw, expected in _PLACEHOLDER_CONTEXT_HINTS.items():
+            if kw in ctx_before and expected != metric:
+                problems.append(
+                    f"占位符语义错配: 上下文'{ctx_before[-10:]}'暗示'{expected}'，"
+                    f"但用了'[{{{{{metric}}}}}]'——应写 [{{{{{expected}}}}}]"
+                )
+                break
     return problems

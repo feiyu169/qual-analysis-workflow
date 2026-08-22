@@ -128,3 +128,26 @@
 3. **校验层**：ADVC 签名修复 + PGNB 裸数字硬拦截 + 校验器 fail-closed（LLM 若违反立即拦截）
 
 **一句话**：本架构已经从"LLM 自由生成数据"演进为"**数据全由 Wind/财报程序化供给，LLM 只做分析与表述，数字引用经 PGNB 程序回填，任何 LLM 越界数字被三层校验拦截**"——符合用户要求的原则。残余风险均为 Wind 数据源本身不提供的能力（运营指标/个股 β/实时可比），已诚实标注并给出 v3 演进路径。
+
+---
+
+## 五、v3 处理记录（2026-08-22：Wind 没有的由财报提供）
+
+用户原则确认："Wind 上没有的数据应该是财报提供的"——v3 候选已全部处理：
+
+| v3 候选 | 处理 | 验证 |
+|---------|------|------|
+| 运营数据无 Wind 交叉（LLM 提取依赖三道防线） | **财报原文核对**：`_parse_chunk_response` 对运营字段用 verify_value_against_source 核对（LLM 提取值必须能在其 source 章节原文找到，否则标 confidence=low + warning——防编造）——B5-2 接线落地 | test_parse_chunk_response_source_verified |
+| 运营数据依赖 LLM 提取 | **程序化财报提取器** `extract_operational_from_filings`：交付量/门店数/毛利率/付费用户模式匹配（不依赖 LLM，数字直接来自原文，双通道防漏） | test_extract_operational_from_filings |
+| 运营数据无 PGNB 占位符 | **运营锚点进 PGNB**：bind_placeholders 支持 ops_data（财报提取的运营值回填 [{{deliveries}}] 等），无数据→[数据待核] | test_bind_ops_placeholder |
+| 占位符语义错配（[{{毛利率}}] 误用） | **validate_placeholder_semantics**：占位符上下文关键词 vs 指标名匹配，错配→问题触发重试 | test_validate_placeholder_semantics_* |
+
+**处理效果**：
+- 运营数据从"LLM 提取+范围校验"升级为"**LLM 提取经财报原文核对 + 程序化财报提取双通道**"——源=财报原文（用户原则达成）
+- 报告标注更新：从"未经 Wind 锚点校验"改为"运营数据来源=财报原文（LLM 提取经原文核对/程序化提取），非 Wind 锚点"
+- 全量 436 passed + 32 skipped（新增 6 个 v3 测试）；ruff 全绿
+
+**v3 后残余（诚实标注）**：
+- β/rf/erp 程序常量（Wind 数据源不提供个股 β）——已标注 + 敏感性
+- 可比公司静态池（Wind 实时可比为后续演进）——已标 static_snapshot
+- 运营指标口径（如"交付量"单位/口径差异）依赖模式匹配准确度——程序化提取器持续补充 pattern 即可

@@ -160,5 +160,47 @@ def test_validate_bare_numbers_derived_caught():
     assert problems, "净利率幻觉应被检出"
 
 
+# ====================================================================
+# v3（用户原则：Wind 没有的由财报提供）：运营锚点 + 语义检测 + 原文核对
+# ====================================================================
+
+def test_bind_ops_placeholder():
+    """v3：运营数据占位符（财报提取锚点——用户原则 Wind 没有的由财报提供）"""
+    from finance.qual_v8.numeric_binder import bind_placeholders as _b
+    ops = {"deliveries": {"value": 389000, "source": "业务概览", "unit": "辆"},
+           "gross_margin": {"value": 0.14, "source": "管理层讨论", "unit": ""}}
+    content = "全年交付[{{deliveries}}]，毛利率[{{gross_margin}}]。"
+    bound, unresolved = _b(content, _anchor(), 1, ops_data=ops)
+    assert not unresolved, f"运营占位符应回填: {unresolved}"
+    assert "389000" in bound, f"应回填交付量: {bound}"
+    assert "0.14" in bound, f"应回填毛利率: {bound}"
+
+
+def test_bind_ops_missing_placeholder():
+    """v3：运营占位符但无数据 → [数据待核]（不编造）"""
+    from finance.qual_v8.numeric_binder import bind_placeholders as _b
+    content = "月活[{{mau}}]。"
+    bound, unresolved = _b(content, _anchor(), 1, ops_data={"dau": {"value": 1200}})
+    assert "[数据待核:mau]" in bound
+    assert unresolved
+
+
+def test_validate_placeholder_semantics_mismatch():
+    """v3：占位符语义错配——'毛利率[{{营业收入}}]' 应写 [{{毛利率}}]"""
+    from finance.qual_v8.numeric_binder import validate_placeholder_semantics
+    content = "公司毛利率[{{营业收入}}]，盈利改善。"
+    problems = validate_placeholder_semantics(content)
+    assert problems, "毛利率上下文+营业收入占位符应检出错配"
+    assert "毛利率" in problems[0]
+
+
+def test_validate_placeholder_semantics_ok():
+    """v3：语义匹配（营收上下文+营业收入占位符）→ 不错配"""
+    from finance.qual_v8.numeric_binder import validate_placeholder_semantics
+    content = "公司营收[{{营业收入}}]亿元，增长。"
+    problems = validate_placeholder_semantics(content)
+    assert not problems
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

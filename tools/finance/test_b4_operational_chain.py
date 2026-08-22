@@ -84,5 +84,44 @@ def test_peer_comparison_no_wrong_ticker():
     assert not any(p.ticker == "002024.SZ" for p in peers), "不得残留分众传媒 ticker"
 
 
+# ====================================================================
+# v3（用户原则：Wind 没有的由财报提供）：程序化运营提取 + LLM 提取原文核对
+# ====================================================================
+
+def test_extract_operational_from_filings():
+    """v3：程序化财报运营提取（交付量/门店数/毛利率——不依赖 LLM，源=财报原文）"""
+    from finance.fact_extractor import extract_operational_from_filings
+
+    sections = {
+        "业务概览": "全年交付389,000辆汽车，门店520家，毛利率14.5%",
+        "管理层讨论": "公司经营稳健",
+    }
+    ops = extract_operational_from_filings(sections)
+    assert "deliveries" in ops, f"应提取交付量: {ops}"
+    assert ops["deliveries"]["value"] == pytest.approx(389000), "交付量应 389000 辆"
+    assert ops["stores"]["value"] == pytest.approx(520), "门店数应 520 家"
+    assert ops["gross_margin"]["value"] == pytest.approx(0.145), "毛利率应 14.5%→0.145"
+    assert ops["deliveries"]["source"], "应有来源章节标注"
+
+
+def test_parse_chunk_response_source_verified():
+    """v3：LLM 提取运营值经财报原文核对——原文找到→high；未找到→low+warning（防编造）"""
+    from finance.fact_extractor import _parse_chunk_response
+
+    # 原文中有 389,000（交付量）
+    sections = {"业务概览": "全年交付389,000辆汽车"}
+    llm_ok = '{"operational": {"deliveries": {"value": 389000, "source": "业务概览"}}}'
+    data_ok, warns_ok = _parse_chunk_response(llm_ok, 0, sections)
+    conf = (data_ok or {}).get("confidences", {}).get("operational.deliveries")
+    assert conf != "low", f"原文能找到的值不应标 low: {warns_ok}"
+
+    # 原文中无 999999（编造）
+    llm_bad = '{"operational": {"deliveries": {"value": 999999, "source": "业务概览"}}}'
+    data_bad, warns_bad = _parse_chunk_response(llm_bad, 0, sections)
+    conf_bad = (data_bad or {}).get("confidences", {}).get("operational.deliveries")
+    assert conf_bad == "low", "原文找不到的值应标 low（防 LLM 编造运营数字）"
+    assert any("原文核对" in w for w in warns_bad), "应有原文核对失败 warning"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

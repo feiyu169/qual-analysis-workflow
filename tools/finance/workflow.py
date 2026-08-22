@@ -1279,9 +1279,21 @@ def _generate_chapter(
                     from .qual_v8.data_anchor import get_data_anchor as _gd
                     from .qual_v8.numeric_binder import bind_placeholders as _bind
                     _wind_dict2 = _wind_to_dict(ctx.wind) if ctx.wind else {}
+                    # v3：运营数据锚点（财报提取——用户原则"Wind 没有的由财报提供"）
+                    _ops_anchor = {}
+                    try:
+                        if ctx.facts and getattr(ctx.facts, "operational", None) is not None:
+                            for _of in ("dau", "mau", "gmv", "arpu", "ltv", "cac",
+                                        "deliveries", "stores", "paying_users"):
+                                _ov = getattr(ctx.facts.operational, _of, None)
+                                if _ov is not None:
+                                    _ops_anchor[_of] = {"value": _ov, "source": "财报", "unit": ""}
+                    except Exception as _e:  # noqa: BLE001
+                        logger.warning(f"运营锚点构建失败（非阻断）: {_e}")
                     if _wind_dict2:
                         content, _unresolved_ph = _bind(
                             content, _gd(_wind_dict2), chapter_num,
+                            ops_data=_ops_anchor,
                         )
                         if _unresolved_ph:
                             logger.info(
@@ -1301,6 +1313,18 @@ def _generate_chapter(
                         _bare_problems = _vbn(content, _gd(_wind_dict3), chapter_num)
                 except Exception as e:
                     logger.warning(f"PGNB 裸数字拦截失败（非阻断）: {e}")
+
+                # v3：占位符语义错配检测（[{{毛利率}}] 误用营业收入等）——heavyskill 建议③
+                try:
+                    from .qual_v8.numeric_binder import validate_placeholder_semantics as _vps
+                    _sem_problems = _vps(content)
+                    if _sem_problems:
+                        logger.warning(
+                            f"{chapter_name} PGNB 占位符语义错配 {len(_sem_problems)} 处"
+                        )
+                except Exception as e:
+                    logger.warning(f"PGNB 语义检测失败（非阻断）: {e}")
+                    _sem_problems = []
 
                 # 格式验证
                 check_result = structural_check(f"ch{chapter_num}", content)
@@ -1332,14 +1356,14 @@ def _generate_chapter(
                 except Exception as e:
                     logger.warning(f"财年校验失败（非阻断）: {e}")
 
-                all_issues = list(check_result.issues) + gate_issues + fiscal_issues + _bare_problems
+                all_issues = list(check_result.issues) + gate_issues + fiscal_issues + _bare_problems + (_sem_problems or [])
                 if _bare_problems:
                     logger.warning(
                         f"{chapter_name} PGNB 裸数字幻觉 {len(_bare_problems)} 处"
                         f"（{_bare_problems[0][:80]}）——触发重试"
                     )
 
-                if check_result.passed and not gate_issues and not fiscal_issues and not _bare_problems:
+                if check_result.passed and not gate_issues and not fiscal_issues and not _bare_problems and not (_sem_problems or []):
                     logger.info(f"{chapter_name} 生成完成: {len(content)} 字符, 格式+闸门+财年+PGNB验证通过")
                     return content
                 elif attempt < max_format_retries:
