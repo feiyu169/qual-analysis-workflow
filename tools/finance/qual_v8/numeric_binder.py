@@ -15,7 +15,10 @@ import re
 logger = logging.getLogger(__name__)
 
 # 占位符语法：[{{指标名}}] 或 [{{指标名:财年}}]（可选指定财年，默认最新）
-PLACEHOLDER_RE = re.compile(r"\[{{([^}:]+)(?::(\d{4}))?}}\]")
+# 2026-08-22：扩展支持 LLM 常见格式错误 [{指标名}]（单花括号）——
+# 实测 ch6 写了 [{经营活动现金流量净额:2024}] 导致 bind_placeholders 匹配不到残留
+# 正则：\[{{? 匹配1-2个左花括号，\}?}?\] 匹配1-2个右花括号
+PLACEHOLDER_RE = re.compile(r"\[\{{1,2}([^}:]+)(?::(\d{4}))?\}{1,2}\]")
 
 # 派生指标 → (公式名, [依赖锚点指标])——程序计算，LLM 只引用不自算
 DERIVED_METRICS: dict[str, dict] = {

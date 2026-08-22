@@ -82,12 +82,16 @@ class CrossChapterConsistencyChecker:
         }
 
         # 关键结论正则模式
+        # 2026-08-22：现金流状态模式精确化——"现金流背离"（正现金流+负利润）和
+        # "自由现金流为负"（经营现金流正但 capex 大）不等于"经营现金流为负"。
+        # 旧模式 r"现金流.*?为负" 会误匹配"现金流表现背离...ROE为负"等合理描述。
         self.conclusion_patterns = {
             "现金流状态": [
-                r"现金流.*?首次转正",
-                r"现金流.*?持续为负",
-                r"现金流.*?转正",
-                r"现金流.*?为负",
+                r"经营.*?现金流.*?首次转正",
+                r"经营.*?现金流.*?持续为负",
+                r"经营.*?现金流.*?转正",
+                r"经营活动.*?现金.*?为负",
+                r"现金流量?\s*净额.*?为负",
             ],
             "盈利状态": [
                 r"盈利.*?拐点",
@@ -460,9 +464,14 @@ class CrossChapterConsistencyChecker:
         return data
 
     def _is_conclusion_conflict(self, conc1: str, conc2: str) -> bool:
-        """判断两个结论是否冲突"""
+        """判断两个结论是否冲突
+
+        2026-08-22：增加"混合描述豁免"——当两个结论都包含正面关键词时，
+        即使其中一个也含负面词（如"转正...但自由现金流仍为负"），不算冲突。
+        这类混合描述在三财年报告中常见（改善但仍有不足）。
+        """
         # 正面关键词
-        positive_keywords = ["转正", "改善", "增长", "上升", "提升"]
+        positive_keywords = ["转正", "改善", "增长", "上升", "提升", "突破"]
         # 负面关键词
         negative_keywords = ["为负", "下降", "恶化", "亏损", "减少"]
 
@@ -472,7 +481,11 @@ class CrossChapterConsistencyChecker:
         conc2_positive = any(kw in conc2 for kw in positive_keywords)
         conc2_negative = any(kw in conc2 for kw in negative_keywords)
 
-        # 一个正面一个负面则冲突
+        # 混合描述豁免：两个结论都含正面词 → 不算冲突（改善+不足并存是合理描述）
+        if conc1_positive and conc2_positive:
+            return False
+
+        # 一个纯正面一个纯负面则冲突
         return (conc1_positive and conc2_negative) or (conc1_negative and conc2_positive)
 
 
