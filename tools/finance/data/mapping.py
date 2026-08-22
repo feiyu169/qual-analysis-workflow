@@ -160,8 +160,9 @@ class DataMappingRegistry:
         """验证schema"""
         errors = []
 
-        # 检查必需字段
-        required_fields = ["营业总收入", "营业利润", "净利润"]
+        # 检查必需字段（双专家 P2：用 canonical 键——canonical 化后"营业总收入"已归一为
+        # "营业收入"、年净利润→归母净利润，按旧键名校验会永久误报"缺少必需字段"）
+        required_fields = ["营业收入", "营业利润", "归母净利润"]
         for field in required_fields:
             if field not in data:
                 # 检查别名

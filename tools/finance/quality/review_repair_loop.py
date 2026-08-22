@@ -612,6 +612,22 @@ def _repair_chapters(
                 logger.info(
                     f"ADVC sweep: {len(_advc_hints)} 处弱签名（digit_typo）仅提示不阻断"
                 )
+            # PGNB（docs/qual-pgnb-architecture.md）：占位符回填——修复后 LLM 可能写占位符
+            try:
+                from ..qual_v8.numeric_binder import bind_placeholders
+                for _ch_num in list(chapters.keys()):
+                    _ch_content = chapters.get(_ch_num, "")
+                    if "[{{" in _ch_content:
+                        _bound, _unresolved = bind_placeholders(
+                            _ch_content, get_data_anchor(wind_data), _ch_num,
+                        )
+                        if _bound != _ch_content:
+                            chapters[_ch_num] = _bound
+                            logger.info(
+                                f"PGNB 回填 第{_ch_num}章（{len(_unresolved)} 个未解析）"
+                            )
+            except Exception as _e:  # noqa: BLE001
+                logger.warning(f"PGNB 回填失败（非阻断）: {_e}")
         except Exception as e:
             logger.warning(f"ADVC sweep 失败（非阻断）: {e}")
 

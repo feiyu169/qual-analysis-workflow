@@ -1051,6 +1051,25 @@ def _build_chapter_prompt(
 5. 数据不足时明确标注「⚠️ 数据不足」
 6. 保持客观中立，不做过度推测
 
+## 🔢 PGNB 数字回填铁律（最重要——违反即重写）
+**禁止直接写出任何财务数字**。需要引用 Wind 锚点表中的指标时，用**占位符**：
+- 最新财年值：`[{{营业收入}}]`（系统自动回填为 FY2025 767.20 亿元）
+- 指定财年：`[{{总资产:2023}}]`（系统回填为 FY2023 841.63 亿元）
+- 可用的指标名（Wind 锚点表键）：营业收入 / 营业利润 / 归母净利润 /
+  经营活动现金流量净额 / 总资产 / 年负债合计 / 年所有者权益合计
+- **正负号由系统按锚点保留**（如亏损 `[{{归母净利润}}]` 会回填为负值，你不得自行写正/负）
+- 非锚点指标（运营数据等）无法用占位符 → 写 `[数据待核:指标名]` 或基于事实表定性描述，
+  **不得编造具体数字**
+
+> 反例（禁止）："公司营业收入14.0亿元" → 应写 "公司营业收入[{{营业收入}}]亿元"
+> 正例："公司营业收入[{{营业收入}}]亿元，较上年增长显著。"
+
+## 📅 时间表述铁律（R7-⑤，违反即重写）
+**禁止使用模糊时间词**：当前 / 目前 / 最近 / 近期 / 近年 / 本年度（单独使用）。
+必须用**具体财年**：FY2025 / FY2024 / FY2023（或"2025财年"）。
+- 反例（禁止）："公司目前营收增长显著" → 应写 "公司 FY2025 营收增长显著"
+- 历史对比必须写明年份："FY2025 较 FY2024 增长 X%"
+
 ## 🏗️ 章节骨架（必须逐字保留，禁止增删改）
 - **本章固定标题**：`{chapter_title}`（不得自造其他标题，尤其**禁止输出 `# 第N章` 形式的 H1 标题**）
 - **H1 铁律**：全文**只允许 0 个 H1（#）**——你输出的就是章节正文，章节标题由组装层统一添加；
@@ -1249,6 +1268,24 @@ def _generate_chapter(
                         f"{chapter_name} ADVC 弱签名提示 {len(_advc_hints)} 处"
                         f"（digit_typo，不阻断）"
                     )
+
+                # PGNB（docs/qual-pgnb-architecture.md）：占位符回填——LLM 写 [{{指标}}]，
+                # 程序按锚点回填（幻觉数字从源头消失；无锚点保留 [数据待核] 不静默）
+                try:
+                    from .qual_v8.data_anchor import get_data_anchor as _gd
+                    from .qual_v8.numeric_binder import bind_placeholders as _bind
+                    _wind_dict2 = _wind_to_dict(ctx.wind) if ctx.wind else {}
+                    if _wind_dict2:
+                        content, _unresolved_ph = _bind(
+                            content, _gd(_wind_dict2), chapter_num,
+                        )
+                        if _unresolved_ph:
+                            logger.info(
+                                f"{chapter_name} PGNB 未解析占位符 {len(_unresolved_ph)} 处"
+                                f"（保留 [数据待核]）"
+                            )
+                except Exception as e:
+                    logger.warning(f"PGNB 回填失败（非阻断）: {e}")
 
                 # 格式验证
                 check_result = structural_check(f"ch{chapter_num}", content)

@@ -174,6 +174,24 @@ class Gate8FinalValidation(GateBase):
                 logger.warning(
                     f"Gate8 ADVC 救援 sweep: {len(_unresolved)} 处值类问题仍无法程序校正（T3 标注）"
                 )
+            # PGNB（docs/qual-pgnb-architecture.md）：终局占位符回填（防 LLM 占位符逃逸到报告）
+            try:
+                from ..numeric_binder import bind_placeholders
+                _anchor = get_data_anchor(wind_data)
+                for _ch_num in list(chapters.keys()):
+                    _ch_content = chapters.get(_ch_num, "")
+                    if "[{{" in _ch_content:
+                        _bound, _unresolved_ph = bind_placeholders(
+                            _ch_content, _anchor, _ch_num,
+                        )
+                        if _bound != _ch_content:
+                            chapters[_ch_num] = _bound
+                            logger.info(
+                                f"Gate8 PGNB 回填 第{_ch_num}章"
+                                f"（{len(_unresolved_ph)} 个未解析占位符）"
+                            )
+            except Exception as _e:  # noqa: BLE001
+                logger.warning(f"Gate8 PGNB 回填失败（非阻断）: {_e}")
             return {
                 "fixed_count": len(_fixes),
                 "fixes": [
