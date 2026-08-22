@@ -202,5 +202,15 @@ def test_validate_placeholder_semantics_ok():
     assert not problems
 
 
+def test_validate_bare_numbers_year_exemption():
+    """v3：年份豁免——LLM 把财年写 '营业收入2024.0亿元'（2024 是年份非营收值）
+    → 豁免（避免误报重试；年份是财年引用，非财务值幻觉）"""
+    from finance.qual_v8.numeric_binder import validate_bare_numbers
+    content = "FY2024 营业收入2024.0亿元的说法是错误的，实际营收[{{营业收入}}]亿元。"
+    problems = validate_bare_numbers(content, _anchor(), 3)
+    # 2024.0 是年份 → 豁免；无其他裸数字（767.20 未写）
+    assert not problems, f"年份数字应豁免: {problems}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

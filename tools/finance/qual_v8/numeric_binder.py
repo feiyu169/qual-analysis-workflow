@@ -201,6 +201,10 @@ def validate_bare_numbers(content: str, anchor, chapter_num: int) -> list[str]:
             value = float(m.group(2))
         except (TypeError, ValueError):
             continue
+        # v3：4 位年份豁免——LLM 把财年（2023/2024/2025）写成 "2024.0" 放在指标后
+        # （"营业收入2024.0亿元"= FY2024 引用误写，非财务值幻觉）——豁免避免误报重试
+        if 2020 <= value <= 2035 and value == int(value) and len(m.group(2).split(".")[0]) == 4:
+            continue
         # 单位万元→亿
         unit = m.group(3) or "亿"
         if unit in ("万元", "万"):
