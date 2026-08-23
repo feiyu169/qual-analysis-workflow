@@ -1,7 +1,7 @@
 """
 Qual v9 Engine 层入口。
 
-提供工具基础设施：结果信封、参数校验、事件模型、协议、异常、工具注册表。
+提供工具基础设施 + Gate 执行引擎 + 影子运行框架。
 参照 dayu-agent engine/ 层，精简为 qual 需要的核心组件。
 """
 from .argument_validator import ArgumentValidator
