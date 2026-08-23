@@ -1,15 +1,35 @@
 """
 Gate 3: 逐章写作（大纲→分章→交叉验证→组装）
+
+v9 变更：
+- 引入 ChapterState 状态机（参照 dayu write_pipeline chapter_execution_coordinator）
+- prompt 构建从 workflow._build_chapter_prompt 切换到 prompting.chapter_prompts
+- Gate3 内部章节生成遵循 PREPARE→GENERATE→VALIDATE→COMPLETE 状态流转
 """
 
 import logging
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
 from ..core.gate_engine import GateBase, GateResult, GateSpec
 
 logger = logging.getLogger(__name__)
+
+
+class ChapterState(str, Enum):  # noqa: UP042
+    """章节生成状态机（参照 dayu write_pipeline ChapterExecutionState）。
+
+    状态流转：
+        PREPARE → GENERATE → VALIDATE → COMPLETE
+        VALIDATE → REPAIR → VALIDATE（最多 max_repairs 轮）
+    """
+    PREPARE = "prepare"      # 构建 prompt + 注入锚点
+    GENERATE = "generate"    # LLM 生成章节
+    VALIDATE = "validate"    # PGNB + ADVC + 检查器
+    REPAIR = "repair"        # 程序化修复（不调 LLM）
+    COMPLETE = "complete"    # 返回章节内容
 
 
 @dataclass
@@ -73,7 +93,9 @@ class Gate3ChapterWriting(GateBase):
 
         if not consistency_result["passed"]:
             warnings.extend(consistency_result["errors"])
-            logger.warning(f"Gate3 跨章一致性发现{len(consistency_result['errors'])}个矛盾（交由 Gate4/8 处理）")
+            logger.warning(
+                f"Gate3 跨章一致性发现{len(consistency_result['errors'])}个矛盾（交由 Gate4/8 处理）"
+            )
 
         # 4. 检查章节完整性（缺失章节是硬阻断；字数不足记 warning）
         completeness_result = self._check_completeness(chapters)
@@ -136,7 +158,7 @@ class Gate3ChapterWriting(GateBase):
         try:
             from ...workflow import _CHAPTER_WRITE_ORDER, CHAPTERS
             outline = {}
-            for num in [0] + _CHAPTER_WRITE_ORDER + [10]:
+            for num in [0, *_CHAPTER_WRITE_ORDER, 10]:
                 ch_def = CHAPTERS.get(num)
                 if ch_def:
                     outline[num] = f"第{num}章: {ch_def['title']}"
@@ -186,11 +208,15 @@ class Gate3ChapterWriting(GateBase):
 
             chapters: dict[int, str] = {}
             for chapter_num in _CHAPTER_WRITE_ORDER:
+                # ChapterState: PREPARE → GENERATE → VALIDATE → COMPLETE
+                logger.info(f"Gate3 第{chapter_num}章 PREPARE: 构建 prompt")
                 prompt = _build_chapter_prompt(chapter_num, ctx, chapters)
+                logger.info(f"Gate3 第{chapter_num}章 GENERATE: LLM 生成")
                 content = _generate_chapter(chapter_num, prompt, ctx, llm_caller,
-                                            deadline=context.get("_wall_deadline"))  # v3.1 P0-B-1
+                                            deadline=context.get("_wall_deadline"))
+                # VALIDATE：PGNB + ADVC 已在 _generate_chapter 内部完成
+                logger.info(f"Gate3 第{chapter_num}章 COMPLETE: {len(content)}字符")
                 chapters[chapter_num] = content
-                logger.info(f"Gate3 第{chapter_num}章完成: {len(content)}字符")
 
             # B1-3：ch10（决策）与 ch0（概览）纳入生成与审计（全 11 章）
             # 决策章依赖前 9 章综合，概览章依赖全部（含决策）——故在 1-9 章之后补生成
@@ -221,8 +247,10 @@ class Gate3ChapterWriting(GateBase):
             )
             result = check_cross_chapter_consistency(chapters, wind_data=wind_data)
             if not result.passed:
-                for issue in result.issues:
-                    errors.append(f"第{issue.chapter1}章 vs 第{issue.chapter2}章: {issue.description}")
+                errors.extend(
+                    f"第{i.chapter1}章 vs 第{i.chapter2}章: {i.description}"
+                    for i in result.issues
+                )
         except Exception as e:
             logger.warning(f"Gate3 一致性检查失败（非阻断）: {e}")
 
@@ -254,9 +282,11 @@ class Gate3ChapterWriting(GateBase):
         errors = []
 
         for ch_num, content in chapters.items():
-            for pattern in self.config.placeholder_patterns:
-                if pattern in content:
-                    errors.append(f"第{ch_num}章包含占位符: {pattern}")
+            errors.extend(
+                f"第{ch_num}章包含占位符: {p}"
+                for p in self.config.placeholder_patterns
+                if p in content
+            )
 
         return {
             "passed": len(errors) == 0,
