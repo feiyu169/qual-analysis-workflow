@@ -27,7 +27,9 @@ from .exceptions import (
     ToolExecutionError,
     ToolNotFoundError,
 )
+from .gate_dag import GateDAG
 from .protocols import LLMRunnerProtocol, ToolExecutorProtocol
+from .run_lifecycle import RunLifecycle
 from .tool_registry import ToolRegistry
 from .tool_result import (
     build_error,
@@ -79,4 +81,7 @@ __all__ = [  # noqa: RUF022 — grouped by module for readability
     "BudgetExceededError",
     # tool_registry
     "ToolRegistry",
+    # gate_dag + run_lifecycle
+    "GateDAG",
+    "RunLifecycle",
 ]
