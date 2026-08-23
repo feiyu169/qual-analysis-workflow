@@ -81,19 +81,10 @@ class GateEngine:
 
         gate = self.gates[gate_num]
 
-        # 检查前置条件
-        for prereq in gate.spec.prerequisites:
-            if prereq not in self.results or not self.results[prereq].passed:
-                return GateResult(
-                    gate_num=gate_num,
-                    passed=False,
-                    score=0.0,
-                    details={"error": f"前置Gate {prereq} 未通过"},
-                    errors=[f"前置Gate {prereq} 未通过"],
-                    warnings=[],
-                    execution_time=0.0,
-                    timestamp=datetime.now().isoformat(),
-                )
+        # v9：prerequisites 检查已移至 workflow.py GateDAG（HARD/SOFT 依赖）
+        # 这里保留空检查——GateDAG 在外层已经做了阻断/降级判断
+        # 旧逻辑：for prereq in gate.spec.prerequisites → 前置Gate {prereq} 未通过
+        # 新逻辑：GateDAG.can_execute() → can_run + is_degraded
 
         # 执行Gate
         start_time = datetime.now()

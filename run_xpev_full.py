@@ -7,10 +7,18 @@
 - 用 v8 QualWorkflow 或 v2-v7 run_analysis
 """
 import json
+import logging
 import os
 import re
 import sys
 import time
+
+# v9: 配置 logging 输出到 stderr（PGNB/GateDAG 日志可见）
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(levelname)s] %(name)s: %(message)s",
+    stream=sys.stderr,
+)
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 TMP = os.path.join(ROOT, ".pip-tmp")

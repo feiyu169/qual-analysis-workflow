@@ -15,6 +15,7 @@ from .core.circuit_breaker import CircuitBreaker
 from .core.gate_engine import GateEngine, GateResult
 from .core.state_machine import GateState, StateMachine, WorkflowState
 from .core.supervisor import FlowComplianceChecker
+from .engine.gate_dag import GateDAG
 from .gates import (
     Gate0DataSourceValidation,
     Gate1TypeInference,
@@ -291,6 +292,9 @@ class QualWorkflow:
 
             context["llm_caller"] = _deadline_guard(context["llm_caller"], context["_wall_deadline"])
 
+        # v9 GateDAG 依赖图（替代旧 prerequisites 硬阻断）
+        gate_dag = GateDAG()
+
         # 执行每个Gate
         for gate_num in range(9):  # Gate 0-8
             logger.info(f"执行Gate {gate_num} (mode={qual_mode})")
@@ -304,6 +308,27 @@ class QualWorkflow:
                         "errors": ["全局墙钟预算耗尽"], "check_criteria_passed": False,
                     }
                 break
+
+            # v9 GateDAG 依赖判断（HARD deps 阻断，SOFT deps 降级）
+            gate_results_for_dag = {
+                k: v for k, v in gate_results.items()
+                if isinstance(v, dict)
+            }
+            can_run, is_degraded = gate_dag.can_execute(gate_num, gate_results_for_dag)
+            if not can_run:
+                # HARD 依赖未满足 → 标记 BLOCKED（替代旧 prerequisites 硬阻断）
+                logger.warning(f"Gate {gate_num} BLOCKED（HARD 依赖未满足）")
+                results[f"gate_{gate_num}"] = {
+                    "passed": False, "score": 0.0, "execution_time": 0.0,
+                    "errors": [f"Gate {gate_num} BLOCKED: HARD 依赖未满足"],
+                    "check_criteria_passed": False,
+                    "state": "blocked",
+                }
+                gate_results[gate_num] = {"passed": False, "state": "blocked"}
+                continue
+
+            if is_degraded:
+                logger.info(f"Gate {gate_num} 降级执行（SOFT 依赖有 FAILED）")
 
             # 记录Gate开始
             self.audit_logger.log(

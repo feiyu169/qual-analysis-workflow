@@ -87,13 +87,9 @@ class GateDAG:
             result = gate_results.get(hard)
             if result is None:
                 return False, False  # 前置 Gate 未执行
-            # GateResult 可能是 contracts.GateResult 或旧 GateResult
-            state = getattr(result, 'state', None) or (
-                'passed' if getattr(result, 'passed', False) else 'failed'
-            )
-            if hasattr(state, 'value'):
-                state = state.value
-            if str(state) != 'passed':
+            # 兼容 contracts.GateResult（state 属性）和 workflow dict（passed/score 字段）
+            state = self._extract_state(result)
+            if state != 'passed':
                 return False, False
 
         # SOFT 依赖：有 FAILED/SKIPPED → 降级运行
@@ -102,15 +98,34 @@ class GateDAG:
             result = gate_results.get(soft)
             if result is None:
                 continue
-            state = getattr(result, 'state', None) or (
-                'passed' if getattr(result, 'passed', False) else 'failed'
-            )
+            state = self._extract_state(result)
             if hasattr(state, 'value'):
                 state = state.value
             if str(state) not in ('passed', 'degraded'):
                 degraded = True
 
         return True, degraded
+
+    def _extract_state(self, result: object) -> str:
+        """从 result 中提取状态字符串（兼容 GateResult 和 dict）。
+
+        Args:
+            result: GateResult 或 dict（workflow.py 中 gate_results 的值）。
+
+        Returns:
+            状态字符串（'passed'/'failed'/'degraded'/'blocked'/'skipped'）。
+        """
+        # contracts.GateResult: state 属性
+        state = getattr(result, 'state', None)
+        if state is not None:
+            return state.value if hasattr(state, 'value') else str(state)
+        # workflow dict: passed 字段
+        if isinstance(result, dict):
+            if result.get('state'):
+                return str(result['state'])
+            return 'passed' if result.get('passed', False) else 'failed'
+        # 旧 GateResult: passed 字段
+        return 'passed' if getattr(result, 'passed', False) else 'failed'
 
     def get_ready(self, gate_results: dict[int, object]) -> list[int]:
         """获取所有可执行的 Gate（HARD 依赖全满足）。"""
@@ -139,11 +154,7 @@ class GateDAG:
                 result = gate_results.get(hard)
                 if result is None:
                     return False
-                state = getattr(result, 'state', None) or (
-                    'passed' if getattr(result, 'passed', False) else 'failed'
-                )
-                if hasattr(state, 'value'):
-                    state = state.value
-                if str(state) != 'passed':
+                state = self._extract_state(result)
+                if state != 'passed':
                     return False
         return True
