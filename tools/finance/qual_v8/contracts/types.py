@@ -14,32 +14,155 @@ from enum import Enum
 from typing import Any
 
 # ============================================================
-# Gate 状态机（参照 dayu RunState 7 态，qual 简化为 5 态）
+# Gate 状态机（对齐 dayu RunState 7 态）
 # ============================================================
 
 class GateState(str, Enum):  # noqa: UP042
-    """Gate 状态枚举。
+    """Gate 状态枚举（7 态，对齐 dayu RunState）。
 
     状态机合法转换:
-        PENDING → RUNNING → PASSED / FAILED / DEGRADED
+        PENDING → RUNNING → PASSED / FAILED / DEGRADED / BLOCKED / SKIPPED
         FAILED → RUNNING（重试）
-        DEGRADED → 终态（标注降级，不重试）
+        BLOCKED → 终态（enforce 阻断，不重试）
+        SKIPPED → 终态（熔断跳过）
     """
     PENDING = "pending"
     RUNNING = "running"
     PASSED = "passed"
     FAILED = "failed"
     DEGRADED = "degraded"
+    BLOCKED = "blocked"   # 新增：enforce 阻断
+    SKIPPED = "skipped"   # 新增：熔断跳过
 
 
 # 合法状态转换表（frozenset 确保不可变，参照 dayu _VALID_TRANSITIONS）
 _VALID_TRANSITIONS: dict[GateState, frozenset[GateState]] = {
-    GateState.PENDING: frozenset({GateState.RUNNING}),
-    GateState.RUNNING: frozenset({GateState.PASSED, GateState.FAILED, GateState.DEGRADED}),
+    GateState.PENDING: frozenset({GateState.RUNNING, GateState.SKIPPED}),
+    GateState.RUNNING: frozenset({GateState.PASSED, GateState.FAILED, GateState.DEGRADED, GateState.BLOCKED}),
     GateState.PASSED: frozenset(),
     GateState.FAILED: frozenset({GateState.RUNNING}),
     GateState.DEGRADED: frozenset(),
+    GateState.BLOCKED: frozenset(),
+    GateState.SKIPPED: frozenset(),
 }
+
+
+# ============================================================
+# 执行阶段（对齐 dayu host RunPhase）
+# ============================================================
+
+class RunPhase(str, Enum):  # noqa: UP042
+    """执行阶段枚举（对标 dayu host 执行生命周期）。
+
+    映射到 Gate0-8 分组：
+        INIT     → 初始化
+        DATA     → Gate0-2（数据准备）
+        WRITE    → Gate3（章节生成）
+        AUDIT    → Gate4（审计修复）
+        ASSEMBLE → Gate5-6（估值+结论）
+        FINALIZE → Gate7-8（问题转化+终局验证）
+    """
+    INIT = "init"
+    DATA = "data"
+    WRITE = "write"
+    AUDIT = "audit"
+    ASSEMBLE = "assemble"
+    FINALIZE = "finalize"
+
+
+# Gate → Phase 映射
+GATE_PHASE_MAP: dict[int, RunPhase] = {
+    0: RunPhase.DATA, 1: RunPhase.DATA, 2: RunPhase.DATA,
+    3: RunPhase.WRITE,
+    4: RunPhase.AUDIT,
+    5: RunPhase.ASSEMBLE, 6: RunPhase.ASSEMBLE,
+    7: RunPhase.FINALIZE, 8: RunPhase.FINALIZE,
+}
+
+
+# ============================================================
+# 写入管线阶段（对齐 dayu write_pipeline）
+# ============================================================
+
+class WritePipelinePhase(str, Enum):  # noqa: UP042
+    """写入管线阶段（对标 dayu write_pipeline 状态机）。
+
+    流转：DRAFT → REVIEW → REPAIR → CONFIRM → COMMIT
+    - DRAFT:   初始生成
+    - REVIEW:  审计检查
+    - REPAIR:  确定性修复
+    - CONFIRM: 修复后复验
+    - COMMIT:  提交最终结果
+    """
+    DRAFT = "draft"
+    REVIEW = "review"
+    REPAIR = "repair"
+    CONFIRM = "confirm"
+    COMMIT = "commit"
+
+
+# ============================================================
+# 数据锚点契约（对标 dayu fins/storage 窄协议输入）
+# ============================================================
+
+@dataclass(frozen=True)
+class DataAnchorContract:
+    """数据锚点契约（不可变，替代 duck-typing anchor 参数）。
+
+    Attributes:
+        key: 原始键名。
+        canonical_key: canonical 键名。
+        unit: 单位。
+        values: (fiscal_year, value) 对列表。
+        source: 数据来源。
+    """
+    key: str
+    canonical_key: str
+    unit: str
+    values: tuple[tuple[int | None, float], ...]
+    source: str = "Wind"
+
+
+@dataclass(frozen=True)
+class FactBinding:
+    """事实绑定记录（替代 fact_extractor 的 dict 传递）。
+
+    Attributes:
+        metric: 指标名。
+        value: 数值。
+        unit: 单位。
+        source: 来源（Wind/Filing/Derived）。
+        fiscal_year: 财年。
+        confidence: 置信度。
+        binding_type: 绑定类型（exact/derived/placeholder）。
+    """
+    metric: str
+    value: float
+    unit: str
+    source: str  # "Wind" | "Filing" | "Derived"
+    fiscal_year: int | None = None
+    confidence: float = 1.0
+    binding_type: str = "exact"  # "exact" | "derived" | "placeholder"
+
+
+# ============================================================
+# 检查器输出（替代各检查器各自定义的 Result 类型）
+# ============================================================
+
+@dataclass(frozen=True)
+class CheckResult:
+    """检查器统一输出（替代各检查器自定义的 Result/Issue 类型）。
+
+    Attributes:
+        checker_name: 检查器名称。
+        passed: 是否通过。
+        score: 评分（0-100）。
+        violations: 违规列表（NumericViolation/StructuralViolation/ConsistencyIssue）。
+    """
+    checker_name: str
+    passed: bool
+    score: float = 100.0
+    violations: tuple[Any, ...] = ()
 
 
 @dataclass(frozen=True)

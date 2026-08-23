@@ -12,12 +12,23 @@ from importlib import import_module
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .protocols import CheckerProtocol, GateProtocol, RepairerProtocol  # noqa: F401
+    from .protocols import (  # noqa: F401
+        CheckerProtocol,
+        DataStoreProtocol,
+        EventSink,
+        FactExtractorProtocol,
+        GateProtocol,
+        RepairerProtocol,
+        WritePipelineProtocol,
+    )
     from .types import (  # noqa: F401
         AuditDecision,
         ChapterSnapshot,
+        CheckResult,
         ConsistencyIssue,
+        DataAnchorContract,
         DataPoint,
+        FactBinding,
         GateContext,
         GateResult,
         GateState,
@@ -26,8 +37,10 @@ if TYPE_CHECKING:
         RepairAction,
         RepairRecord,
         ReviewIssue,
+        RunPhase,
         StructuralViolation,
         WorkflowRunResult,
+        WritePipelinePhase,
     )
 
 
@@ -47,10 +60,19 @@ _EXPORT_MAP: dict[str, tuple[str, str]] = {
     "RepairAction": (".types", "RepairAction"),
     "RepairRecord": (".types", "RepairRecord"),
     "AuditDecision": (".types", "AuditDecision"),
+    "RunPhase": (".types", "RunPhase"),
+    "WritePipelinePhase": (".types", "WritePipelinePhase"),
+    "DataAnchorContract": (".types", "DataAnchorContract"),
+    "FactBinding": (".types", "FactBinding"),
+    "CheckResult": (".types", "CheckResult"),
     # protocols
     "GateProtocol": (".protocols", "GateProtocol"),
     "CheckerProtocol": (".protocols", "CheckerProtocol"),
     "RepairerProtocol": (".protocols", "RepairerProtocol"),
+    "DataStoreProtocol": (".protocols", "DataStoreProtocol"),
+    "WritePipelineProtocol": (".protocols", "WritePipelineProtocol"),
+    "FactExtractorProtocol": (".protocols", "FactExtractorProtocol"),
+    "EventSink": (".protocols", "EventSink"),
 }
 
 

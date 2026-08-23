@@ -70,3 +70,30 @@ class TimeoutError(EngineError):
         self.operation = operation
         self.timeout_seconds = timeout_seconds
         super().__init__(f"{operation} 超时 ({timeout_seconds}s)")
+
+
+class WritePipelineError(EngineError):
+    """写入管线异常（对标 dayu write_pipeline 异常层级）。"""
+
+    def __init__(self, phase: str, reason: str) -> None:
+        self.phase = phase
+        self.reason = reason
+        super().__init__(f"写入管线 [{phase}] 失败: {reason}")
+
+
+class RepairRollbackError(WritePipelineError):
+    """ADVC 自证失败回滚异常。"""
+
+    def __init__(self, chapter: int, reason: str) -> None:
+        self.chapter = chapter
+        super().__init__("repair", f"第{chapter}章自证失败回滚: {reason}")
+
+
+class DataAnchorError(EngineError):
+    """数据锚点异常（对标 dayu DataStoreProtocol 异常）。"""
+
+    def __init__(self, key: str, fiscal_year: int | None, reason: str) -> None:
+        self.key = key
+        self.fiscal_year = fiscal_year
+        fy_str = f"FY{fiscal_year}" if fiscal_year else "latest"
+        super().__init__(f"数据锚点 [{key}/{fy_str}] 异常: {reason}")

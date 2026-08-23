@@ -19,7 +19,7 @@ from typing import Any
 
 
 class QualEventType(str, Enum):  # noqa: UP042
-    """Qual 事件类型枚举。"""
+    """Qual 事件类型枚举（对齐 dayu engine/events.py + write_pipeline）。"""
 
     # 内容生成事件
     CONTENT_DELTA = "content_delta"
@@ -30,13 +30,26 @@ class QualEventType(str, Enum):  # noqa: UP042
     GATE_COMPLETE = "gate_complete"
     GATE_FAILED = "gate_failed"
     GATE_DEGRADED = "gate_degraded"
+    GATE_BLOCKED = "gate_blocked"     # 新增：enforce 阻断
+    GATE_SKIPPED = "gate_skipped"     # 新增：熔断跳过
+
+    # Run 阶段事件（对标 dayu host RunPhase）
+    PHASE_START = "phase_start"
+    PHASE_COMPLETE = "phase_complete"
+
+    # 写入管线事件（对标 dayu write_pipeline）
+    DRAFT_START = "draft_start"
+    REVIEW_START = "review_start"
+    REPAIR_APPLIED = "repair_applied"
+    CONFIRM_PASSED = "confirm_passed"
+    CONFIRM_FAILED = "confirm_failed"
+    COMMIT_DONE = "commit_done"
 
     # 检查器事件
     CHECKER_WARNING = "checker_warning"
     CHECKER_ERROR = "checker_error"
 
     # 修复事件
-    REPAIR_APPLIED = "repair_applied"
     REPAIR_FAILED = "repair_failed"
 
     # 控制事件
