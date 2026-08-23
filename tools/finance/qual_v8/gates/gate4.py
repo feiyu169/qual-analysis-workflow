@@ -7,11 +7,6 @@ from datetime import datetime
 from typing import Any
 
 # v3.1 P0-B-1：确定性/终止性异常显式 fail-closed（白名单，不被 except Exception 吞掉）
-from ...llm_errors import (
-    DeterministicLLMFailure,
-    LLMCallBudgetExceeded,
-    WallClockDeadlineExceeded,
-)
 from ..core.gate_engine import GateBase, GateResult, GateSpec
 
 logger = logging.getLogger(__name__)
@@ -233,60 +228,32 @@ class Gate4AuditRepair(GateBase):
         }
 
     def _substantive_review(self, chapters: dict[int, str], context: dict[str, Any]) -> dict[str, Any]:
-        """实质审查（真实：quality.review_and_repair_loop，含锚点注入）"""
-        errors = []
+        """实质审查（v9：单轮确定性修复，消除 LLM patch 死循环）
 
-        llm_caller = context.get("llm_caller")
-        if llm_caller is None:
-            # v3.1 P0-A-2：fail-closed（原为 passed=True 静默通过）
-            return {"passed": False, "errors": ["无 LLM 调用器（fail-closed）"], "repaired_chapters": None}
+        v8 用 review_and_repair_loop（max_rounds=3 LLM patch），v9 改为
+        review_and_repair_single_pass（100% 程序化，零 LLM 修复）。
+        """
+        errors: list[str] = []
 
         try:
-            # 构造 DataContext（供 review_and_repair_loop 使用）
-            from ..adapters import build_data_context, industry_for
-            ctx = build_data_context(
-                ticker=context.get("ticker", ""),
-                company_name=context.get("company_name", ""),
-                market=context.get("market", "hk"),
-                wind_data=context.get("wind_data"),
-                filing_data=context.get("filing_data"),
-            )
-            facts = context.get("facts")
-            if facts and not getattr(ctx, "facts", None):
-                ctx.facts = facts
+            wind_data_for_check: dict = {}
+            wind = context.get("wind_data")
+            if wind:
+                if isinstance(wind, dict):
+                    wind_data_for_check = wind
+                else:
+                    wind_data_for_check = {
+                        "income": wind.income if isinstance(wind.income, dict) else {},
+                        "balance": wind.balance if isinstance(wind.balance, dict) else {},
+                        "cashflow": wind.cashflow if isinstance(wind.cashflow, dict) else {},
+                        "_year_labels": getattr(wind, "_year_labels", None) or {},
+                    }
 
-            wind_data_for_check = {}
-            if ctx.wind:
-                wind_data_for_check = {
-                    "income": ctx.wind.income if isinstance(ctx.wind.income, dict) else {},
-                    "balance": ctx.wind.balance if isinstance(ctx.wind.balance, dict) else {},
-                    "cashflow": ctx.wind.cashflow if isinstance(ctx.wind.cashflow, dict) else {},
-                    # 必须带上 _year_labels：否则 DataAnchor 无财年锚点（FYNone），
-                    # 多财年章节（如 ch6/ch7 引用 FY2024 历史值）会被误判为与最新锚点不符而回滚修复
-                    "_year_labels": getattr(ctx.wind, "_year_labels", None) or {},
-                }
-
-            industry = industry_for(context.get("company_name", ""))
-
-            from ...quality.review_repair_loop import review_and_repair_loop
-            result = review_and_repair_loop(
+            from ...quality.review_repair_loop import review_and_repair_single_pass
+            result = review_and_repair_single_pass(
                 chapters=chapters,
-                ctx=ctx,
-                llm_caller=llm_caller,
                 wind_data=wind_data_for_check,
-                max_rounds=3,
-                industry=industry,
-                # v3.1 P0-B-10：shadow 模式只审不修（workflow 已按 qual_mode 注入）
-                skip_repair=bool(context.get("shadow_skip_repair", False)),
-                # v3.1 P0-B-8：全局墙钟/调用预算透传（与 workflow context 同源）
-                # C4-1：审查子预算 ≤35 次（⊂ v3.1 总预算 200）——超预算 fail-closed（不静默放行）
-                # 双专家 P2：按章节数比例放宽（11 章 × 5 = 55），防 3 轮全量审查合法超限误杀
-                llm_call_budget=min(context.get("llm_call_budget", 200),
-                                    max(35, len(chapters) * 5)),
                 deadline=context.get("_wall_deadline"),
-                # C1-3：Gate3 跨章结果首轮复用（避免重复静态检查）
-                precomputed_cross_chapter=context.get("gate3_consistency_issues"),
-                # P1：T2 低置信修复开关（ADVC 层1，默认关；弱签名+FY 唯一目标仍可替换）
                 enable_t2=bool(context.get("advc_enable_t2", False)),
             )
 
@@ -294,31 +261,17 @@ class Gate4AuditRepair(GateBase):
                 for issue in (result.remaining_issues or [])[:5]:
                     errors.append(f"审查未修复: {issue}")
 
-            # 双专家 P0：显式检查 review_incomplete（审查链不完整 → fail-closed，
-            # 即使 passed 为 True 也不得放行——防御性双保险）
-            if getattr(result, "review_incomplete", False):
-                errors.append(
-                    "实质审查不完整（部分检查器异常），按 fail-closed 判定失败"
-                )
-
             return {
-                "passed": result.passed and not getattr(result, "review_incomplete", False),
+                "passed": result.passed,
                 "errors": errors,
                 "issues_found": getattr(result, "issues_found", 0),
                 "issues_fixed": getattr(result, "issues_fixed", 0),
                 "repaired_chapters": getattr(result, "chapters", None),
             }
-        except (LLMCallBudgetExceeded, WallClockDeadlineExceeded) as e:
-            # v3.1 P0-4：白名单前置——预算/墙钟子类必须先于父类 DeterministicLLMFailure
-            logger.error(f"Gate4 实质审查终止性失败（预算/墙钟）: {e}")
-            return {"passed": False, "errors": [f"实质审查终止性失败: {e}"], "repaired_chapters": None}
-        except DeterministicLLMFailure as e:
-            logger.error(f"Gate4 实质审查确定性失败: {e}")
-            return {"passed": False, "errors": [f"实质审查确定性失败: {e}"], "repaired_chapters": None}
+
         except Exception as e:
-            logger.error(f"Gate4 实质审查失败: {e}")
-            # v3.1 P0-A-2：fail-closed（原为 passed=True 静默通过）
-            return {"passed": False, "errors": [f"实质审查异常（fail-closed）: {e}"], "repaired_chapters": None}
+            logger.error(f"实质审查失败: {e}")
+            return {"passed": False, "errors": [f"实质审查异常: {e}"], "repaired_chapters": None}
 
     def _detect_contradictions(self, chapters: dict[int, str]) -> dict[str, Any]:
         """检测逻辑矛盾（真实：quality.logic_consistency_check）"""

@@ -235,25 +235,17 @@ def test_redteam_runs_when_gate4_passed():
 # ===== C4-1：审查预算 ≤35 =====
 
 def test_review_budget_capped_at_35():
-    """C4-1：Gate4 审查子预算 ≤35（⊂ 总预算 200）"""
-    gate = Gate4AuditRepair()
-    context = {"llm_call_budget": 200, "_wall_deadline": None,
-               "shadow_skip_repair": True, "ticker": "", "company_name": "",
-               "market": "hk", "wind_data": {}, "filing_data": {},
-               "llm_caller": lambda n, p: "ok",
-               "gate3_consistency_issues": None}
-    with patch("finance.quality.review_repair_loop.review_and_repair_loop",
-               return_value=MagicMock(passed=True, issues_found=0, issues_fixed=0,
-                                      remaining_issues=[], chapters={})) as mock_loop, \
-         patch("finance.qual_v8.adapters.build_data_context",
-               return_value=MagicMock(wind=MagicMock(income={}, balance={}, cashflow={},
-                                                     _year_labels={}),
-                                      facts=None)), \
-         patch("finance.qual_v8.adapters.industry_for", return_value="综合"):
-        gate._substantive_review({1: "ch"}, context)
-        kwargs = mock_loop.call_args.kwargs
-        assert kwargs.get("llm_call_budget") == 35, \
-            f"审查子预算应为 35，实为 {kwargs.get('llm_call_budget')}"
+    """C4-1：v9 单轮确定性修复不消耗 LLM 预算（无 llm_call_budget 参数）"""
+    from finance.quality.review_repair_loop import ReviewRepairResult, review_and_repair_single_pass
+    # v9 的 review_and_repair_single_pass 不调用 LLM，无需预算控制
+    # 验证函数签名不含 llm_call_budget（确定性修复零 LLM 依赖）
+    import inspect
+    sig = inspect.signature(review_and_repair_single_pass)
+    assert "llm_call_budget" not in sig.parameters, \
+        "v9 单轮修复不应有 llm_call_budget 参数（零 LLM 依赖）"
+    # 验证 wind_data 为空时仍返回合法结果
+    result = review_and_repair_single_pass(chapters={1: "测试内容"}, wind_data=None)
+    assert isinstance(result, ReviewRepairResult)
 
 
 # ===== C5-3：锚点单例 =====

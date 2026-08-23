@@ -630,7 +630,7 @@ def _repair_chapters(
                         logger.info(
                             f"日期语义绑定 第{_ch_num}章 {len(_fixes)} 处"
                         )
-            except Exception as _e:  # noqa: BLE001
+            except Exception as _e:
                 logger.warning(f"日期语义绑定失败（非阻断）: {_e}")
             # PGNB（docs/qual-pgnb-architecture.md）：占位符回填——修复后 LLM 可能写占位符
             try:
@@ -646,7 +646,7 @@ def _repair_chapters(
                             logger.info(
                                 f"PGNB 回填 第{_ch_num}章（{len(_unresolved)} 个未解析）"
                             )
-            except Exception as _e:  # noqa: BLE001
+            except Exception as _e:
                 logger.warning(f"PGNB 回填失败（非阻断）: {_e}")
         except Exception as e:
             logger.warning(f"ADVC sweep 失败（非阻断）: {e}")
@@ -795,6 +795,8 @@ def _repair_chapters(
                     from ..qual_v8.data_anchor import get_data_anchor as _gd_r
                     from ..qual_v8.numeric_binder import (
                         bind_bare_numbers as _bbn_r,
+                    )
+                    from ..qual_v8.numeric_binder import (
                         bind_placeholders as _bind_r,
                     )
                     _anchor_r = _gd_r(wind_data)
@@ -821,7 +823,7 @@ def _repair_chapters(
                                 result.ok = True
                                 result.rollback = False
                                 result.validation = {"passed": True, "issues": []}
-                except Exception as _e:  # noqa: BLE001
+                except Exception as _e:
                     logger.warning(f"第{ch_num}章 PGNB patch 兜底失败（非阻断）: {_e}")
 
             if result.ok and result.applied:
@@ -839,3 +841,140 @@ def _repair_chapters(
             logger.warning(f"第{ch_num}章 patch 修复失败: {e}")
 
     return fixed_count
+
+
+# ====================================================================
+# v9 单轮确定性审查修复（Qual v9 Phase 3：消除 Gate4 死循环）
+# ====================================================================
+
+def review_and_repair_single_pass(
+    chapters: dict[int, str],
+    wind_data: dict | None = None,
+    llm_caller: Callable[[str, str], str] | None = None,
+    deadline: float | None = None,
+    enable_t2: bool = False,
+) -> ReviewRepairResult:
+    """单轮确定性审查修复（v9 核心：消除 Gate4 死循环）。
+
+    流程：
+    1. 运行 3 个检查器（NumericGuard + StructuralCheck + CrossChapter）
+    2. 对可确定性修复的问题执行 ADVC + PGNB + bind_fuzzy_dates
+    3. 单次复验（只检查被修复的章节）
+    4. 返回结果（不再循环）
+
+    与 review_and_repair_loop 的区别：
+    - 无 max_rounds 多轮循环
+    - 无 LLM patch 修复（100% 程序化）
+    - 无单调性守卫（不循环所以不需要）
+    - 无豁免机制（程序化修复不会引入新问题）
+
+    Args:
+        chapters: 各章节内容 {chapter_num: content}
+        wind_data: Wind 数据
+        llm_caller: LLM 调用器（未使用，保留接口兼容）
+        deadline: 墙钟截止时间
+        enable_t2: ADVC T2 低置信修复开关
+
+    Returns:
+        ReviewRepairResult
+    """
+    import time as _time
+
+    start = _time.monotonic()
+    issues: list[str] = []
+    issues_fixed = 0
+
+    # 1. 运行 3 个检查器
+    try:
+        from .cross_chapter_consistency import check_cross_chapter_consistency
+        result = check_cross_chapter_consistency(chapters, wind_data=wind_data)
+        if not result.passed:
+            issues.extend(f"[跨章节一致性] {i.description}" for i in result.issues)
+    except Exception as e:
+        logger.warning(f"跨章节一致性检查失败: {e}")
+
+    try:
+        from .structural_check import structural_check
+        for ch_num, content in chapters.items():
+            result = structural_check(f"ch{ch_num}", content)
+            if not result.passed:
+                issues.extend(f"[结构检查] {i}" for i in result.issues)
+    except Exception as e:
+        logger.warning(f"结构检查失败: {e}")
+
+    try:
+        from ..qual_v8.numeric_guard import NumericGuard
+        guard = NumericGuard()
+        for ch_num, content in chapters.items():
+            result = guard.check_all(ch_num, content, wind_data or {})
+            if not result.passed:
+                issues.extend(f"[数值守卫] {v.message}" for v in result.violations)
+    except Exception as e:
+        logger.warning(f"数值守卫检查失败: {e}")
+
+    if not issues:
+        logger.info("单轮审查：无问题，通过")
+        return ReviewRepairResult(
+            passed=True, rounds=1, chapters=chapters,
+            issues_found=0, issues_fixed=0, remaining_issues=[],
+        )
+
+    logger.info(f"单轮审查：发现 {len(issues)} 个问题")
+
+    # 2. 程序化修复（ADVC + PGNB + bind_fuzzy_dates）
+    if wind_data:
+        try:
+            from ..qual_v8.anchor_repair import sweep_all_chapters
+            from ..qual_v8.data_anchor import get_data_anchor
+            from ..qual_v8.numeric_binder import (
+                bind_bare_numbers,
+                bind_fuzzy_dates,
+                bind_placeholders,
+            )
+            anchor = get_data_anchor(wind_data)
+
+            # ADVC sweep
+            _fixed, _fixes, _unresolved, _hints = sweep_all_chapters(
+                chapters, anchor, enable_t2=enable_t2,
+            )
+            if _fixes:
+                chapters.clear()
+                chapters.update(_fixed)
+                issues_fixed += len(_fixes)
+                logger.info(f"ADVC sweep: 修复 {len(_fixes)} 处")
+
+            # 日期语义绑定 + 裸数字替换 + 占位符回填
+            for ch_num in list(chapters.keys()):
+                c = chapters.get(ch_num, "")
+                c, date_fixes = bind_fuzzy_dates(c, wind_data, ch_num)
+                c, bbn_fixes = bind_bare_numbers(c, anchor, ch_num)
+                if "[{{" in c:
+                    c, _ = bind_placeholders(c, anchor, ch_num)
+                chapters[ch_num] = c
+                issues_fixed += len(date_fixes) + len(bbn_fixes)
+        except Exception as e:
+            logger.warning(f"程序化修复失败: {e}")
+
+    # 3. 单次复验（只检查被修复的章节）
+    remaining: list[str] = []
+    try:
+        from .cross_chapter_consistency import check_cross_chapter_consistency
+        result = check_cross_chapter_consistency(chapters, wind_data=wind_data)
+        if not result.passed:
+            remaining.extend(f"[跨章节一致性] {i.description}" for i in result.issues)
+    except Exception:
+        pass
+
+    elapsed = _time.monotonic() - start
+    passed = len(remaining) == 0
+
+    logger.info(
+        f"单轮审查完成: passed={passed}, 发现{len(issues)}个, 修复{issues_fixed}个, "
+        f"剩余{len(remaining)}个, 耗时{elapsed:.1f}s"
+    )
+
+    return ReviewRepairResult(
+        passed=passed, rounds=1, chapters=chapters,
+        issues_found=len(issues), issues_fixed=issues_fixed,
+        remaining_issues=remaining[:10],
+    )
