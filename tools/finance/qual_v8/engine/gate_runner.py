@@ -1,8 +1,8 @@
 """
-Gate 执行引擎（从 workflow.py 拆出）。
+Gate 执行引擎（v9 重构：接入 GateDAG + RunLifecycle）。
 
-负责 Gate 0-8 的顺序执行、重试、熔断、墙钟守卫。
-workflow.py 只保留 QualWorkflow 门面类，GateRunner 承担实际执行逻辑。
+负责 Gate 0-8 的 DAG 驱动执行、重试、熔断、墙钟守卫。
+v9 核心变更：从线性链改为 DAG 依赖（HARD/SOFT），Gate4 失败不阻塞 Gate5-8。
 
 设计参照：dayu-agent host/executor.py（Gate 生命周期管理）
 """
@@ -26,14 +26,19 @@ from ..core.state_machine import GateState as LegacyGateState
 from ..core.state_machine import StateMachine, WorkflowState
 from ..core.supervisor import FlowComplianceChecker
 from .events import EventCollector, gate_complete, gate_failed, gate_start
+from .gate_dag import GateDAG
+from .run_lifecycle import RunLifecycle
 
 logger = logging.getLogger(__name__)
 
 
 class GateRunner:
-    """Gate 执行引擎：顺序执行 Gate 0-8，含熔断器/重试/墙钟守卫。
+    """Gate 执行引擎（v9：DAG 驱动，非线性链）。
 
-    从 workflow.py QualWorkflow.execute() 拆出，workflow.py 只保留门面调用。
+    核心变更：
+    - GateDAG：HARD/SOFT 依赖图，Gate4 失败不阻塞 Gate5-8
+    - RunLifecycle：阶段流转（INIT→DATA→WRITE→AUDIT→ASSEMBLE→FINALIZE）
+    - 降级执行：SOFT 依赖 FAILED 时标记 DEGRADED 而非 BLOCKED
 
     Attributes:
         gate_engine: Gate 注册 + 分发引擎。
@@ -42,6 +47,8 @@ class GateRunner:
         supervisor: 第三方监督。
         audit_logger: 审计日志。
         event_collector: 事件收集器。
+        dag: Gate 依赖图。
+        lifecycle: 执行生命周期。
     """
 
     def __init__(
@@ -60,13 +67,21 @@ class GateRunner:
         self.audit_logger = audit_logger
         self.event_collector = EventCollector()
         self.config = config or {}
+        self.dag = GateDAG()
+        self.lifecycle = RunLifecycle()
 
     def run_all(
         self,
         ctx: GateContext,
         gate_attempts: int = 3,
     ) -> dict[int, GateResult]:
-        """顺序执行 Gate 0-8，返回 gate_results。
+        """DAG 驱动执行 Gate 0-8，返回 gate_results。
+
+        v9 核心变更：
+        - 使用 GateDAG 判断 Gate 是否可执行（HARD/SOFT 依赖）
+        - SOFT 依赖 FAILED 时标记 DEGRADED（非 BLOCKED）
+        - Gate5-8 在 Gate4 失败时仍降级运行
+        - 使用 RunLifecycle 管理阶段流转
 
         Args:
             ctx: Gate 执行上下文。
@@ -78,6 +93,7 @@ class GateRunner:
         gate_results: dict[int, GateResult] = {}
         deadline = ctx.wall_deadline
 
+        # DAG 驱动：按依赖图顺序执行
         for gate_num in range(9):
             # 墙钟检查
             if deadline and time.monotonic() > deadline:
@@ -89,22 +105,47 @@ class GateRunner:
                     )
                 break
 
-            result = self._run_single_gate(gate_num, ctx, gate_attempts)
-            gate_results[gate_num] = result
+            # DAG 依赖检查
+            can_run, degraded = self.dag.can_execute(gate_num, gate_results)
+            if not can_run:
+                # HARD 依赖未满足 → 标记 BLOCKED
+                logger.warning(f"Gate {gate_num} BLOCKED（HARD 依赖未满足）")
+                gate_results[gate_num] = GateResult(
+                    gate_num=gate_num, state=GateState.BLOCKED,
+                    errors=("HARD 依赖未满足",),
+                )
+                ctx = ctx.with_gate_result(gate_num, gate_results[gate_num])
+                continue
 
-            # 更新 ctx 中的 gate_results（供后续 Gate 读取）
+            if degraded:
+                logger.info(f"Gate {gate_num} 降级执行（SOFT 依赖有 FAILED）")
+
+            result = self._run_single_gate(gate_num, ctx, gate_attempts)
+
+            # 降级标记：SOFT 依赖 FAILED 且本 Gate 本身 PASSED → 标记 DEGRADED
+            if degraded and result.state == GateState.PASSED:
+                result = GateResult(
+                    gate_num=gate_num, state=GateState.DEGRADED,
+                    score=result.score,
+                    errors=result.errors,
+                    warnings=(*result.warnings, "降级执行（SOFT 依赖有 FAILED）"),
+                    execution_time=result.execution_time,
+                    timestamp=result.timestamp,
+                )
+
+            gate_results[gate_num] = result
             ctx = ctx.with_gate_result(gate_num, result)
 
-            # B1-2 分级阻断（enforce 模式）
-            if ctx.qual_mode == "enforce" and gate_num in {4, 8} and result.state == GateState.FAILED:
-                    from ..workflow_context import ComplianceBlockedException
-                    err_text = "; ".join(result.errors[:6])
-                    critical_keywords = ["数值矛盾", "财年错位", "跨章节一致性", "占位符", "空壳"]
-                    if any(kw in err_text for kw in critical_keywords):
-                        self.state_machine.transition_workflow(WorkflowState.FAILED)
-                        raise ComplianceBlockedException(
-                            f"Gate {gate_num} 关键错误阻断: {result.errors[:3]}"
-                        )
+            # RunLifecycle 推进
+            self.lifecycle.advance(gate_num)
+
+            # enforce 模式阻断（仅 Gate8 硬阻断）
+            if ctx.qual_mode == "enforce" and gate_num == 8 and result.state == GateState.FAILED:
+                err_text = "; ".join(result.errors[:6])
+                critical_keywords = ["数值矛盾", "财年错位", "跨章节一致性", "占位符", "空壳"]
+                if any(kw in err_text for kw in critical_keywords):
+                    self.state_machine.transition_workflow(WorkflowState.FAILED)
+                    raise RuntimeError(f"Gate 8 关键错误阻断: {result.errors[:3]}")
 
         return gate_results
 
