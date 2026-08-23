@@ -104,7 +104,38 @@ _CURRENCY_HKD = ["港元", "港币", "HKD", "HK$"]
 # ====================================================================
 
 class NumericGuard:
-    """前端数值闸门合集"""
+    """前端数值闸门合集（v9：实现 CheckerProtocol）
+
+    6 道闸门：数值量级 / 空章 / 空壳 / 财年 / 币值 / 组装前
+    """
+
+    @property
+    def name(self) -> str:
+        """检查器名称（CheckerProtocol 接口）。"""
+        return "NumericGuard"
+
+    def check(self, chapters: dict[int, str], ctx: object = None) -> "CheckResult":
+        """CheckerProtocol 接口：对所有章节运行全闸门。
+
+        Args:
+            chapters: 章节内容 {章节号: 内容}
+            ctx: 上下文（可选，含 wind_data）
+
+        Returns:
+            CheckResult
+        """
+        from ..qual_v8.contracts.types import CheckResult
+        wind_data = getattr(ctx, 'wind_data', None) or {}
+        all_violations = []
+        for ch_num, content in chapters.items():
+            result = self.check_all(ch_num, content, wind_data)
+            if not result.passed:
+                all_violations.extend(result.violations)
+        return CheckResult(
+            checker_name="NumericGuard",
+            passed=len(all_violations) == 0,
+            violations=tuple(all_violations),
+        )
 
     # ------------------------------------------------------------
     # 闸门1：数值量级校验（类别锚点）

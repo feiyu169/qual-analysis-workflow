@@ -41,7 +41,28 @@ class ConsistencyResult:
 
 
 class CrossChapterConsistencyChecker:
-    """跨章节一致性检查器"""
+    """跨章节一致性检查器（v9：实现 CheckerProtocol）"""
+
+    @property
+    def name(self) -> str:
+        """检查器名称（CheckerProtocol 接口）。"""
+        return "CrossChapterConsistency"
+
+    def check(self, chapters: dict[int, str], ctx: object = None) -> object:
+        """CheckerProtocol 接口（v9）。返回 CheckResult。"""
+        from ..qual_v8.contracts.types import CheckResult
+        result = self._check_consistency(chapters)
+        violations = tuple(result.issues) if result.issues else ()
+        return CheckResult(
+            checker_name="CrossChapterConsistency",
+            passed=result.passed,
+            score=result.score,
+            violations=violations,
+        )
+
+    def _check_consistency(self, chapters: dict[int, str]) -> ConsistencyResult:
+        """原有检查逻辑（由 check() 委托调用）。"""
+        return self._check_consistency_impl(chapters)
 
     def __init__(self, wind_data: dict | None = None):
         # 财年语义单源：DataAnchor 归因（FiscalSemantics——未标注数字引用按锚点值归因财年，
@@ -100,9 +121,9 @@ class CrossChapterConsistencyChecker:
             ],
         }
 
-    def check(self, chapters: dict[int, str]) -> ConsistencyResult:
+    def _check_consistency_impl(self, chapters: dict[int, str]) -> ConsistencyResult:
         """
-        检查跨章节一致性
+        检查跨章节一致性（内部实现，由 check/_check_consistency 委托调用）
 
         Args:
             chapters: 各章节内容 {chapter_num: content}
@@ -505,4 +526,4 @@ def check_cross_chapter_consistency(chapters: dict[int, str],
         ConsistencyResult
     """
     checker = CrossChapterConsistencyChecker(wind_data=wind_data)
-    return checker.check(chapters)
+    return checker._check_consistency(chapters)

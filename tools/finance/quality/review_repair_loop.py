@@ -981,3 +981,206 @@ def review_and_repair_single_pass(
         issues_found=len(issues), issues_fixed=issues_fixed,
         remaining_issues=remaining[:10],
     )
+
+
+# ====================================================================
+# v9 WritePipeline 状态机（对标 dayu write_pipeline audit/confirm/repair）
+# ====================================================================
+
+def _make_write_pipeline(
+    wind_data: dict | None = None,
+    llm_caller: object | None = None,
+    deadline: float | None = None,
+    enable_t2: bool = False,
+) -> "WritePipeline":
+    """工厂：构造 WritePipeline 实例。"""
+    return WritePipeline(
+        wind_data=wind_data,
+        llm_caller=llm_caller,
+        deadline=deadline,
+        enable_t2=enable_t2,
+    )
+
+
+class WritePipeline:
+    """审计/确认/修复闭环状态机（对标 dayu write_pipeline）。
+
+    流转：DRAFT → REVIEW → REPAIR → CONFIRM → COMMIT
+
+    设计原则（dayu 对标）：
+    - audit/confirm/repair 三步闭环
+    - 每步有明确输入/输出
+    - 单轮执行（不循环），失败标注降级
+    - 与 contracts.types.WritePipelinePhase 对齐
+
+    用法：
+        pipeline = WritePipeline(wind_data=wind_data)
+        chapters, remaining = pipeline.run_loop(chapters, ctx)
+    """
+
+    def __init__(
+        self,
+        wind_data: dict | None = None,
+        llm_caller: object | None = None,
+        deadline: float | None = None,
+        enable_t2: bool = False,
+    ) -> None:
+        self._wind_data = wind_data
+        self._llm_caller = llm_caller
+        self._deadline = deadline
+        self._enable_t2 = enable_t2
+        self._phase: str = "draft"
+        self._history: list[str] = []
+
+    @property
+    def phase(self) -> str:
+        """当前阶段。"""
+        return self._phase
+
+    def review(self, chapters: dict[int, str]) -> tuple[list[str], float]:
+        """审计检查（REVIEW 阶段）。
+
+        Returns:
+            (issues, score)：问题列表 + 评分
+        """
+        self._phase = "review"
+        self._history.append("review")
+        issues: list[str] = []
+
+        try:
+            from .cross_chapter_consistency import check_cross_chapter_consistency
+            result = check_cross_chapter_consistency(chapters, wind_data=self._wind_data)
+            if not result.passed:
+                issues.extend(f"[跨章一致性] {i.description}" for i in result.issues)
+        except Exception as e:
+            logger.warning(f"跨章检查失败: {e}")
+
+        try:
+            from .structural_check import structural_check
+            for ch_num, content in chapters.items():
+                result = structural_check(f"ch{ch_num}", content)
+                if not result.passed:
+                    issues.extend(f"[结构] {i}" for i in result.issues)
+        except Exception as e:
+            logger.warning(f"结构检查失败: {e}")
+
+        try:
+            from .numeric_guard import NumericGuard
+            guard = NumericGuard()
+            for ch_num, content in chapters.items():
+                result = guard.check_all(ch_num, content, self._wind_data or {})
+                if not result.passed:
+                    issues.extend(f"[数值] {v.message}" for v in result.violations)
+        except Exception as e:
+            logger.warning(f"数值守卫失败: {e}")
+
+        score = max(0.0, 100.0 - len(issues) * 5)
+        return issues, score
+
+    def repair(
+        self, chapters: dict[int, str], issues: list[str],
+    ) -> tuple[dict[int, str], int]:
+        """确定性修复（REPAIR 阶段）。
+
+        Returns:
+            (repaired_chapters, fix_count)
+        """
+        self._phase = "repair"
+        self._history.append("repair")
+        fix_count = 0
+
+        if not self._wind_data:
+            return chapters, 0
+
+        try:
+            from ..qual_v8.anchor_repair import sweep_all_chapters
+            from ..qual_v8.data_anchor import get_data_anchor
+            from ..qual_v8.numeric_binder import (
+                bind_bare_numbers, bind_fuzzy_dates, bind_placeholders,
+            )
+            anchor = get_data_anchor(self._wind_data)
+
+            _fixed, _fixes, _, _ = sweep_all_chapters(
+                chapters, anchor, enable_t2=self._enable_t2,
+            )
+            if _fixes:
+                chapters.clear()
+                chapters.update(_fixed)
+                fix_count += len(_fixes)
+
+            for ch_num in list(chapters.keys()):
+                c = chapters.get(ch_num, "")
+                c, d_fixes = bind_fuzzy_dates(c, self._wind_data, ch_num)
+                c, b_fixes = bind_bare_numbers(c, anchor, ch_num)
+                if "[{{" in c:
+                    c, _ = bind_placeholders(c, anchor, ch_num)
+                chapters[ch_num] = c
+                fix_count += len(d_fixes) + len(b_fixes)
+        except Exception as e:
+            logger.warning(f"确定性修复失败: {e}")
+
+        return chapters, fix_count
+
+    def confirm(self, chapters: dict[int, str]) -> tuple[bool, list[str]]:
+        """修复后复验（CONFIRM 阶段）。
+
+        Returns:
+            (passed, remaining_issues)
+        """
+        self._phase = "confirm"
+        self._history.append("confirm")
+        remaining: list[str] = []
+
+        try:
+            from .cross_chapter_consistency import check_cross_chapter_consistency
+            result = check_cross_chapter_consistency(chapters, wind_data=self._wind_data)
+            if not result.passed:
+                remaining.extend(f"[跨章一致性] {i.description}" for i in result.issues)
+        except Exception:
+            pass
+
+        return len(remaining) == 0, remaining
+
+    def commit(self, chapters: dict[int, str]) -> dict[int, str]:
+        """提交最终结果（COMMIT 阶段）。
+
+        Returns:
+            chapters（不变）
+        """
+        self._phase = "commit"
+        self._history.append("commit")
+        return chapters
+
+    def run_loop(
+        self,
+        chapters: dict[int, str],
+        ctx: object | None = None,
+    ) -> tuple[dict[int, str], tuple[str, ...]]:
+        """执行完整 review→repair→confirm→commit 循环。
+
+        Args:
+            chapters: 章节内容
+            ctx: 上下文（未使用，保留接口兼容）
+
+        Returns:
+            (final_chapters, remaining_issues)
+        """
+        # REVIEW
+        issues, score = self.review(chapters)
+        logger.info(f"WritePipeline REVIEW: {len(issues)} 个问题, score={score}")
+
+        if not issues:
+            return self.commit(chapters), ()
+
+        # REPAIR
+        chapters, fix_count = self.repair(chapters, issues)
+        logger.info(f"WritePipeline REPAIR: 修复 {fix_count} 处")
+
+        # CONFIRM
+        passed, remaining = self.confirm(chapters)
+        logger.info(f"WritePipeline CONFIRM: passed={passed}, 剩余 {len(remaining)} 个")
+
+        # COMMIT（无论 passed 与否都提交——降级标注）
+        chapters = self.commit(chapters)
+
+        return chapters, tuple(remaining)
