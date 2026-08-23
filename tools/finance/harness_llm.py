@@ -79,20 +79,22 @@ def create_harness_caller(
     temperature: float = 0.2,
     max_tokens: int = 12000,
     system: str = None,
-    deadline: float = None,  # v3.1 P0-B-8：调用级墙钟检查（time.monotonic 值）
+    deadline: float = None,
 ):
     """创建 llm_caller(chapter_name, prompt) -> str。
 
+    优先通过 llm-bridge（DSH 宿主模型路由）调用；
+    bridge 不可用时自动 fallback 到直接 DeepSeek API（llm_caller.py）。
+
     Args:
         base_url: DSH web 地址（默认取 DSH_WEB_URL 环境变量）
-        model/provider: 覆盖宿主默认模型路由（默认使用宿主 currentSelection）
-        timeout: 单次调用超时（秒，默认 300）
+        model/provider: 覆盖宿主默认模型路由
+        timeout: 单次调用超时（秒）
         max_retries: 失败重试次数
-        temperature: 生成温度（默认 0.2，与 hermes 一致保证格式遵从度）
-        max_tokens: 最大输出 token（红队审查等长输出任务可调大，如 24000）
-        system: 自定义 system prompt（默认报告撰写格式；审查类任务传专用 prompt）
-        deadline: 墙钟截止时间（time.monotonic() 值；每次尝试前检查，
-                  v3.1 P0-B-8：确定性失败不重试）
+        temperature: 生成温度
+        max_tokens: 最大输出 token
+        system: 自定义 system prompt
+        deadline: 墙钟截止时间
     """
     import time as _time
 
@@ -101,7 +103,44 @@ def create_harness_caller(
     base = base_url or _default_base_url()
     sys_prompt = system if system is not None else SYSTEM_PROMPT
 
+    # 检测 bridge 是否可用（启动时一次探测）
+    _bridge_available = False
+    try:
+        import urllib.request as _urllib
+        _probe = _urllib.Request(
+            base.rstrip("/") + "/api/llm-bridge",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+        )
+        with _urllib.urlopen(_probe, timeout=3) as _r:
+            _bridge_available = _r.status != 404
+    except Exception:
+        _bridge_available = False
+
+    # bridge 不可用时准备 fallback caller
+    _fallback_caller = None
+    if not _bridge_available:
+        _log("bridge 不可用（404），启用直接 API fallback")
+        try:
+            from .llm_caller import create_deepseek_caller
+            _fallback_caller = create_deepseek_caller(
+                model="deepseek-chat",
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout,
+                max_retries=max_retries,
+            )
+        except Exception as e:
+            _log(f"fallback caller 创建失败: {e}")
+
     def llm_caller(chapter_name: str, prompt: str) -> str:
+        # 若 bridge 不可用且 fallback 可用，直接走 fallback
+        if not _bridge_available and _fallback_caller is not None:
+            if deadline is not None and _time.monotonic() > deadline:
+                raise WallClockDeadlineExceeded(f"墙钟预算耗尽: {chapter_name}")
+            return _fallback_caller(chapter_name, prompt)
+
+        # 正常路径：通过 bridge 调用
         payload = {
             "system": sys_prompt,
             "messages": [{"role": "user", "content": prompt}],
@@ -117,15 +156,12 @@ def create_harness_caller(
         last_err = None
         for attempt in range(max_retries + 1):
             t0 = time.time()
-            # v3.1 P0-B-8：调用级墙钟检查（try 外，不被吞）
             if deadline is not None and _time.monotonic() > deadline:
                 _log(f"失败 {chapter_name}: 墙钟截止时间耗尽（不重试）")
                 raise WallClockDeadlineExceeded(f"墙钟预算耗尽: {chapter_name}")
             try:
                 data = _call_bridge(payload, base, timeout)
                 if not data.get("ok"):
-                    # P0: max-tokens 截断但有内容 → 保留已生成内容（不 raise，避免丢稿）
-                    # 注意：桥接插件返回 finishReason（字符串），兼容旧版 finish（对象/字符串）
                     finish = data.get("finishReason") or data.get("finish") or {}
                     text = data.get("text") or ""
                     if (isinstance(finish, dict) and finish.get("kind") == "max-tokens") or \
@@ -133,8 +169,6 @@ def create_harness_caller(
                         if text and len(text.strip()) > 0:
                             _log(f"⚠️ 完成 {chapter_name} 尝试{attempt+1}: max-tokens 截断，保留 {len(text)} 字符")
                             return text + "\n\n<!-- ⚠️ LLM 输出被 max-tokens 截断，内容不完整 -->"
-                        # v3.1 P0-B：max-tokens 且空输出 → 确定性失败，不重试
-                        _log(f"失败 {chapter_name} 尝试{attempt+1}: max-tokens 空输出（确定性失败，不重试）")
                         raise DeterministicLLMFailure(
                             f"LLM 输出为空（finish={finish}），确定性失败，不重试",
                             finish_reason=finish, model=model,
@@ -144,7 +178,7 @@ def create_harness_caller(
                 _log(f"完成 {chapter_name} 尝试{attempt+1} ({round(time.time()-t0,1)}s, {len(text)}字符)")
                 return text
             except DeterministicLLMFailure:
-                raise  # 确定性失败不重试（含 WallClockDeadlineExceeded 子类）
+                raise
             except Exception as e:
                 last_err = e
                 _log(f"失败 {chapter_name} 尝试{attempt+1}: {repr(e)[:200]} ({round(time.time()-t0,1)}s)")

@@ -26,7 +26,21 @@ def _load_deepseek_config() -> tuple[str, str]:
     api_key = os.environ.get("DEEPSEEK_API_KEY", "")
     base_url = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
-    # 2. .env 文件
+    # 2. 工作区 config/.env 文件（2026-08-22：qual 工作区标准位置）
+    if not api_key:
+        workspace = os.environ.get("HS_WORKSPACE", "")
+        if not workspace:
+            workspace = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "..")
+        env_file = os.path.join(workspace, "config", ".env")
+        if os.path.exists(env_file):
+            key_prefix = "DEEPSEEK" + "_API_KEY="
+            for line in open(env_file, encoding="utf-8"):
+                line = line.strip()
+                if line.startswith(key_prefix):
+                    api_key = line.split("=", 1)[1].strip()
+                    break
+
+    # 3. ~/.hermes/.env
     if not api_key:
         env_file = Path.home() / ".hermes" / ".env"
         key_prefix = "DEEPSEEK" + "_API_KEY="
@@ -35,7 +49,7 @@ def _load_deepseek_config() -> tuple[str, str]:
                 if line.startswith(key_prefix):
                     api_key = line.split("=", 1)[1].strip()
 
-    # 3. config.yaml (gbrain MCP env)
+    # 4. config.yaml (gbrain MCP env)
     if not api_key:
         config_path = Path.home() / ".hermes" / "config.yaml"
         if config_path.exists():
