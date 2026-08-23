@@ -310,11 +310,8 @@ class QualWorkflow:
                 break
 
             # v9 GateDAG 依赖判断（HARD deps 阻断，SOFT deps 降级）
-            gate_results_for_dag = {
-                k: v for k, v in gate_results.items()
-                if isinstance(v, dict)
-            }
-            can_run, is_degraded = gate_dag.can_execute(gate_num, gate_results_for_dag)
+            # 直接传 gate_results 全集（含 GateResult 对象和 dict），不做过滤
+            can_run, is_degraded = gate_dag.can_execute(gate_num, gate_results)
             if not can_run:
                 # HARD 依赖未满足 → 标记 BLOCKED（替代旧 prerequisites 硬阻断）
                 logger.warning(f"Gate {gate_num} BLOCKED（HARD 依赖未满足）")
@@ -407,6 +404,7 @@ class QualWorkflow:
                 "execution_time": result.execution_time,
                 "errors": result.errors,
                 "check_criteria_passed": result.details.get("check_criteria_passed"),
+                "state": "degraded" if is_degraded else ("passed" if result.passed else "failed"),
             }
 
             # 第三方监督
