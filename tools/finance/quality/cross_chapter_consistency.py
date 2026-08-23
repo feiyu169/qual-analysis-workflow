@@ -469,11 +469,14 @@ class CrossChapterConsistencyChecker:
         2026-08-22：增加"混合描述豁免"——当两个结论都包含正面关键词时，
         即使其中一个也含负面词（如"转正...但自由现金流仍为负"），不算冲突。
         这类混合描述在三财年报告中常见（改善但仍有不足）。
+
+        2026-08-23：增加"改善性关键词"——"收窄""拐点""减亏"等描述改善趋势的词
+        标为正面（不是负面）。"亏损收窄"含"亏损"但本质是改善描述，不应判为负面。
         """
-        # 正面关键词
-        positive_keywords = ["转正", "改善", "增长", "上升", "提升", "突破"]
-        # 负面关键词
-        negative_keywords = ["为负", "下降", "恶化", "亏损", "减少"]
+        # 正面关键词（含改善趋势）
+        positive_keywords = ["转正", "改善", "增长", "上升", "提升", "突破", "拐点", "收窄", "减亏", "好转"]
+        # 负面关键词（纯恶化）
+        negative_keywords = ["为负", "下降", "恶化", "持续亏损", "扩大", "加剧"]
 
         conc1_positive = any(kw in conc1 for kw in positive_keywords)
         conc1_negative = any(kw in conc1 for kw in negative_keywords)

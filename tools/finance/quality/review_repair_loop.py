@@ -906,7 +906,7 @@ def review_and_repair_single_pass(
         logger.warning(f"结构检查失败: {e}")
 
     try:
-        from ..qual_v8.numeric_guard import NumericGuard
+        from .numeric_guard import NumericGuard
         guard = NumericGuard()
         for ch_num, content in chapters.items():
             result = guard.check_all(ch_num, content, wind_data or {})
