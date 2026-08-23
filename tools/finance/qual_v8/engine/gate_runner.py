@@ -13,19 +13,19 @@ import time
 from datetime import datetime
 from typing import Any
 
-from .contracts.types import (
+from ..contracts.types import (
     GateContext,
     GateResult,
     GateState,
 )
-from .core.audit_logger import AuditLogger
-from .core.circuit_breaker import CircuitBreaker
-from .core.error_classifier import ErrorClassifier
-from .core.gate_engine import GateEngine
-from .core.state_machine import GateState as LegacyGateState
-from .core.state_machine import StateMachine, WorkflowState
-from .core.supervisor import FlowComplianceChecker
-from .engine.events import EventCollector, gate_complete, gate_failed, gate_start
+from ..core.audit_logger import AuditLogger
+from ..core.circuit_breaker import CircuitBreaker
+from ..core.error_classifier import ErrorClassifier
+from ..core.gate_engine import GateEngine
+from ..core.state_machine import GateState as LegacyGateState
+from ..core.state_machine import StateMachine, WorkflowState
+from ..core.supervisor import FlowComplianceChecker
+from .events import EventCollector, gate_complete, gate_failed, gate_start
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +97,7 @@ class GateRunner:
 
             # B1-2 分级阻断（enforce 模式）
             if ctx.qual_mode == "enforce" and gate_num in {4, 8} and result.state == GateState.FAILED:
-                    from .workflow_context import ComplianceBlockedException
+                    from ..workflow_context import ComplianceBlockedException
                     err_text = "; ".join(result.errors[:6])
                     critical_keywords = ["数值矛盾", "财年错位", "跨章节一致性", "占位符", "空壳"]
                     if any(kw in err_text for kw in critical_keywords):

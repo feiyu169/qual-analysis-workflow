@@ -130,9 +130,9 @@ def run_shadow_comparison(
     Returns:
         ShadowResult 对比结果。
     """
-    from .cross_chapter_consistency import CrossChapterConsistencyChecker
-    from .numeric_guard import NumericGuard
-    from .structural_check import structural_check
+    from ...quality.cross_chapter_consistency import CrossChapterConsistencyChecker
+    from ...quality.numeric_guard import NumericGuard
+    from ...quality.structural_check import structural_check
 
     # 新 3 检查器（主路径）
     new_issues: list[str] = []
@@ -168,7 +168,7 @@ def run_shadow_comparison(
     # 旧检查器（影子模式）——只记录不阻断
     shadow_issues: list[str] = []
     try:
-        from .fact_checker import check_facts
+        from ...quality.fact_checker import check_facts
         result = check_facts(chapters, wind_data or {})
         if not result.passed:
             shadow_issues.extend(f"[FactChecker] {i.description}" for i in result.issues)
@@ -176,7 +176,7 @@ def run_shadow_comparison(
         pass
 
     try:
-        from .conclusion_validator import check_conclusion
+        from ...quality.conclusion_validator import check_conclusion
         result = check_conclusion(chapters, None, wind_data)
         if not result.passed:
             shadow_issues.extend(f"[Conclusion] {i.description}" for i in result.issues)
@@ -184,7 +184,7 @@ def run_shadow_comparison(
         pass
 
     try:
-        from .logic_consistency_check import check_logic_consistency
+        from ...quality.logic_consistency_check import check_logic_consistency
         for _ch_num, content in chapters.items():
             result = check_logic_consistency(content)
             if result:
@@ -193,7 +193,7 @@ def run_shadow_comparison(
         pass
 
     try:
-        from .date_anchor_check import check_date_anchors
+        from ...quality.date_anchor_check import check_date_anchors
         for _ch_num, content in chapters.items():
             result = check_date_anchors(content, wind_data)
             if result:

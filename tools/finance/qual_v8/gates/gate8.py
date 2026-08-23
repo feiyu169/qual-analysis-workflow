@@ -164,7 +164,7 @@ class Gate8FinalValidation(GateBase):
 
         try:
             from ..engine.shadow_runner import run_shadow_comparison
-            from ..qual_v8.data_anchor import get_data_anchor
+            from ..data_anchor import get_data_anchor
             anchor = get_data_anchor(
                 wind_data if isinstance(wind_data, dict)
                 else {"income": {}, "balance": {}, "cashflow": {}}
