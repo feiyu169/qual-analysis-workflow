@@ -64,6 +64,19 @@ class Gate8FinalValidation(GateBase):
             except Exception as e:
                 logger.warning(f"Gate8 救援后报告重组失败: {e}")
 
+        # 0.6 P0-1 影子运行 A/B 对比（v9：新 3 检查器 vs 旧检查器覆盖率验证）
+        # Phase 5 期间运行；Phase 6 A/B 通过后可移除
+        shadow_result = self._run_shadow_comparison(context)
+        details["shadow_comparison"] = shadow_result
+        if shadow_result and not shadow_result.get("skipped"):
+            coverage = shadow_result.get("coverage", 1.0)
+            if coverage < 0.95:
+                logger.warning(
+                    f"⚠️ 影子运行覆盖率 {coverage:.1%} < 95%，"
+                    f"漏检 {shadow_result.get('total_missed', 0)}/"
+                    f"{shadow_result.get('total_shadow', 0)} 项"
+                )
+
         # 1. 检查所有Gate是否通过
         all_gates_result = self._check_all_gates(context)
         details["all_gates"] = all_gates_result
@@ -138,6 +151,36 @@ class Gate8FinalValidation(GateBase):
         # 检查人工确认
         human_confirmed = context.get("human_confirmed", False)
         return bool(human_confirmed)
+
+    def _run_shadow_comparison(self, context: dict[str, Any]) -> dict[str, Any]:
+        """P0-1 影子运行 A/B 对比（v9）：新 3 检查器 vs 旧检查器覆盖率验证。
+
+        Phase 5 期间运行，输出覆盖率报告。Phase 6 A/B 通过后可移除。
+        """
+        chapters = context.get("chapters", {})
+        wind_data = context.get("wind_data", {})
+        if not chapters or not wind_data:
+            return {"skipped": True, "reason": "无 chapters 或 wind_data"}
+
+        try:
+            from ..engine.shadow_runner import run_shadow_comparison
+            from ..qual_v8.data_anchor import get_data_anchor
+            anchor = get_data_anchor(
+                wind_data if isinstance(wind_data, dict)
+                else {"income": {}, "balance": {}, "cashflow": {}}
+            )
+            result = run_shadow_comparison(chapters, wind_data, anchor)
+            return {
+                "skipped": False,
+                "coverage": result.coverage,
+                "total_shadow": result.total_shadow,
+                "total_missed": result.total_missed,
+                "missed_by_new": result.missed_by_new[:5],
+                "false_positives_new": result.false_positives_new[:5],
+            }
+        except Exception as e:
+            logger.warning(f"影子运行对比失败（非阻断）: {e}")
+            return {"skipped": True, "reason": str(e)}
 
     def _advc_rescue_sweep(self, context: dict[str, Any]) -> dict[str, Any]:
         """ADVC 组装闸门救援 sweep（P1：最终闸门前确定性数值清洗）。

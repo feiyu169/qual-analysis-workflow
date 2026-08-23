@@ -482,6 +482,9 @@ def _run_substantive_review(
 ) -> list[str]:
     """执行实质性审查（v3.1：enable_debate 门控对抗辩论；审查调用计入预算/墙钟）
 
+    注意：v9 主路径使用 review_and_repair_single_pass（100% 程序化，零 LLM），
+    本函数仅供旧路径 review_and_repair_loop 兼容调用。
+
     C2-2：only_chapters 非 None 时仅审查指定章节（修复后增量——LLM 调用降 60-70%）。
     """
     issues = []
