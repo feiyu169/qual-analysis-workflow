@@ -1,13 +1,15 @@
 """
-数据锚点机制（修复版 2026-08-18）
+数据锚点机制（v9 重构：实现 DataStoreProtocol，2026-08-23）
 
 用于跨章节数据同步，确保各章节引用的数据一致。
+v9：DataAnchor 实现 DataStoreProtocol（dayu fins/storage 窄协议模式），
+外部代码通过 Protocol 接口访问，不直接依赖 DataAnchor 实现。
 
-修复项：
-- B1: _extract_data 死代码 → 真实提取（指标名+数字+单位）写入字典
-- B2: init_from_wind_data 键契约 → canonical 键 + 别名表（与 assemble_wind_data 输出对齐）
+历史修复项：
+- B1: _extract_data 死代码 → 真实提取
+- B2: init_from_wind_data 键契约 → canonical 键 + 别名表
 - B3: DataPoint 增加 fiscal_year 维度；锚点可存 3 年列表
-- B4: validate/fix 财年感知：仅校验报告中出现且锚点有同财年的数字
+- B4: validate/fix 财年感知
 """
 
 import logging
@@ -75,7 +77,10 @@ class DataPoint:
 
 class DataAnchor:
     """
-    数据锚点（唯一数据源）
+    数据锚点（唯一数据源，实现 DataStoreProtocol）。
+
+    v9 重构：显式实现 DataStoreProtocol，外部代码通过 Protocol 接口访问。
+    对标 dayu fins/storage/repository_protocols.py 的窄 Protocol 设计。
 
     在Gate 2提取的数据作为唯一数据源
     在Gate 4检查各章节引用的数据是否与锚点一致
@@ -88,6 +93,19 @@ class DataAnchor:
 
     def _init_default_anchors(self):
         """初始化默认锚点（空；由 init_from_wind_data 填充）"""
+
+    # ============================================================
+    # DataStoreProtocol 接口实现
+    # ============================================================
+
+    def get(self, key: str, fiscal_year: int | None = None) -> float | None:
+        """获取数值（指定 key + 可选财年，DataStoreProtocol 接口）。"""
+        return self.get_anchor(key, fiscal_year)
+
+    def set(self, key: str, value: float, unit: str = "亿元",
+            fiscal_year: int | None = None, source: str = "Wind") -> None:
+        """写入数值（DataStoreProtocol 接口，仅供初始化阶段）。"""
+        self.set_anchor(key, value, unit, source, fiscal_year)
 
     def set_anchor(self, key: str, value: float, unit: str = "亿元",
                    source: str = "Wind", fiscal_year: int | None = None):
