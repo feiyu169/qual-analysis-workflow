@@ -255,6 +255,55 @@ class Gate8FinalValidation(GateBase):
                             )
             except Exception as _e:  # noqa: BLE001
                 logger.warning(f"Gate8 PGNB 回填失败（非阻断）: {_e}")
+
+            # v9：DCF 负值修复——ch7/ch10 中 LLM 生成的负 DCF 值替换为"不适用"
+            import re as _re_dcf
+            for _ch_num in list(chapters.keys()):
+                _ch_content = chapters.get(_ch_num, "")
+                _dcf_fixes = 0
+                # 匹配 "DCF每股价值：-XX.XX港元" 或 "DCF估值：-XX.XX"
+                for _m in _re_dcf.finditer(
+                    r"(?:DCF|折现)[^\n]{0,20}[:：]\s*\*{0,2}(-?\d+\.?\d*)\s*(?:港元|港币|HKD|元)",
+                    _ch_content,
+                ):
+                    try:
+                        _val = float(_m.group(1))
+                        if _val < 0:
+                            _old = _m.group(0)
+                            _new = _old.replace(_m.group(1), "不适用（FCF为负，DCF无效）")
+                            _ch_content = _ch_content.replace(_old, _new, 1)
+                            _dcf_fixes += 1
+                    except (ValueError, TypeError):
+                        pass
+                # 匹配 "目标价区间：-XX.XX ~ -XX.XX港元"
+                for _m in _re_dcf.finditer(
+                    r"目标价[^\n]{0,20}[:：]\s*\*{0,2}(-?\d+\.?\d*)\s*[~～至-]\s*(-?\d+\.?\d*)",
+                    _ch_content,
+                ):
+                    try:
+                        _v1, _v2 = float(_m.group(1)), float(_m.group(2))
+                        if _v1 < 0 or _v2 < 0:
+                            _old = _m.group(0)
+                            _new = _old.replace(_m.group(1), "不适用").replace(_m.group(2), "不适用")
+                            _ch_content = _ch_content.replace(_old, _new, 1)
+                            _dcf_fixes += 1
+                    except (ValueError, TypeError):
+                        pass
+                # 匹配 "上行空间：-XXX.X%"
+                for _m in _re_dcf.finditer(r"上行空间[：:]\s*\*{0,2}(-?\d+\.?\d*)%", _ch_content):
+                    try:
+                        _val = float(_m.group(1))
+                        if _val < -50:  # 上行空间 < -50% 明显异常
+                            _old = _m.group(0)
+                            _new = _old.replace(_m.group(1), "不适用")
+                            _ch_content = _ch_content.replace(_old, _new, 1)
+                            _dcf_fixes += 1
+                    except (ValueError, TypeError):
+                        pass
+                if _dcf_fixes > 0:
+                    chapters[_ch_num] = _ch_content
+                    logger.info(f"Gate8 DCF 负值修复 第{_ch_num}章 {_dcf_fixes} 处")
+
             return {
                 "fixed_count": len(_fixes),
                 "fixes": [

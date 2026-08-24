@@ -1954,6 +1954,8 @@ def _generate_decision_chapter(
             if judgments:
                 aggregation = DecisionAggregator.aggregate(judgments)
                 logger.info(f"DecisionAggregator聚合结果: {aggregation}")
+                # v9：写入 context 供 Gate6 评级提取 fallback
+                context["decision_rating"] = aggregation
         except Exception as e:
             logger.warning(f"DecisionAggregator聚合失败: {e}")
 
