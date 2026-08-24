@@ -159,7 +159,9 @@ def run_shadow_comparison(
     # 3. CrossChapterConsistency
     try:
         checker = CrossChapterConsistencyChecker(wind_data)
-        result = checker.check(chapters)
+        # v9: check() now returns CheckResult (CheckerProtocol interface)
+        # Use _check_consistency() for backward-compatible ConsistencyResult
+        result = checker._check_consistency(chapters)
         if not result.passed:
             new_issues.extend(f"[Consistency] {i.description}" for i in result.issues)
     except Exception as e:

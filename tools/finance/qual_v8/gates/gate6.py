@@ -277,7 +277,7 @@ class Gate6Conclusion(GateBase):
         }
 
     def _extract_rating(self, chapters: dict[int, str]) -> str:
-        """提取投资评级"""
+        """提取投资评级（v9：扩展匹配模式）"""
         import re
 
         # 在所有章节中查找评级
@@ -285,11 +285,17 @@ class Gate6Conclusion(GateBase):
             patterns = [
                 r"评级[：:]\s*(买入|增持|中性|减持|卖出)",
                 r"(买入|增持|中性|减持|卖出)\s*评级",
+                r"投资建议[：:]\s*(买入|增持|中性|减持|卖出)",
+                r"建议[：:]\s*(买入|增持|中性|减持|卖出)",
+                r"目标评级[：:]\s*(买入|增持|中性|减持|卖出)",
+                r"(建议|推荐)\s*(买入|增持)",
+                r"(建议|推荐)\s*(减持|卖出)",
             ]
 
             for pattern in patterns:
                 match = re.search(pattern, content)
                 if match:
-                    return match.group(1)
+                    # 兼容两种捕获组：group(1) 或 group(2)
+                    return match.group(1) if len(match.groups()) == 1 else match.group(2)
 
         return ""

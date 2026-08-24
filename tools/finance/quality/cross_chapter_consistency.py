@@ -333,6 +333,12 @@ class CrossChapterConsistencyChecker:
                     by_fy.setdefault(fy, {})[ch_num] = conc
 
             for fy, conclusions in by_fy.items():
+                # v9：未标注财年的结论（fy=None）不参与跨章冲突判断
+                # 三财年报告中，"2024年现金流为负、2025年现金流转正"是合法叙事，
+                # 未标注财年的描述（如"现金流量净额为负"）可能是历史引用，
+                # 不应默认归入最新财年与新值冲突。
+                if fy is None:
+                    continue
                 if len(conclusions) < 2:
                     continue
                 ch_list = list(conclusions.keys())
