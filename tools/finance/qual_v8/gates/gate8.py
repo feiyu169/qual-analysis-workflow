@@ -233,8 +233,9 @@ class Gate8FinalValidation(GateBase):
                         )
                     # PGNB v4（2026-08-22）：终局裸数字程序替换——审查修复循环回滚后
                     # 残留的幻觉数字（第6章归母净资产=59.6 等）在此一次性替换为锚点值
+                    # v9 strict：Gate8 使用 latest_only=True，只允许最新财年值通过
                     _ch_content, _bbn_fixes = bind_bare_numbers(
-                        _ch_content, _anchor, _ch_num,
+                        _ch_content, _anchor, _ch_num, latest_only=True,
                     )
                     if _bbn_fixes:
                         chapters[_ch_num] = _ch_content

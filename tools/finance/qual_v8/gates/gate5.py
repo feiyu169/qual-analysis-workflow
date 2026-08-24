@@ -159,8 +159,16 @@ class Gate5QualityEnhancement(GateBase):
                     if _fcf and _wacc > _g and _shares > 0:
                         # 简化永续增长 DCF：V = FCF1/(wacc-g)，per-share = V/shares
                         dcf_value = (_fcf / (_wacc - _g)) / _shares
-                        valuation["dcf_value"] = round(dcf_value, 2)
-                        logger.info(f"Gate5 DCF per-share: {dcf_value:.2f}（简化永续模型）")
+                        # v9：DCF 负值处理——亏损公司 FCF 为负时 DCF 无效，
+                        # 标注为"不适用"，使用可比公司估值作为主要方法
+                        if dcf_value < 0:
+                            valuation["dcf_value"] = None
+                            valuation["dcf_not_applicable"] = True
+                            valuation["dcf_reason"] = f"FCF={_fcf:.1f}亿为负，DCF不适用"
+                            logger.info(f"Gate5 DCF 不适用: FCF={_fcf:.1f}亿为负，使用可比公司估值")
+                        else:
+                            valuation["dcf_value"] = round(dcf_value, 2)
+                            logger.info(f"Gate5 DCF per-share: {dcf_value:.2f}（简化永续模型）")
             except Exception as e:
                 logger.warning(f"Gate5 DCF per-share 计算失败（非阻断）: {e}")
             context["valuation"] = valuation

@@ -253,10 +253,14 @@ def bind_fuzzy_dates(
 # ====================================================================
 
 
-def bind_bare_numbers(content: str, anchor, chapter_num: int) -> tuple[str, list[str]]:
+def bind_bare_numbers(content: str, anchor, chapter_num: int, *, latest_only: bool = False) -> tuple[str, list[str]]:
     """裸数字程序绑定：LLM 未用占位符直接写财务数字时，若该指标有锚点且值不匹配
     任一财年 → **程序把数字替换为 [{{指标}}] 占位符**（占位符随后由 bind_placeholders
     按锚点回填，数字 100% 来自锚点）；命中锚点/无锚点/年份 → 原样保留。
+
+    Args:
+        latest_only: True 时只允许最新财年值通过，历史财年值强制替换为占位符。
+                     Gate8 rescue sweep 使用（严格模式，防止 ch9/ch10 幻觉残留）。
 
     实测背景（2026-08-22 小鹏全流程）：第5章 LLM 写"营业利润=12.5"（锚点 -44.16）、
     "总资产=0.79"（锚点 1031.63），validate_bare_numbers 拦截后依赖 LLM 重写，
@@ -309,6 +313,22 @@ def bind_bare_numbers(content: str, anchor, chapter_num: int) -> tuple[str, list
         pts = anchor.get_metric_points(metric)
         if not pts:
             return m.group(0)  # 无锚点（毛利率/运营数据）→ 保留，不猜测
+
+        # v9 latest_only 模式：只允许最新财年值通过
+        if latest_only:
+            latest_dp = pts[-1]
+            if (latest_dp.value is not None
+                    and abs(v - latest_dp.value) / max(abs(latest_dp.value), 1e-9) <= 0.01):
+                return m.group(0)  # 命中最新财年 → 合法
+            # 命中历史财年或不命中 → 强制替换为占位符
+            head = m.group(0)[: m.start(2) - m.start(0)]
+            tail = m.group(0)[m.end(2) - m.start(0):]
+            fixes.append(
+                f"{metric}: {value} → 占位符（latest_only，锚点 FY{latest_dp.fiscal_year}={latest_dp.value:.2f}）"
+            )
+            return head + f"[{{{{{metric}}}}}]" + tail
+
+        # 标准模式：命中任一财年锚点 → 合法
         if any(
             dp.value is not None
             and abs(v - dp.value) / max(abs(dp.value), 1e-9) <= 0.01
