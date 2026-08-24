@@ -237,12 +237,17 @@ def enhance_report_quality(
             # 注入估值结果到第7章（B2a-2：币种统一——hk 市场用"港元"，避免与财务人民币混用）
             if result.valuation_result and result.valuation_result.get('dcf_value'):
                 _ccy = "港元" if market == "hk" else "元"
-                val_text = f"\n\n## 估值分析\n\n- DCF每股价值: {result.valuation_result['dcf_value']:.2f}{_ccy}\n"
-                val_text += f"- 目标价区间: {result.valuation_result.get('target_bear', 0):.2f} - {result.valuation_result.get('target_bull', 0):.2f}{_ccy}\n"
-                val_text += f"- 上行空间: {result.valuation_result.get('upside', 0):.1%}\n"
-                if 7 in chapters:
-                    chapters[7] = chapters[7] + val_text
-                    logger.info("[Quality] 估值结果已注入第7章")
+                _dcf = result.valuation_result['dcf_value']
+                # v9：DCF 负值不注入（亏损公司 DCF 无效，注入会导致红队致命）
+                if _dcf is not None and _dcf < 0:
+                    logger.info(f"[Quality] DCF 为负({_dcf:.2f})，不注入第7章（使用可比公司估值）")
+                else:
+                    val_text = f"\n\n## 估值分析\n\n- DCF每股价值: {_dcf:.2f}{_ccy}\n"
+                    val_text += f"- 目标价区间: {result.valuation_result.get('target_bear', 0):.2f} - {result.valuation_result.get('target_bull', 0):.2f}{_ccy}\n"
+                    val_text += f"- 上行空间: {result.valuation_result.get('upside', 0):.1%}\n"
+                    if 7 in chapters:
+                        chapters[7] = chapters[7] + val_text
+                        logger.info("[Quality] 估值结果已注入第7章")
 
         except Exception as e:
             logger.error(f"Stage 4 失败: {e}")
