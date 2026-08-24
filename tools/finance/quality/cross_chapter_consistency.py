@@ -198,27 +198,38 @@ class CrossChapterConsistencyChecker:
             # 财年归因：先看 span 前后的年份标注，再用 DataAnchor
             pos = item["span"][0]
             fy = None
+            context_fy = None  # 上下文标注的财年（可能与锚点归因不一致）
             after = content[pos:pos + 30]
             m2 = re.search(r"(?:亿元|亿|万元|万)?[（(]?\s*(20\d{2})\s*年", after)
             if m2:
-                fy = int(m2.group(1))
+                context_fy = int(m2.group(1))
             else:
                 ctx = content[max(0, pos - 150):pos]
                 years = re.findall(r"(?:FY\s*)?(20\d{2})(?:\s*年)?", ctx)
                 if years:
-                    fy = int(years[-1])
-                else:
-                    # DataAnchor 归因（命中任一财年锚点→该财年；未命中→None）
-                    try:
-                        attr = self._anchor.attribute_text_value(metric, value)
-                        fy = attr["fiscal_year"]
-                        if attr["is_historical"] and fy is not None:
-                            # 历史引用未标注 → 记 warning（FiscalSemantics 收集）
-                            self.unattributed_historical.append(
-                                f"{metric}={value} 命中 FY{fy} 锚点但未标注财年"
-                            )
-                    except Exception:
-                        fy = None
+                    context_fy = int(years[-1])
+
+            # DataAnchor 归因（最终依据——数值真实来源）
+            anchor_fy = None
+            try:
+                attr = self._anchor.attribute_text_value(metric, value)
+                anchor_fy = attr["fiscal_year"]
+                # 只在上下文未标注财年时才收入 unattributed_historical
+                if attr["is_historical"] and anchor_fy is not None and context_fy is None:
+                    self.unattributed_historical.append(
+                        f"{metric}={value} 命中 FY{anchor_fy} 锚点但未标注财年"
+                    )
+            except Exception:
+                anchor_fy = None
+
+            # 财年冲突检测：上下文标注与锚点归因不一致 → 以锚点为准
+            # （LLM 可能在 2025 年上下文中错误引用了 FY2023 的值）
+            if context_fy is not None and anchor_fy is not None and context_fy != anchor_fy:
+                fy = anchor_fy  # 以锚点归因为准
+            elif context_fy is not None:
+                fy = context_fy
+            else:
+                fy = anchor_fy
 
             # 每指标每财年只保留最新值（同一 span 后出现的覆盖）
             if metric not in seen:

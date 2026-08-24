@@ -79,7 +79,7 @@ class Gate6Conclusion(GateBase):
             errors.extend(overview_result["errors"])
 
         # 3. 检查投资评级
-        rating_result = self._check_rating(chapters)
+        rating_result = self._check_rating(chapters, context)
         details["rating"] = rating_result
 
         if not rating_result["passed"]:
@@ -227,11 +227,11 @@ class Gate6Conclusion(GateBase):
             "word_count": len(overview_chapter),
         }
 
-    def _check_rating(self, chapters: dict[int, str]) -> dict[str, Any]:
+    def _check_rating(self, chapters: dict[int, str], context: dict | None = None) -> dict[str, Any]:
         """检查投资评级"""
         errors = []
 
-        rating = self._extract_rating(chapters)
+        rating = self._extract_rating(chapters, context)
 
         if not rating:
             errors.append("未找到投资评级")
@@ -248,7 +248,7 @@ class Gate6Conclusion(GateBase):
         """检查评级与估值一致性"""
         errors = []
 
-        rating = self._extract_rating(chapters)
+        rating = self._extract_rating(chapters, context)
         valuation = context.get("valuation")
         current_price = context.get("current_price", 0)
 
@@ -276,8 +276,8 @@ class Gate6Conclusion(GateBase):
             "errors": errors,
         }
 
-    def _extract_rating(self, chapters: dict[int, str]) -> str:
-        """提取投资评级（v9：扩展匹配模式）"""
+    def _extract_rating(self, chapters: dict[int, str], context: dict | None = None) -> str:
+        """提取投资评级（v9：扩展匹配 + DecisionAggregator fallback）"""
         import re
 
         # 在所有章节中查找评级
@@ -290,12 +290,19 @@ class Gate6Conclusion(GateBase):
                 r"目标评级[：:]\s*(买入|增持|中性|减持|卖出)",
                 r"(建议|推荐)\s*(买入|增持)",
                 r"(建议|推荐)\s*(减持|卖出)",
+                r"综合.*?(?:评级|评价|结论)[：:]\s*(买入|增持|中性|减持|卖出)",
+                r"(?:评级|评价|结论)[：:]\s*(买入|增持|中性|减持|卖出)",
             ]
 
             for pattern in patterns:
                 match = re.search(pattern, content)
                 if match:
-                    # 兼容两种捕获组：group(1) 或 group(2)
                     return match.group(1) if len(match.groups()) == 1 else match.group(2)
+
+        # Fallback：从 DecisionAggregator 输出提取
+        if context:
+            rating = context.get("decision_rating", "")
+            if rating and rating in self.allowed_ratings:
+                return rating
 
         return ""
