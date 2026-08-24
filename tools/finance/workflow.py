@@ -1954,8 +1954,8 @@ def _generate_decision_chapter(
             if judgments:
                 aggregation = DecisionAggregator.aggregate(judgments)
                 logger.info(f"DecisionAggregator聚合结果: {aggregation}")
-                # v9：写入 context 供 Gate6 评级提取 fallback
-                context["decision_rating"] = aggregation
+                # v9：返回聚合结果供调用方写入 context
+                return aggregation  # noqa: B012
         except Exception as e:
             logger.warning(f"DecisionAggregator聚合失败: {e}")
 
@@ -3256,6 +3256,9 @@ def run_analysis(
     try:
         decision = _generate_decision_chapter(chapters, ctx, llm_caller, checkpoint)
         logger.info("Step 5b 完成: 第10章")
+        # v9：DecisionAggregator 结果写入 context 供 Gate6 评级提取
+        if hasattr(ctx, '_decision_rating'):
+            context["decision_rating"] = ctx._decision_rating
     except Exception as e:
         error_msg = f"Step 5b 决策章生成失败: {e}"
         logger.error(error_msg)
