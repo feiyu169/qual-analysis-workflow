@@ -261,9 +261,9 @@ class Gate8FinalValidation(GateBase):
             for _ch_num in list(chapters.keys()):
                 _ch_content = chapters.get(_ch_num, "")
                 _dcf_fixes = 0
-                # 匹配 "DCF每股价值：-XX.XX港元" 或 "DCF估值：-XX.XX"
+                # 匹配 "DCF每股价值：-XX.XX港元" 或 "DCF估值：-XX.XX"（含 markdown 粗体）
                 for _m in _re_dcf.finditer(
-                    r"(?:DCF|折现)[^\n]{0,20}[:：]\s*\*{0,2}(-?\d+\.?\d*)\s*(?:港元|港币|HKD|元)",
+                    r"(?:DCF|折现)[^\n]{0,30}[:：]\s*\*{0,2}(-?\d+\.?\d*)\*{0,2}\s*(?:港元|港币|HKD|元)",
                     _ch_content,
                 ):
                     try:

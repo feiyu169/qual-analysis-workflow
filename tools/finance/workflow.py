@@ -1954,8 +1954,8 @@ def _generate_decision_chapter(
             if judgments:
                 aggregation = DecisionAggregator.aggregate(judgments)
                 logger.info(f"DecisionAggregator聚合结果: {aggregation}")
-                # v9：返回聚合结果供调用方写入 context
-                return aggregation  # noqa: B012
+                # v9：存到 ctx 供调用方读取（不中断 content 返回）
+                ctx._decision_rating = aggregation
         except Exception as e:
             logger.warning(f"DecisionAggregator聚合失败: {e}")
 
