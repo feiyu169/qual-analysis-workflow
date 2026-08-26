@@ -180,3 +180,25 @@ print(d["deliberation"][0]["deliberation_response"])
 - 纯 prompt 模式原版：`skills/heavyskill/skill/heavyskill.md`
 - 审查模式沉淀（hermes 侧实践）：`skills/heavyskill/references/`（多轨迹审查、清单注入、
   迭代审查、双阶段审查等模式）
+
+---
+
+## 插件工具（一期，2026-08-22，会话级需重建）
+
+heavyskill 已提供 Cordis 动态插件 `heavyskill-tools`（持久化源码
+`workflow/plugin/heavyskill-tools.js`，**会话级——DSH 重启即失，需 cordis_define +
+cordis_run 重建**）。4 个原生工具，经长驻桥 `heavyskill_bridge.py --serve` 调用引擎：
+
+| 工具 | 作用 | 关键参数 |
+|---|---|---|
+| `hsk_review` | K 路多轨迹审查（basic/enhanced/chunked） | query, content?, k?, mode?, api_key?, validator_api_key? |
+| `hsk_verify` | 对已有结论做 mimo 验证 | conclusion, trajectories?, query?, validator_api_key? |
+| `hsk_history` | 读样本库最近记录 | limit? |
+| `hsk_adjudicate` | 人工裁决样本（adopt/reject/amend，audit 双签名） | sample_id, verdict, notes?, adjudicator? |
+
+要点：
+- 工具返回**摘要（≤5KB）+ 完整结果文件路径**（80KB JSON 不直接回传，防 stdout 截断）
+- `hsk_review` 内置**蜜罐自检**（已知结果用例，防缓存/硬编码伪装）
+- key：默认读环境 `DEEPSEEK_API_KEY` / `XIAOMI_KEY`，也可显式传参
+- 重建步骤（重启后）：读 `workflow/plugin/heavyskill-tools.js` → cordis_define（kind new，
+  idPrefix 'hsk'，code.host = 文件 `return {...}` 函数体）→ cordis_run

@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-08-22 — HeavySkill 插件化一期（heavyskill-tools 动态插件 + 长驻桥）
+
+### 背景
+裁判裁决书（`skills/heavyskill/references/plugin-sample-registry-adjudication.md`）批准
+"插件化 + 样本库"分期实施：一期插件化（~6.5 人天）解决 agent 手工拼 CLI/解析 80KB JSON 的
+调用痛点；二期样本库启用校准统计（一期先埋采集 hook）。
+
+### 一期交付
+- `skills/heavyskill/heavyskill_bridge.py --serve`：长驻 stdio JSON-RPC 桥（命令 review/
+  verify/history/adjudicate）；**摘要压缩 ≤5KB + 完整结果写临时文件**（80KB stdout 行缓冲
+  P0 缓解）；safe_handle 结构化错误（单条失败不退出）；UTF-8 强制；每次命令独立 pipeline
+- `workflow/plugin/heavyskill-tools.js`：动态 Cordis 插件（4 工具：hsk_review/hsk_verify/
+  hsk_history/hsk_adjudicate）；复用 hgf-tools 模式（队列串行/命令级超时/进程自动重建/
+  timer inject/进程树 terminate）；**蜜罐自检**（防缓存/硬编码伪装）
+- `workflow/sample_registry.py`：样本库（hsk.v1 信封，HeavySkill 私有 data/，与 .hgf 零依赖）；
+  record_sample（一期采集 hook，CLI 默认开、--no-record-sample 关）/ read_samples（tail 语义）/
+  adjudicate（audit log + adjudicator 双签名字段）；校准阈值（<20 insufficient_data / <30 描述性统计）
+- CLI：--no-record-sample 开关；样本自动采集
+
+### 验收（HGF 流程）
+- 单测 35 → 42（test_bridge.py：桥协议畸形 JSON/未知命令/中文往返/样本库 CRUD/audit/校准阈值/损坏行容忍）
+- ruff 全绿（新代码零新增债，scoped 配置含新文件）；node --check JS 通过
+- **真实桥 smoke**：K=2 真实 LLM 审查（摘要 3096 字符 ≤5KB、truncation 检测、完整文件落盘）、
+  样本库联动（history+adjudicate）、未知命令不崩溃
+- **插件注册验证**：cordis_define + cordis_run（hsk-1/pkg-2 run-1，4 工具注册成功）
+- **HGF CLI 9 门禁全部 MUST_PASS（exit=0）**；附带归档 1 条含 JS 误跑的 failure_log 记录
+- 已知边界：HGF ruff 门禁对 .js 文件报 invalid-syntax（fail-loud 正确），CLI 门禁 files 列表
+  不含 JS（JS 由 node --check + 插件运行时验证）
+
+### 文档
+- 裁决书 `skills/heavyskill/references/plugin-sample-registry-adjudication.md`
+- SKILL.md 插件工具说明（hsk_review/hsk_verify/hsk_history/hsk_adjudicate + 蜜罐 + 会话级重建）
+
 ## 2026-08-21 — heavyskill 审查质量四路径增强（双模型 deepseek+mimo，按技术方案实施）
 
 ### 背景

@@ -245,6 +245,11 @@ Examples:
         help="mimo 验证/二审 API key（config.yaml 或环境注入）。",
     )
     parser.add_argument(
+        "--no-record-sample",
+        action="store_true",
+        help="一期样本采集默认开；此开关关闭（审查后不写样本库）。",
+    )
+    parser.add_argument(
         "--quiet",
         action="store_true",
         help="Suppress console output (useful with --output).",
@@ -386,6 +391,16 @@ async def main() -> int:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(result.to_json(), encoding="utf-8")
         logger.info(f"Results saved to {output_path}")
+
+    # 一期：样本采集 hook（默认开；--no-record-sample 关闭）
+    if not getattr(args, "no_record_sample", False):
+        try:
+            from heavyskill.workflow.sample_registry import record_sample
+
+            sid = record_sample(result, config)
+            logger.info(f"样本已记录: {sid}")
+        except Exception as e:
+            logger.warning(f"样本采集失败: {e}")
 
     # P54-R1/R5：截断/退化必须显式告警；无可用答案时非 0 退出（除非 --accept-partial）
     if result.has_truncation():
