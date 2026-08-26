@@ -183,6 +183,20 @@ When reviewing technical proposals that need multiple rounds of refinement:
 3. Domain feasibility — can the proposed methods actually work?
 4. Standards compliance — backward compatible, rollback capable
 
+## Mode Selection (4 runnable forms, enhanced 2026-08-21)
+
+| Form | Mechanism | Needs | When |
+|------|-----------|-------|------|
+| **Mode 1** subagent template | K parallel DSH subagents + in-context deliberation | none | content already in session, no API key, fast iteration |
+| **Mode 2-basic** | K parallel LLM calls + sequential deliberation | DEEPSEEK_API_KEY | batch, JSON output, regular reviews (K=8 ≈ 85K tokens) |
+| **Mode 2-enhanced** | basic + quality_score ranking + auto-k + **mimo validator & independent second review** | + XIAOMI_TOKEN_PLAN_CN_API_KEY | critical gates / architecture reviews needing an independent model's view |
+| **Mode 2-chunked** | split large content (>18K chars) into chunks, review each, meta-deliberate | DEEPSEEK_API_KEY | large proposals/code — avoids the 20K inline truncation |
+
+Decision tree: content already in session / no key → Mode 1; content > 18K chars → Mode 2-chunked;
+critical verdict → Mode 2-enhanced (`--enable-validator --enable-second-review [--auto-k]`,
+fails open to basic when the mimo key is missing); otherwise Mode 2-basic.
+See `references/enhancement-plan-dual-model.md` for the full design and CLI switches.
+
 ## References
 
 - `references/checklist-injection-guide.md` — Checklist injection technique for code review

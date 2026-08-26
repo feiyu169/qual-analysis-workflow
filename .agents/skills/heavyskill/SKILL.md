@@ -20,14 +20,27 @@ HeavySkill 的核心思想（论文 arXiv:2605.02396）：与其让单个推理�
 - 数学 / STEM 问题（可验证性要求高）
 - 需要"独立第三方视角"的评审（如买方报告质量审查、Gate 放行评估）
 
-## 两种模式
+## 模式总览（4 种运行形态）
 
-| | 模式1：子代理模板（推荐） | 模式2：Python 流水线 |
-|---|---|---|
-| 依赖 | 无（DSH 子代理） | python + httpx + DEEPSEEK_API_KEY |
-| 成本 | 受会话子代理配额约束 | 受 API 配额约束 |
-| 适用 | 日常审查、内容已在本会话上下文 | 大批量、需要 JSON 输出、要留存轨迹 |
-| 代码位置 | 本技能内模板 | `skills/heavyskill/`（导出代码） |
+| | 模式1：子代理模板（推荐日常） | 模式2-基础：Python 流水线 | 模式2-增强：双模型 | 模式2-分批：大内容 |
+|---|---|---|---|---|
+| 机制 | K 路并行子代理 + 会话内审议 | K 路并行 LLM + 顺序审议 | 基础 + 质量分择优/auto_k + mimo 验证/二审 | 大内容分块独立审查 + 元审议 |
+| 依赖 | 无（DSH 子代理） | python + httpx + DEEPSEEK_API_KEY | + XIAOMI_TOKEN_PLAN_CN_API_KEY（mimo） | 同模式2-基础 |
+| 适用 | 内容已在本会话、无 key、快速迭代 | 大批量、需 JSON 留存轨迹、常规审查 | **关键门禁/架构级评审、需独立第三方视角** | 方案/代码 >18000 字符 |
+| 代码位置 | 本技能内模板 | `skills/heavyskill/` | 同左（四路径增强） | `workflow/chunked_review.py` |
+
+**选择决策树**（自上而下）：
+
+```
+内容在会话上下文且无/不想用 API key？──是→ 模式1（K=4 快速 / K=8 标准）
+                    │否
+内容 > 18000 字符？──────────────────是→ 模式2-分批（--chunk-content-file，超限不再截断）
+                    │否
+关键裁决/门禁放行？──────────────────是→ 模式2-增强（--enable-validator --enable-second-review
+                    │                        [可选 --auto-k]；无 mimo key 自动退化为基础）
+                    │否
+常规审查/留痕/批量───────────────→ 模式2-基础
+```
 
 ---
 
@@ -141,6 +154,23 @@ print(d["deliberation"][0]["deliberation_response"])
 | 4 | 1x | 1x | 基线 | 快速审查 |
 | 8 | 2x | 2x | 更好 | **标准（推荐）** |
 | 16 | 4x | 4x | 最佳 | 关键审查（有稳定性问题） |
+
+### 模式选择对照（含四路径增强，2026-08-21）
+
+| 维度 | 模式1 | 模式2-基础 | 模式2-增强 | 模式2-分批 |
+|---|---|---|---|---|
+| 成本（tokens） | 子代理配额 | K=8 ≈ 85K tokens / ~4min（PGNB 实测） | 基础 + 2 次 mimo（~12s×2） | 基础 × 块数 + 元审议 |
+| 质量保障 | 多轨迹+审议 | 多轨迹+审议+截断治理 | **+ 质量分择优 + 动态 K + mimo 异质校验/二审** | 分块全覆盖 + 元审议 |
+| 输入约束 | 内容必须内联 prompt | 内联 ≤18000 字符（超出截断） | 同基础 | `--chunk-content-file` 自动分块 |
+| 关键命令 | — | `--reason_k 8 --summary_k 4 --language cn` | 加 `--enable-validator --enable-second-review [--auto-k]` | `--chunk` 或直接用 `ChunkedReviewer` |
+
+**增强开关说明（模式2-增强）**：
+- `--enable-validator`：审议后 mimo 校验（规则：verdict 格式/P0 一致性/维度覆盖；LLM：逻辑矛盾/遗漏/过度自信），输出 JSON `validation` 字段；FAIL 时告警
+- `--enable-second-review`：mimo **独立二审**（不注入一审结论）→ 确定性仲裁（任一 FAIL 取 FAIL / 一致提置信度 / 分歧标记人工复核），输出 `second_review` 字段
+- `--auto-k`：按 query 长度自动定 K（short 2 / medium 4 / long 8）+ 首轮质量不足自动补跑（输出 `k_extended`）
+- mimo key 未配置时 validator/二审**自动降级**（fail-open，不阻断主链路），等价于模式2-基础
+
+**mimo key 注入**：`--validator-api-key $env:XIAOMI_KEY`（或改 `config.yaml` 的 `validator_api_key`，勿提交真实密钥）。
 
 ---
 
