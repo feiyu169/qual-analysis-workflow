@@ -1,0 +1,1 @@
+{"schema": "hsk-audit.v1", "kind": "hsk-audit", "writer": "agent", "timestamp": "2026-08-26T14:20:39+00:00", "sample_id": "hsk-20260826-142039-dde1", "old_verdict": null, "new_verdict": "adopt", "notes": "smoke 验证"}

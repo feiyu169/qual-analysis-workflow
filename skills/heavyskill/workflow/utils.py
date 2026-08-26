@@ -157,6 +157,11 @@ def extract_answer(text: str) -> Optional[str]:
                 a_lower = answer.lower()
                 if "最终答案" in answer or "final answer" in a_lower:
                     continue
+                # P54-R8：含反引号 = 字段引用/代码标识列表（如
+                # "answer: `source`、`report_date`、`currency`、`unit`" 被英文
+                # pattern 误抓）——不是自然语言答案，跳过
+                if "`" in answer:
+                    continue
                 return answer
 
     # Fallback: try to get the last non-empty line

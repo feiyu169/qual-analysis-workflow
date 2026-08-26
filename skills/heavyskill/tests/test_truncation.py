@@ -45,6 +45,19 @@ def test_extract_answer_rejects_truncated_fragment():
     assert extract_answer(t) is None
 
 
+def test_extract_answer_rejects_field_list_fragment():
+    # P54-R8：英文 pattern 在中文审议文本中误抓技术字段列表
+    # （"answer: `source`、`report_date`、`currency`、`unit`"）→ 拒绝反引号片段
+    t = (
+        "…输入校验应覆盖：货币资金、有息负债、净债务；总股本、当前股价、汇率；"
+        "answer: `source`、`report_date`、`currency`、`unit`。\n\n"
+        "最终答案：该方案满足 CFA 审慎要求，有条件通过。"
+    )
+    ans = extract_answer(t)
+    assert ans is not None
+    assert "`" not in ans
+
+
 def test_extract_answer_accepts_standard_colon_format():
     # P54-R2：冒号标准格式必须提取（旧守卫误杀回归点）
     assert extract_answer("答案是：42") == "42"
