@@ -129,6 +129,9 @@ gates:
     - description: 审查清单逐项勾选
       type: review_checklist
       verification: L1
+    - description: 业务缺陷评审（P56 分层收益：独立评审拦截业务语义缺陷）
+      type: business_review
+      verification: L1
     max_retries: 3
     name: 代码审查 (第三方)
     phase: 2

@@ -1,7 +1,7 @@
-# 工作流配置 - V3.4.0（版本号与 workflow/__init__.py 一致）
+# 工作流配置 - V3.4.1（版本号与 workflow/__init__.py 一致）
 workflow:
   name: "Hermes Agent Workflow"
-  version: "3.4.0"
+  version: "3.4.1"
   
   # 关键模块配置
   critical_modules:

@@ -237,6 +237,64 @@ def _check_review(gate: dict, working_dir: str, file_hint: str | None) -> tuple:
     return False, [f"评审记录中无 {gate['id']} 的通过结论"]
 
 
+def _check_business_review(
+    gate: dict, working_dir: str, file_hint: str | None
+) -> tuple:
+    """P56 分层收益模型：业务缺陷评审准出（V3.4.1）。
+
+    分层模型（ROI 对照实验五轮实证）：
+    - 门禁层拦**工具型缺陷**（导入/密钥/语法/格式）——自动化、即时
+    - 评审层拦**业务语义缺陷**（边界条件/控制流/模式匹配）——需语义理解，
+      静态门禁无能力（真实样本轮：门禁 25%，评审 3/3）
+
+    本检查器验证：存在独立的 business_review 评审记录（kind=independent），
+    且 verifier 为外部评审方（非内部 agent），notes 含评审发现——
+    被审代码不得自证"业务无缺陷"。
+    """
+    p = os.path.join(working_dir, ".hgf", "reviews.jsonl")
+    if not os.path.exists(p):
+        return False, ["评审记录 .hgf/reviews.jsonl 不存在（无业务缺陷评审）"]
+    with open(p, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            rec = json.loads(line)
+            if rec.get("gate") != gate["id"] or rec.get("verdict") != "pass":
+                continue
+            # P56：业务评审必须独立（被审代码不得自证通过）
+            kind = rec.get("kind", "independent")
+            if kind == "self-check":
+                return False, [
+                    f"{gate['id']} 业务评审拒绝 self-check（被审代码不得自证'业务无缺陷'）——"
+                    "需 independent 独立评审（P56 分层收益）"
+                ]
+            reviewer = (rec.get("reviewer") or "").strip()
+            verifier = (rec.get("verifier") or "").strip()
+            if not reviewer or not verifier:
+                return False, [
+                    f"{gate['id']} 业务评审缺少双签名（reviewer + verifier）"
+                ]
+            if reviewer == verifier:
+                return False, [
+                    f"{gate['id']} 业务评审 reviewer=verifier（非独立，P56）"
+                ]
+            # verifier 应为外部评审方（heavyskill 多轨迹 / 人类专家）——
+            # 内部 agent 不得充当业务评审的独立验证方
+            if verifier in ("agent", "hgf-gates", "dsh"):
+                return False, [
+                    f"{gate['id']} 业务评审 verifier={verifier} 为内部（P56 要求外部评审方）"
+                ]
+            # 评审记录须含业务缺陷发现（notes 提及缺陷/审查/发现）
+            notes = rec.get("notes") or ""
+            if not any(
+                kw in notes
+                for kw in ("缺陷", "发现", "审查", "P0", "P1", "P2", "verdict")
+            ):
+                return False, [f"{gate['id']} 业务评审 notes 无缺陷发现记录（P56）"]
+            return True, []
+    return False, [f"评审记录中无 {gate['id']} 的独立业务评审通过结论（P56）"]
+
+
 def _check_unit_tests(gate: dict, working_dir: str, file_hint: str | None) -> tuple:
     """L1 真实执行：pytest 必须通过（禁止'存在即通过'）
 
@@ -730,6 +788,7 @@ _CHECKERS = {
     "health_check": _check_health,
     "monitoring_normal": _check_health,
     "self_audit": _check_self_audit,  # V3.3.3 P53 元门禁自律（V2 方案）
+    "business_review": _check_business_review,  # V3.4.1 P56 分层收益（业务缺陷评审）
 }
 
 
