@@ -26,6 +26,7 @@ P 库（P0-P52）是 hermes 踩坑纪律库，原始清单在
 | P53 | 元门禁自律（V3.3.3 自审查沉淀） | self_audit 检查器（gate_5_3，4 项机械验证）+ 7 防回归测试 + pre-push/CI |
 | P54 | 审查结果被截断（heavyskill 模式2） | 预算配置打通（max_tokens/summary_max_tokens）+ finish_reason 显性化 + 截断轨迹剔除 + 输出 JSON `truncation` 摘要 + `tests/test_truncation.py` 9 项防回归 |
 | P55 | 隐形测试 + ruff 自动修复掩盖断裂（2026-08-22） | **建议门禁化**：unit_test 门禁增加全目录收集验证（`pytest tools/finance/` 非仅聚合入口）；ruff --fix 前 grep 确认被清理 import 的目标符号存在（防 F401 静默删断裂引用）；声称数字（测试数/覆盖率）写文档前实测复现 |
+| P56 | 分层收益模型（2026-08-21 ROI 五轮实证） | **已门禁化**：business_review 检查器（gate_2_2 准出，独立评审拦业务语义缺陷）+ scripts/business_review.py（评审包→heavyskill→记录）+ 门禁拦工具型/评审拦业务型分层 |
 
 ## 文档纪律（无自动门禁，需 agent 遵守）
 

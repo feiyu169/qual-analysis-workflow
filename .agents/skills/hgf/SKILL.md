@@ -491,6 +491,24 @@ Phase 3: 71.36h（真实时间跨度：3 天前推进 gate_3_1 到今天）  Pha
 
 **一句话**：HGF 的价值不在"设计了多少 gate"，而在**每个 gate 的真实检查器会在你"以为做完了"时拦下你**——狗粮化 8 次拦截（含 1 次监控探针抓污染）就是最硬的证据。
 
+## 分层收益模型（P56 标准实践，2026-08-21 ROI 五轮实证沉淀）
+
+**原则**：门禁拦工具型缺陷 + 评审拦业务型缺陷 = 组合 100% 拦截。
+
+| 层 | 拦截对象 | 机制 | 成本 |
+|----|---------|------|------|
+| **门禁层**（L0-L3） | 工具型缺陷（导入/密钥/语法/格式） | ruff/pytest/detect-secrets/semgrep 等 | 秒级-分钟级 |
+| **评审层**（P56） | 业务语义缺陷（边界/控制流/模式匹配） | heavyskill 独立评审（K 路+审议） | 分钟级-小时级 |
+
+**实证**（qual 真实项目 4 缺陷）：门禁单独 25%，评审 3/3 业务缺陷，组合 100%。
+
+**执行**（核心/高风险变更必须做业务评审）：
+```bash
+python workflow/scripts/business_review.py --files "a.py,b.py" --dir .
+```
+- gate_2_2 准出 business_review：独立评审记录（kind=independent，verifier 外部）
+- 被审代码不得自证"业务无缺陷"（self-check 拒绝）
+
 ## 参考文档（工作区）
 
 - 主技能：`skills/software-development/gate-driven-development/SKILL.md`

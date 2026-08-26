@@ -15,6 +15,7 @@
 | [2026-08-21-heavyskill-p54-hgf-review.md](2026-08-21-heavyskill-p54-hgf-review.md) | 2026-08-21 | HGF 审查 P54 修复：裁决 FAIL——CLI 标志断裂/冒号守卫误杀/审议截断无保护（3×P1 实证），修复清单 R1-R7 | P54 |
 | [2026-08-21-roi-benchmark.md](2026-08-21-roi-benchmark.md) | 2026-08-21 | ROI 对照实验：合成 100% → 真实 25%（门禁拦工具型）→ 门禁+评审分层 100%（评审拦业务型）；分层收益模型验证 | P53 |
 | [2026-08-22-invisible-tests-ruff-mask.md](2026-08-22-invisible-tests-ruff-mask.md) | 2026-08-22 | qual 隐形测试：27 文件长期不可收集（v3 路径断裂）被门禁掩盖；ruff --fix 静默删断裂 import；声称-现实漂移 | P55 |
+| [2026-08-21-layered-model.md](2026-08-21-layered-model.md) | 2026-08-21 | P56 分层收益模型：门禁拦工具型（100%）+ 评审拦业务型（100%）= 组合 100%；已沉淀为 business_review 标准实践 | P56 |
 
 ## 沉淀流程
 
