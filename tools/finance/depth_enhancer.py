@@ -358,18 +358,23 @@ def compute_flip_thresholds(
 # 对比分析
 # ====================================================================
 
-def compute_yoy_changes(financials: dict) -> list[YoYChange]:
+def compute_yoy_changes(financials) -> list[YoYChange]:
     """
     计算同比变化。
 
     Args:
-        financials: Wind财务数据
+        financials: Wind财务数据（dict 或 Financials 契约）
 
     Returns:
         YoY变化列表
     """
     changes = []
-    income = financials.get('income', {})
+    # v10：兼容 Financials 契约和 dict
+    from .contracts.financials import Financials as _Fin
+    if isinstance(financials, _Fin):
+        income = financials.to_wind_dict().get('income', {})
+    else:
+        income = financials.get('income', {})
 
     metrics = {
         '营收': '年营业总收入',
@@ -502,53 +507,67 @@ def run_depth_enhancement(
     """
     result = DepthResult()
 
-    # 获取基础数据
-    income = financials.get('income', {})
-    rev_list = income.get('年营业总收入', [])
-    op_list = income.get('年营业利润', [])  # 使用营业利润而非净利润
-    np_list = income.get('年净利润', [])
-
-    base_revenue = rev_list[-1] if rev_list else 1427.76
-
-    # 使用营业利润计算EBIT利润率（而非净利润）
-    if op_list and base_revenue:
-        base_ebit_margin = op_list[-1] / base_revenue
-        # 如果营业利润为负，使用保守估计
-        if base_ebit_margin < 0:
-            base_ebit_margin = 0.05  # 假设5%的营业利润率
-    elif np_list and base_revenue:
-        # 备用：使用净利润（但需要调整为正值）
-        base_ebit_margin = abs(np_list[-1] / base_revenue) * 0.5  # 保守估计
+    # v10 P0：使用 Financials 契约（禁止硬编码 fallback）
+    from .contracts.financials import Financials as _Fin
+    if isinstance(financials, _Fin):
+        fin = financials
     else:
-        base_ebit_margin = 0.13
+        from .data.wind_adapter import wind_to_financials
+        fin = wind_to_financials(
+            wind_data=financials,
+            shares=shares,
+            current_price=current_price,
+        )
 
-    # === Step 1: 情景分析 ===
-    try:
-        result.scenarios = run_scenario_analysis(
-            base_revenue=base_revenue,
-            base_ebit_margin=base_ebit_margin,
-            base_wacc=base_wacc,
-            base_terminal_growth=base_terminal_growth,
+    base_revenue = fin.revenue
+    is_loss = fin.is_loss_company
+    ebit_margin = fin.ebit_margin
+
+    # v10 P0：亏损公司跳过 DCF 情景分析，使用 EV/Revenue 模型
+    if is_loss:
+        logger.info(
+            f"亏损公司（EBIT={ebit_margin:.2%}，OCF={fin.operating_cashflow:.1f}亿），"
+            f"跳过 DCF 情景/翻转，使用 EV/Revenue 模型"
+        )
+        result.scenarios = []
+        result.flip_thresholds = _compute_ev_revenue_flip_thresholds(
+            revenue=base_revenue,
+            enterprise_value=fin.enterprise_value,
+            current_price=current_price,
             shares=shares,
         )
-    except Exception as e:
-        logger.warning(f"情景分析失败: {e}")
-        result.warnings.append(f"情景分析失败: {e}")
+        result.warnings.append(
+            f"亏损公司(EBIT={ebit_margin:.2%})，情景分析使用 EV/Revenue 模型（非 DCF）"
+        )
+    else:
+        # 盈利公司：正常 DCF 情景分析
+        try:
+            result.scenarios = run_scenario_analysis(
+                base_revenue=base_revenue,
+                base_ebit_margin=ebit_margin,
+                base_wacc=base_wacc,
+                base_terminal_growth=base_terminal_growth,
+                shares=shares,
+            )
+        except Exception as e:
+            logger.warning(f"情景分析失败: {e}")
+            result.warnings.append(f"情景分析失败: {e}")
 
     # === Step 2: 结论翻转阈值 ===
-    try:
-        result.flip_thresholds = compute_flip_thresholds(
-            base_value=valuation_value,
-            current_price=current_price,
-            base_revenue=base_revenue,
-            base_ebit_margin=base_ebit_margin,
-            base_wacc=base_wacc,
-            base_terminal_growth=base_terminal_growth,
-            shares=shares,
-        )
-    except Exception as e:
-        logger.warning(f"翻转阈值计算失败: {e}")
-        result.warnings.append(f"翻转阈值失败: {e}")
+    if not is_loss:
+        try:
+            result.flip_thresholds = compute_flip_thresholds(
+                base_value=valuation_value,
+                current_price=current_price,
+                base_revenue=base_revenue,
+                base_ebit_margin=ebit_margin,
+                base_wacc=base_wacc,
+                base_terminal_growth=base_terminal_growth,
+                shares=shares,
+            )
+        except Exception as e:
+            logger.warning(f"翻转阈值计算失败: {e}")
+            result.warnings.append(f"翻转阈值失败: {e}")
 
     # === Step 3: 同比分析 ===
     try:
@@ -619,3 +638,36 @@ def format_depth_for_report(dr: DepthResult) -> str:
         lines.append(f"- **整体洞察评分**: {dr.overall_insight_score:.0f}/100")
 
     return "\n".join(lines)
+
+
+# v10 P0：亏损公司 EV/Revenue 翻转阈值（替代 DCF 翻转阈值）
+def _compute_ev_revenue_flip_thresholds(
+    revenue: float,
+    enterprise_value: float,
+    current_price: float,
+    shares: float,
+) -> list[FlipThreshold]:
+    """亏损公司 EV/Revenue 翻转阈值。"""
+    thresholds = []
+    current_ev_rev = enterprise_value / revenue if revenue > 0 else 0
+
+    flip_ev_rev = current_ev_rev * 0.5
+    flip_revenue = enterprise_value / flip_ev_rev if flip_ev_rev > 0 else 0
+
+    thresholds.append(FlipThreshold(
+        variable="EV/Revenue倍数",
+        current_value=round(current_ev_rev, 2),
+        flip_value=round(flip_ev_rev, 2),
+        direction="down",
+        impact=f"当 EV/Revenue 降至 {flip_ev_rev:.2f}x 时，估值等于当前股价",
+    ))
+
+    thresholds.append(FlipThreshold(
+        variable="营收(亿)",
+        current_value=round(revenue, 2),
+        flip_value=round(flip_revenue, 2),
+        direction="down",
+        impact=f"当营收降至 {flip_revenue:.1f}亿 时，估值等于当前股价（EV/Rev={flip_ev_rev:.2f}x）",
+    ))
+
+    return thresholds
