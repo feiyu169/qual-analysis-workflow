@@ -227,6 +227,9 @@ class Gate3ChapterWriting(GateBase):
 
             decision = _generate_decision_chapter(chapters, ctx, llm_caller)
             chapters[10] = decision
+            # v10：DecisionAggregator 结果写入 context 供 Gate6 评级提取
+            if hasattr(ctx, '_decision_rating'):
+                context["decision_rating"] = ctx._decision_rating
             logger.info(f"Gate3 第10章完成（决策）: {len(decision)}字符")
             overview = _generate_overview_chapter(chapters, ctx, llm_caller)
             chapters[0] = overview
