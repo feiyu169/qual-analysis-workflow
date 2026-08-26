@@ -13,7 +13,7 @@
 | [2026-08-21-v34-review.md](2026-08-21-v34-review.md) | 2026-08-21 | V3.4 方案架构+代码审查（K=8）：架构正确但代码 5 处 P0 缺陷（glob 匹配/伪签名/对照污染/空集合/非原子写） | P53 |
 | [2026-08-21-heavyskill-mode2-truncation.md](2026-08-21-heavyskill-mode2-truncation.md) | 2026-08-21 | heavyskill 模式2 审查结果被截断：max_tokens 配置断裂 + finish_reason 不检查 + 思维链回退污染共识（已修复+9 单测） | P54 |
 | [2026-08-21-heavyskill-p54-hgf-review.md](2026-08-21-heavyskill-p54-hgf-review.md) | 2026-08-21 | HGF 审查 P54 修复：裁决 FAIL——CLI 标志断裂/冒号守卫误杀/审议截断无保护（3×P1 实证），修复清单 R1-R7 | P54 |
-| [2026-08-21-roi-benchmark.md](2026-08-21-roi-benchmark.md) | 2026-08-21 | ROI 对照实验：合成轮 100% 拦截 → 真实项目样本轮 25%（门禁拦工具型缺陷，业务缺陷靠评审）；修复循环是必要组件 | P53 |
+| [2026-08-21-roi-benchmark.md](2026-08-21-roi-benchmark.md) | 2026-08-21 | ROI 对照实验：合成 100% → 真实 25%（门禁拦工具型）→ 门禁+评审分层 100%（评审拦业务型）；分层收益模型验证 | P53 |
 | [2026-08-22-invisible-tests-ruff-mask.md](2026-08-22-invisible-tests-ruff-mask.md) | 2026-08-22 | qual 隐形测试：27 文件长期不可收集（v3 路径断裂）被门禁掩盖；ruff --fix 静默删断裂 import；声称-现实漂移 | P55 |
 
 ## 沉淀流程
