@@ -16,13 +16,16 @@ logger = logging.getLogger(__name__)
 # Wind 原始字段 → Financials 属性映射
 _WIND_FIELD_MAP: dict[tuple[str, str], tuple[str, bool]] = {
     # (section, field_name) → (attr_name, required)
-    ("income", "年营业总收入"): ("revenue", True),
-    ("income", "年营业利润"): ("operating_profit", True),
-    ("income", "年净利润"): ("net_profit_parent", True),
+    # 使用 canonical 键名（Wind MCP 经 assemble_wind_data 转换后的形态）
+    ("income", "营业收入"): ("revenue", True),
+    ("income", "营业利润"): ("operating_profit", True),
+    ("income", "归母净利润"): ("net_profit_parent", True),
     ("income", "年毛利润"): ("gross_profit", False),
+    ("income", "净利润"): ("net_profit_parent", False),  # alias fallback
     ("balance", "总资产"): ("total_assets", True),
     ("balance", "年负债合计"): ("total_liabilities", True),
     ("balance", "年所有者权益合计"): ("equity_parent", True),
+    ("balance", "归母净资产"): ("equity_parent", False),  # alias fallback
     ("balance", "货币资金"): ("cash", False),
     ("balance", "有息负债"): ("interest_bearing_debt", False),
     ("cashflow", "经营活动现金流量净额"): ("operating_cashflow", True),
@@ -60,12 +63,18 @@ def wind_to_financials(
     values: dict[str, float | None] = {}
 
     for (section, field_name), (attr_name, required) in _WIND_FIELD_MAP.items():
+        # 如果该属性已经有值（来自更优先的 key），跳过 alias fallback
+        if attr_name in values and values[attr_name] is not None:
+            continue
+
         section_data = wind_data.get(section, {})
         field_list = section_data.get(field_name, [])
 
         if not field_list:
             if not required:
-                values[attr_name] = None
+                # 不覆盖已有值
+                if attr_name not in values:
+                    values[attr_name] = None
                 continue
             errors.append(f"Wind 字段缺失: {section}.{field_name}")
             continue
@@ -73,7 +82,8 @@ def wind_to_financials(
         raw_value = field_list[-1]
         if raw_value is None:
             if not required:
-                values[attr_name] = None
+                if attr_name not in values:
+                    values[attr_name] = None
                 continue
             errors.append(f"Wind 字段值为 None: {section}.{field_name}")
             continue

@@ -376,14 +376,25 @@ def compute_yoy_changes(financials) -> list[YoYChange]:
     else:
         income = financials.get('income', {})
 
+    # v10：使用 canonical key（已修正为 营业收入/归母净利润/营业利润）
+    # 并通过 canonicalize 兜底确保 key 存在
+    from .canonical import canonicalize as _canon
+    try:
+        norm = _canon(financials if isinstance(financials, dict) else financials.to_wind_dict())
+        income = norm.get('income', {})
+    except Exception:
+        income = financials.get('income', {}) if isinstance(financials, dict) else {}
+
     metrics = {
-        '营收': '年营业总收入',
-        '净利润': '年净利润',
-        '营业利润': '年营业利润',
+        '营收': '营业收入',
+        '净利润': '归母净利润',
+        '营业利润': '营业利润',
     }
 
     for display_name, wind_key in metrics.items():
-        values = income.get(wind_key, [])
+        raw_values = income.get(wind_key, [])
+        # v10：过滤 None 值（canonicalize 后可能含 None）
+        values = [v for v in raw_values if v is not None]
         if isinstance(values, list) and len(values) >= 2:
             current = values[-1]
             previous = values[-2]

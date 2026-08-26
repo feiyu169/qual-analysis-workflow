@@ -168,12 +168,10 @@ def enhance_report_quality(
             if HAS_UNIFIED_VALUATION:
                 from .valuation.unified import UnifiedValuation
 
-                # 从financials提取关键数据（兼容嵌套 {income:...} 与扁平 {revenue:...} 两种结构）
-                _income = financials.get('income') if isinstance(financials.get('income'), dict) else {}
-                _rev_list = _income.get('年营业总收入') or _income.get('营业收入') or []
-                _op_list = _income.get('年营业利润') or _income.get('营业利润') or []
-                revenue = _rev_list[-1] if _rev_list else financials.get('revenue', 0)
-                operating_profit = _op_list[-1] if _op_list else financials.get('operating_profit', 0)
+                # v10：使用 accessor 统一取值（自动 canonical 化）
+                from .data.accessor import get_revenue as _get_rev, get_operating_profit as _get_op
+                revenue = _get_rev(financials) or financials.get('revenue', 0)
+                operating_profit = _get_op(financials) or financials.get('operating_profit', 0)
                 ebit_margin = operating_profit / revenue if revenue > 0 else 0.05
 
                 # 修复：create_default_assumptions不支持base_ebit_margin参数
