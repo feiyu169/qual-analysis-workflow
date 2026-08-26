@@ -658,19 +658,37 @@ def _compute_ev_revenue_flip_thresholds(
     current_price: float,
     shares: float,
 ) -> list[FlipThreshold]:
-    """亏损公司 EV/Revenue 翻转阈值。"""
+    """亏损公司 EV/Revenue 翻转阈值。
+
+    翻转逻辑：当营收降至多少时，即使 EV/Revenue 倍数不变，
+    企业价值也跌破当前市值（即股价跌破当前价）。
+    """
     thresholds = []
+    market_cap = current_price * shares
     current_ev_rev = enterprise_value / revenue if revenue > 0 else 0
 
-    flip_ev_rev = current_ev_rev * 0.5
-    flip_revenue = enterprise_value / flip_ev_rev if flip_ev_rev > 0 else 0
+    # EV/Revenue 倍数翻转点：当倍数降至多少时，EV = 当前市值
+    flip_ev_rev = market_cap / revenue if revenue > 0 else 0
+
+    # 计算 EV ≈ 市值的偏差（净债务≈0 时翻转点≈当前值，无信息量）
+    ev_rev_gap = abs(current_ev_rev - flip_ev_rev) / max(current_ev_rev, 0.01)
+
+    if ev_rev_gap < 0.05:
+        # EV ≈ 市值，改用 20% 倍数下降作为翻转点
+        flip_ev_rev = current_ev_rev * 0.80
+        flip_revenue = revenue * 0.80
+        note = "（净债务≈0，以 20% 偏差为敏感度阈值）"
+    else:
+        # 正常情况：翻转点 = 市值 / 倍数
+        flip_revenue = market_cap / current_ev_rev if current_ev_rev > 0 else 0
+        note = ""
 
     thresholds.append(FlipThreshold(
         variable="EV/Revenue倍数",
         current_value=round(current_ev_rev, 2),
         flip_value=round(flip_ev_rev, 2),
         direction="down",
-        impact=f"当 EV/Revenue 降至 {flip_ev_rev:.2f}x 时，估值等于当前股价",
+        impact=f"当 EV/Revenue 降至 {flip_ev_rev:.2f}x 时，估值等于当前股价{note}",
     ))
 
     thresholds.append(FlipThreshold(
@@ -678,7 +696,7 @@ def _compute_ev_revenue_flip_thresholds(
         current_value=round(revenue, 2),
         flip_value=round(flip_revenue, 2),
         direction="down",
-        impact=f"当营收降至 {flip_revenue:.1f}亿 时，估值等于当前股价（EV/Rev={flip_ev_rev:.2f}x）",
+        impact=f"当营收降至 {flip_revenue:.1f}亿 时，估值等于当前股价（EV/Rev={current_ev_rev:.2f}x）{note}",
     ))
 
     return thresholds
