@@ -304,6 +304,32 @@ class Gate8FinalValidation(GateBase):
                     chapters[_ch_num] = _ch_content
                     logger.info(f"Gate8 DCF 负值修复 第{_ch_num}章 {_dcf_fixes} 处")
 
+            # v10 PGNB 自修复循环：rescue sweep 后复验 Critical，仍有数值不一致时
+            # 对未修复章节强制再跑一次 bind_bare_numbers（latest_only=True）
+            try:
+                from ..data_anchor import CrossChapterValidator
+                _recheck = CrossChapterValidator(_anchor).validate_all_chapters(chapters)
+                if not _recheck["passed"]:
+                    _unfixed_chapters = set()
+                    for _err in _recheck.get("errors", []):
+                        m = re.search(r"第(\d+)章", _err)
+                        if m:
+                            _unfixed_chapters.add(int(m.group(1)))
+                    if _unfixed_chapters:
+                        _extra_fixes = 0
+                        for _ch_num in _unfixed_chapters:
+                            _ch_content = chapters.get(_ch_num, "")
+                            _ch_content, _bbn_fixes2 = bind_bare_numbers(
+                                _ch_content, _anchor, _ch_num, latest_only=True,
+                            )
+                            if _bbn_fixes2:
+                                chapters[_ch_num] = _ch_content
+                                _extra_fixes += len(_bbn_fixes2)
+                        if _extra_fixes > 0:
+                            logger.info(f"Gate8 PGNB 自修复: {_extra_fixes} 处残留幻觉修正")
+            except Exception as _e:  # noqa: BLE001
+                logger.warning(f"Gate8 PGNB 自修复失败（非阻断）: {_e}")
+
             return {
                 "fixed_count": len(_fixes),
                 "fixes": [
