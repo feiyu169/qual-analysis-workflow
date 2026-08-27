@@ -334,6 +334,7 @@ class MemoryCache:
         valid = self.get_valid_trajectories()
         answers = self.get_all_answers()
         answer_freq = get_answer_frequencies(answers)
+        scores = [t.quality_score for t in valid]
 
         return {
             "total_trajectories": len(self.trajectories),
@@ -342,7 +343,24 @@ class MemoryCache:
             "unique_answers": len(answer_freq),
             "consensus_answer": self.get_consensus_answer(),
             "answer_frequencies": dict(answer_freq.most_common()),
+            # 二期：轨迹质量分分布（供样本库校准；无有效轨迹时 None）
+            "quality_distribution": _quality_summary(scores) if scores else None,
         }
+
+
+def _quality_summary(scores: List[float]) -> Dict[str, float]:
+    """质量分分布摘要 {min, max, mean, median}。"""
+    if not scores:
+        return {}
+    ordered = sorted(scores)
+    n = len(ordered)
+    median = ordered[n // 2] if n % 2 else (ordered[n // 2 - 1] + ordered[n // 2]) / 2
+    return {
+        "min": min(scores),
+        "max": max(scores),
+        "mean": round(sum(scores) / n, 2),
+        "median": median,
+    }
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the entire cache to a dictionary."""

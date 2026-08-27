@@ -55,3 +55,13 @@
 - 门禁：ruff 全绿 + pytest 全套 + HGF CLI MUST_PASS（exit=0）
 - 集成：真实 API K=2 端到端（基础/增强两种 mode）
 - 沉淀：CHANGELOG + SKILL.md 工具说明
+
+## 六、实施状态
+
+- [x] **一期插件化（2026-08-22）**：heavyskill_bridge.py + heavyskill-tools.js（4 工具，hsk-1/pkg-2 注册运行）+
+  sample_registry.py + CLI 采集；43 单测、HGF 9 门禁 MUST_PASS、真实桥 smoke、插件注册验证
+- [x] **二期样本库校准（2026-08-22）**：calibration_report.py（分桶采纳率/Spearman/AUC/回归集/
+  阈值保护）+ memory_cache quality_distribution（修一期遗留恒 None）；50 单测、HGF 9 门禁 MUST_PASS、
+  真实报告验证（2 条样本 insufficient_data 保护正确）
+- [ ] **校准生效条件**：样本 N≥20（quality_score 可用）→ N≥30（统计检验）；
+  实际采纳率/ρ/AUC 达标后 quality_score 权重可调（当前公式为启发式基线）

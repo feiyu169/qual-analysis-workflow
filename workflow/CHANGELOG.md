@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-08-22 — HeavySkill 样本库校准二期（calibration_report）
+
+### 背景
+裁判裁决书二期（样本库校准，~5.5 人天）：用样本库积累的人工裁决（adopt/reject）
+校准 quality_score 与结论可信度——把 heavyskill 从"机制看起来对"升级为"数据证明有效"。
+
+### 交付
+- `scripts/calibration_report.py`：校准报告（CLI + JSON 模式）
+  - 采纳率统计（total/adopted/rejected/pending/adoption_rate）
+  - **分桶采纳率**（quality_score 4 桶，应单调递增）
+  - **Spearman 秩相关**（scipy，二值 y 平均秩处理；N≥30 显著性检验）
+  - **ROC-AUC**（Mann-Whitney U 等价；>0.7 才有意义）
+  - **回归测试集**（被 reject 样本重放防退化）
+  - 阈值保护（裁判裁定）：N<20 insufficient_data / N<30 仅描述性统计
+- `workflow/memory_cache.py`：`get_stats()` 增加 `quality_distribution`（min/max/mean/median）
+  ——修复一期遗留：record_sample 的质量分分布此前恒为 None（cache_stats 无此键）
+- 单测 `tests/test_calibration.py`：8 项（分桶单调/相关/不足 N 返回 None/AUC/阈值/回归集/常量一致）
+
+### 验收（HGF 流程）
+- 单测 43 → 50；ruff 全绿（新代码零新增债）
+- **HGF CLI 9 门禁全部 MUST_PASS（exit=0）**
+- 真实样本库报告验证：2 条样本（smoke）→ insufficient_data 保护正确触发、分桶输出正常
+- 统计方法说明：二值 y（0/1 大量 ties）下 scipy 平均秩使完美单调 ρ≈0.87 而非 1——统计上正确且偏保守（测试已固化）
+
+### 使用
+```powershell
+python skills/heavyskill/scripts/calibration_report.py [--json] [--regression]
+```
+
 ## 2026-08-22 — HeavySkill 插件化一期（heavyskill-tools 动态插件 + 长驻桥）
 
 ### 背景
