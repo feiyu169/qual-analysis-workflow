@@ -30,6 +30,8 @@ class ValuationVerdict:
     target_bull: float
     target_bull_assumptions: str
     upside: float               # 百分比
+    rating: str                 # 投资评级（买入/增持/中性/减持/卖出）
+    rating_rationale: str       # 评级理由
     method: str                 # 主方法描述
     method_details: dict        # 各方法估值结果
     reconciliation: str         # 仲裁说明（CFA V-C）
@@ -139,6 +141,9 @@ class ValuationArbiter:
 
         upside = (target / financials.current_price - 1) * 100 if financials.current_price > 0 else 0
 
+        # v10 P0-2：评级-目标价映射（CFA V-B：估值结论必须与投资建议一致）
+        rating, rating_rationale = _derive_rating(upside)
+
         return ValuationVerdict(
             target_price=round(target, 2),
             target_bear=round(bear, 2),
@@ -147,6 +152,8 @@ class ValuationArbiter:
             target_bull=round(bull, 2),
             target_bull_assumptions=bull_a,
             upside=round(upside, 1),
+            rating=rating,
+            rating_rationale=rating_rationale,
             method=method_desc,
             method_details=available,
             reconciliation=reconciliation,
@@ -165,7 +172,8 @@ class ValuationArbiter:
         return ValuationVerdict(
             target_price=0, target_bear=0, target_bear_assumptions="",
             target_base=0, target_bull=0, target_bull_assumptions="",
-            upside=0, method="不适用", method_details={},
+            upside=0, rating="无", rating_rationale="估值方法不可用",
+            method="不适用", method_details={},
             reconciliation="所有估值方法均不可用，无法给出估值结论。",
             is_loss_company=financials.is_loss_company,
             primary_method="无",
@@ -173,3 +181,24 @@ class ValuationArbiter:
             currency=financials.currency,
             data_as_of=financials.report_date,
         )
+
+
+def _derive_rating(upside_pct: float) -> tuple[str, str]:
+    """根据上行空间推导投资评级（CFA V-B：估值结论必须与投资建议一致）。
+
+    Args:
+        upside_pct: 上行空间百分比（如 25.0 表示 +25%）
+
+    Returns:
+        (评级, 理由)
+    """
+    if upside_pct >= 30:
+        return "买入", f"上行空间 {upside_pct:.1f}%（≥30%），估值显著低估"
+    elif upside_pct >= 15:
+        return "增持", f"上行空间 {upside_pct:.1f}%（15-30%），估值温和低估"
+    elif upside_pct >= -15:
+        return "中性", f"上行/下行空间 {upside_pct:.1f}%（±15%），估值合理"
+    elif upside_pct >= -30:
+        return "减持", f"下行空间 {abs(upside_pct):.1f}%（15-30%），估值温和高估"
+    else:
+        return "卖出", f"下行空间 {abs(upside_pct):.1f}%（≥30%），估值显著高估"
