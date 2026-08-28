@@ -304,6 +304,22 @@ class Gate8FinalValidation(GateBase):
                     chapters[_ch_num] = _ch_content
                     logger.info(f"Gate8 DCF 负值修复 第{_ch_num}章 {_dcf_fixes} 处")
 
+            # v10：格式错位修复——检测"年份+数值+时间量词"模式
+            # 如 "FY2025 303.69-5年" → 归母净资产数值被嵌入时间表述
+            _fmt_re = re.compile(r"(\d{4})\s+(\d+\.?\d*)\s*[-~～]\s*(\d+)\s*年")
+            for _ch_num in list(chapters.keys()):
+                _ch_content = chapters.get(_ch_num, "")
+                _fmt_fixes = 0
+                for _m in _fmt_re.finditer(_ch_content):
+                    _old = _m.group(0)
+                    _year, _val, _period = _m.group(1), _m.group(2), _m.group(3)
+                    _new = f"{_year}年 {_val}亿（{_period}年周期）"
+                    _ch_content = _ch_content.replace(_old, _new, 1)
+                    _fmt_fixes += 1
+                if _fmt_fixes > 0:
+                    chapters[_ch_num] = _ch_content
+                    logger.info(f"Gate8 格式错位修复 第{_ch_num}章 {_fmt_fixes} 处")
+
             # v10 PGNB 自修复循环：rescue sweep 后复验 Critical，仍有数值不一致时
             # 对未修复章节强制再跑一次 bind_bare_numbers（latest_only=True）
             try:

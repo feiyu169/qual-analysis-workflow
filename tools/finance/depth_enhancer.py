@@ -667,21 +667,28 @@ def _compute_ev_revenue_flip_thresholds(
     market_cap = current_price * shares
     current_ev_rev = enterprise_value / revenue if revenue > 0 else 0
 
-    # EV/Revenue 倍数翻转点：当倍数降至多少时，EV = 当前市值
+    # Step 1: EV/Revenue 倍数翻转点（当倍数降到多少时，EV = 市值）
     flip_ev_rev = market_cap / revenue if revenue > 0 else 0
 
-    # 计算 EV ≈ 市值的偏差（净债务≈0 时翻转点≈当前值，无信息量）
-    ev_rev_gap = abs(current_ev_rev - flip_ev_rev) / max(current_ev_rev, 0.01)
+    # Step 2: 营收翻转点（倍数不变，营收降到多少时 EV = 市值）
+    flip_revenue = market_cap / current_ev_rev if current_ev_rev > 0 else 0
 
-    if ev_rev_gap < 0.05:
-        # EV ≈ 市值，改用 20% 倍数下降作为翻转点
+    # Step 3: 检测净债务≈0 的情况（翻转点≈当前值，无信息量）
+    ev_rev_gap = abs(current_ev_rev - flip_ev_rev) / max(current_ev_rev, 0.01)
+    rev_gap = abs(revenue - flip_revenue) / max(revenue, 0.01)
+
+    note = ""
+    if ev_rev_gap < 0.05 or rev_gap < 0.05:
+        # 净债务≈0，改用 20% 偏差作为敏感度阈值
         flip_ev_rev = current_ev_rev * 0.80
         flip_revenue = revenue * 0.80
         note = "（净债务≈0，以 20% 偏差为敏感度阈值）"
     else:
-        # 正常情况：翻转点 = 市值 / 倍数
-        flip_revenue = market_cap / current_ev_rev if current_ev_rev > 0 else 0
-        note = ""
+        # 方向验证：翻转点必须低于当前值（下降才有意义）
+        if flip_ev_rev > current_ev_rev:
+            flip_ev_rev = current_ev_rev * 0.80
+        if flip_revenue > revenue:
+            flip_revenue = revenue * 0.80
 
     thresholds.append(FlipThreshold(
         variable="EV/Revenue倍数",

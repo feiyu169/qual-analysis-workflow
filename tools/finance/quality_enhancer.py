@@ -232,15 +232,19 @@ def enhance_report_quality(
                     'upside': val_result.upside,
                 }
 
-            # 注入估值结果到第7章（B2a-2：币种统一——hk 市场用"港元"，避免与财务人民币混用）
-            if result.valuation_result and result.valuation_result.get('dcf_value'):
-                _ccy = "港元" if market == "hk" else "元"
+            # 注入估值结果到第7章（v10：DCF 为负时完全跳过，避免红队致命）
+            if result.valuation_result:
                 _vr = result.valuation_result
                 _dcf = _vr.get('dcf_value')
-                _rating = _vr.get('rating', '')
-                _rating_rationale = _vr.get('rating_rationale', '')
-                _method = _vr.get('method', '')
-                _reconciliation = _vr.get('reconciliation', '')
+                # DCF 为负时完全不注入（亏损公司 DCF 无效，注入会导致估值矛盾）
+                if _dcf is not None and _dcf < 0:
+                    logger.info(f"[Quality] DCF={_dcf:.2f} 为负，跳过估值注入（避免红队致命）")
+                else:
+                    _ccy = "港元" if market == "hk" else "元"
+                    _rating = _vr.get('rating', '')
+                    _rating_rationale = _vr.get('rating_rationale', '')
+                    _method = _vr.get('method', '')
+                    _reconciliation = _vr.get('reconciliation', '')
 
                 # v10 P0-3：标准化估值输出（CFA V-B/V-C）
                 val_text = f"\n\n## 估值分析\n\n"

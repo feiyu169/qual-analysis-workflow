@@ -314,6 +314,57 @@ class CrossChapterConsistencyChecker:
                             content2=f"{indicator}={val2}亿",
                         ))
 
+        # 4. 派生指标跨章一致性：净现比（经营现金流/净利润）
+        _ratio_patterns = [
+            r"净现比[：:]\s*(-?\d+\.?\d*)\s*[%％倍]",
+            r"现金流转化率[：:]\s*(-?\d+\.?\d*)\s*[%％倍]",
+            r"经营现金流.*?净利润.*?(\d+\.?\d*)\s*倍",
+        ]
+        _ratio_by_ch: dict[int, dict[int | None, float]] = {}
+        for ch_num, content in chapters.items():
+            for pat in _ratio_patterns:
+                for m in re.finditer(pat, content):
+                    try:
+                        val = float(m.group(1))
+                        if "%" in pat:
+                            val = val / 100.0
+                        ctx = content[max(0, m.start() - 150):m.start()]
+                        years = re.findall(r"(?:FY\s*)?(20\d{2})(?:\s*年)?", ctx)
+                        fy = int(years[-1]) if years else None
+                        _ratio_by_ch.setdefault(ch_num, {})[fy] = val
+                    except (ValueError, IndexError):
+                        continue
+
+        _latest = self._anchor.get_latest_fiscal_year() if self._anchor else None
+        _ratio_by_fy: dict[int | None, dict[int, float]] = {}
+        for ch_num, fy_vals in _ratio_by_ch.items():
+            for fy, val in fy_vals.items():
+                bucket = fy if fy is not None else _latest
+                _ratio_by_fy.setdefault(bucket, {})[ch_num] = val
+
+        for fy, values in _ratio_by_fy.items():
+            if len(values) < 2:
+                continue
+            unique = set(values.values())
+            if len(unique) <= 1:
+                continue
+            ch_list = list(values.keys())
+            for i in range(len(ch_list)):
+                for j in range(i + 1, len(ch_list)):
+                    ch1, ch2 = ch_list[i], ch_list[j]
+                    v1, v2 = values[ch1], values[ch2]
+                    fy_txt = f"FY{fy}" if fy else "最新财年"
+                    if abs(v1 - v2) / max(abs(v1), abs(v2), 1e-9) <= 0.05:
+                        continue
+                    sev = "fatal" if (v1 > 0) != (v2 > 0) else "important"
+                    issues.append(ConsistencyIssue(
+                        issue_type="data_conflict",
+                        severity=sev,
+                        description=f"净现比({fy_txt})在第{ch1}章={v1:.1%}，第{ch2}章={v2:.1%}",
+                        chapter1=ch1, line1=0, content1=f"净现比={v1:.1%}",
+                        chapter2=ch2, line2=0, content2=f"净现比={v2:.1%}",
+                    ))
+
         return issues
 
     def _check_conclusion_consistency(self, chapters: dict[int, str]) -> list[ConsistencyIssue]:
