@@ -174,7 +174,10 @@ class Gate0DataSourceValidation(GateBase):
         """验证数据（真实：canonical 键覆盖率 + 3年范围）"""
         errors = []
 
-        if not filing_result["success"]:
+        # v10：Wind-only 模式下跳过财报缺失检查
+        wind_data = context.get("wind_data")
+        is_wind_only = not filing_result["success"] and wind_data and isinstance(wind_data, dict) and wind_data.get("income")
+        if not filing_result["success"] and not is_wind_only:
             errors.append("财报数据缺失")
 
         coverage, missing = 0.0, []
