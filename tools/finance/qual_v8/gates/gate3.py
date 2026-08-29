@@ -209,9 +209,9 @@ class Gate3ChapterWriting(GateBase):
                     from ...fact_extractor import ExtractedFacts, FinancialFacts, OperationalFacts
                     fin = FinancialFacts(
                         revenue=facts.get('revenue'),
-                        net_income=facts.get('net_income'),
+                        net_profit=facts.get('net_income'),
                         total_assets=facts.get('total_assets'),
-                        operating_cash_flow=facts.get('operating_cash_flow'),
+                        operating_cashflow=facts.get('operating_cash_flow'),
                     )
                     ops = OperationalFacts()
                     ctx.facts = ExtractedFacts(
