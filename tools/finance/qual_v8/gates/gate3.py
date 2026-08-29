@@ -204,26 +204,23 @@ class Gate3ChapterWriting(GateBase):
             # 注入事实表（若 Gate1 已提取）
             facts = context.get("facts")
             if facts and not getattr(ctx, "facts", None):
-                # v10：wind-only 模式下 facts 是 dict，需要包装为兼容对象
+                # v10：wind-only 模式下 facts 是 dict，包装为 ExtractedFacts 兼容对象
                 if isinstance(facts, dict):
-                    class _FactsCompat:
-                        """dict 包装，兼容 ctx.facts.operational/financial 等属性访问。"""
-                        def __init__(self, d: dict):
-                            self._d = d
-                            # operational: 运营数据
-                            self.operational = type('O', (), {
-                                k: v for k, v in d.items()
-                                if isinstance(v, (int, float, str))
-                                and k not in ('revenue', 'net_income', 'total_assets', 'operating_cash_flow')
-                            })()
-                            # financial: 财务数据（含 revenue/net_income 等）
-                            self.financial = type('F', (), {
-                                'revenue': d.get('revenue'),
-                                'net_income': d.get('net_income'),
-                                'total_assets': d.get('total_assets'),
-                                'operating_cash_flow': d.get('operating_cash_flow'),
-                            })()
-                    ctx.facts = _FactsCompat(facts)
+                    from ...fact_extractor import ExtractedFacts, FinancialFacts, OperationalFacts
+                    fin = FinancialFacts(
+                        revenue=facts.get('revenue'),
+                        net_income=facts.get('net_income'),
+                        total_assets=facts.get('total_assets'),
+                        operating_cash_flow=facts.get('operating_cash_flow'),
+                    )
+                    ops = OperationalFacts()
+                    ctx.facts = ExtractedFacts(
+                        company_name=context.get('company_name', ''),
+                        ticker=context.get('ticker', ''),
+                        fiscal_year=context.get('fiscal_year', 0),
+                        operational=ops,
+                        financial=fin,
+                    )
                 else:
                     ctx.facts = facts
 
