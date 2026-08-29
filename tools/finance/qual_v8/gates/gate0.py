@@ -77,8 +77,13 @@ class Gate0DataSourceValidation(GateBase):
         filing_result = self._fetch_filing(context)
         details["filing"] = filing_result
 
+        # v10：Wind-only 模式——美股等无法下载年报时，仅用 Wind 数据
         if not filing_result["success"]:
-            errors.append(f"财报获取失败: {filing_result.get('error', '未知错误')}")
+            wind_data = context.get("wind_data")
+            if wind_data and isinstance(wind_data, dict) and wind_data.get("income"):
+                warnings.append(f"财报获取失败（Wind-only 模式）: {filing_result.get('error', '未知')}")
+            else:
+                errors.append(f"财报获取失败: {filing_result.get('error', '未知错误')}")
 
         # 2. 尝试获取Wind数据（从 context 取已装配数据）
         wind_result = self._fetch_wind_data(context)
