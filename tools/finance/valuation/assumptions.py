@@ -155,6 +155,7 @@ def create_default_assumptions(
     base_revenue: float,
     base_wacc: float = None,
     base_terminal_growth: float = 0.02,
+    beta: float = 1.2,
 ) -> ValuationAssumptions:
     """
     创建默认假设
@@ -163,17 +164,18 @@ def create_default_assumptions(
         base_revenue: 基础营收（亿）
         base_wacc: 基础WACC（默认使用CAPM计算）
         base_terminal_growth: 基础永续增长率
+        beta: Beta 系数（必须从 Wind 或可比公司获取，禁止硬编码）
 
     Returns:
         ValuationAssumptions
     """
     # 计算WACC
     if base_wacc is None:
-        rf = 0.023  # 无风险利率
-        beta = 1.2  # Beta系数
-        erp = 0.055  # 股权风险溢价
-        ke = rf + beta * erp  # 0.089
-        kd = 0.05  # 债务成本
+        rf = 0.023  # 无风险利率（中国10年期国债）
+        beta = beta  # 从调用方获取，禁止硬编码（P-04 问题）
+        erp = 0.055  # 股权风险溢价（A股历史均值）
+        ke = rf + beta * erp
+        kd = 0.05  # 债务成本（AA+级债券均值）
         tax_rate = 0.25
         d_ratio = 0.15  # 债务比例
         base_wacc = ke * (1 - d_ratio) + kd * (1 - tax_rate) * d_ratio

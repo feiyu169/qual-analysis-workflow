@@ -89,6 +89,21 @@ def validate_valuation_inputs(
     if financials.currency not in ("CNY", "HKD", "USD"):
         errors.append(f"币种 {financials.currency} 不支持")
 
+    # v10: 置信度检查
+    if financials.confidence < 0.5:
+        warnings.append(f"数据置信度 {financials.confidence:.2f} < 0.5，估值结果可靠性存疑")
+
+    # v10: 时间戳检查（数据新鲜度）
+    if financials.timestamp:
+        try:
+            from datetime import datetime
+            ts = datetime.fromisoformat(financials.timestamp)
+            age_days = (datetime.now() - ts).total_seconds() / 86400
+            if age_days > 30:
+                warnings.append(f"数据时间戳 {financials.timestamp} 超过 30 天，可能过时")
+        except (ValueError, TypeError):
+            pass
+
     for w in warnings:
         logger.warning(f"估值输入校验警告: {w}")
 

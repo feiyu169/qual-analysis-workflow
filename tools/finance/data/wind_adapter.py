@@ -115,4 +115,5 @@ def wind_to_financials(
         company_name=company_name,
         fiscal_year=fiscal_year,
         source="Wind",
+        timestamp=__import__("datetime").datetime.now().isoformat(),
     )

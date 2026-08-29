@@ -48,6 +48,8 @@ class Financials:
     source: str = "Wind"
     report_date: str = ""
     unit: str = "亿元"
+    timestamp: str = ""           # 数据获取时间戳
+    confidence: float = 1.0       # 数据置信度（0-1，1=完全可信）
 
     @property
     def net_debt(self) -> float:
