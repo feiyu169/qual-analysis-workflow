@@ -73,6 +73,21 @@ class Gate1TypeInference(GateBase):
         facts = self._extract_facts(context)
         details["facts"] = _facts_to_dict(facts) if not isinstance(facts, dict) else facts
 
+        # v10：Wind-only 模式——从 Wind 数据直接构建必填字段
+        wind_data = context.get("wind_data", {})
+        if isinstance(facts, dict) and not facts.get("revenue") and wind_data:
+            _income = wind_data.get("income", {})
+            _balance = wind_data.get("balance", {})
+            _cashflow = wind_data.get("cashflow", {})
+            if _income.get("营业收入"):
+                facts["revenue"] = _income["营业收入"][-1]
+            if _income.get("归母净利润"):
+                facts["net_income"] = _income["归母净利润"][-1]
+            if _balance.get("总资产"):
+                facts["total_assets"] = _balance["总资产"][-1]
+            if _cashflow.get("经营活动现金流量净额"):
+                facts["operating_cash_flow"] = _cashflow["经营活动现金流量净额"][-1]
+
         # quick 模式：事实提取 SKIPPED 时跳过必填字段/偏差检查（不阻断检查链）
         facts_skipped = (context.get("gate_1_result") or {}).get("facts_skipped", False)
 
