@@ -74,6 +74,25 @@ class Gate7ProblemTransformation(GateBase):
         memory_result = self._store_memory(context, transformation_result["issues"])
         details["memory"] = memory_result
 
+        # 3.5 v10 Phase 3：跨章数据校验（检查前移）
+        # 关键指标跨章引用不一致时发出 warning
+        chapters = context.get("chapters", {})
+        if chapters:
+            try:
+                from ...quality.cross_chapter_consistency import (
+                    CrossChapterConsistencyChecker,
+                )
+                wind_data = context.get("wind_data", {})
+                checker = CrossChapterConsistencyChecker(wind_data=wind_data)
+                result = checker._check_consistency(chapters)
+                if not result.passed:
+                    for issue in result.issues[:5]:
+                        warnings.append(
+                            f"跨章数据校验警告: {issue.description[:100]}"
+                        )
+            except Exception as e:
+                logger.warning(f"Gate7 跨章数据校验失败（非阻断）: {e}")
+
         if not memory_result["passed"]:
             errors.extend(memory_result["errors"])
 

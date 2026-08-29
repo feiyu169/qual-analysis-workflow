@@ -85,6 +85,22 @@ class Gate6Conclusion(GateBase):
         if not rating_result["passed"]:
             errors.extend(rating_result["errors"])
 
+        # 3.5 v10 Phase 3：评级-目标价校验（检查前移）
+        # 评级与估值结论的上行空间不一致时发出 warning
+        try:
+            _rating = rating_result.get("rating", "")
+            _vr = context.get("valuation", {})
+            if isinstance(_vr, dict) and _vr.get("upside") is not None and _rating:
+                _upside = _vr["upside"]
+                _expected = self._expected_rating(_upside)
+                if _expected and _rating != _expected:
+                    warnings.append(
+                        f"评级-目标价校验警告：评级'{_rating}'与上行空间{_upside:.1%}"
+                        f"不一致（预期'{_expected}'），需人工复核"
+                    )
+        except Exception as e:
+            logger.warning(f"Gate6 评级校验失败（非阻断）: {e}")
+
         # 4. 检查评级与估值一致性
         consistency_result = self._check_rating_valuation_consistency(chapters, context)
         details["consistency"] = consistency_result
@@ -226,6 +242,20 @@ class Gate6Conclusion(GateBase):
             "errors": errors,
             "word_count": len(overview_chapter),
         }
+
+    @staticmethod
+    def _expected_rating(upside_pct: float) -> str:
+        """根据上行空间推导预期评级（与 valuation/arbiter.py 一致）。"""
+        if upside_pct >= 30:
+            return "买入"
+        elif upside_pct >= 15:
+            return "增持"
+        elif upside_pct >= -15:
+            return "中性"
+        elif upside_pct >= -30:
+            return "减持"
+        else:
+            return "卖出"
 
     def _check_rating(self, chapters: dict[int, str], context: dict | None = None) -> dict[str, Any]:
         """检查投资评级"""

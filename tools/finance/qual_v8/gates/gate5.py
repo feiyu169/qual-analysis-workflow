@@ -79,6 +79,26 @@ class Gate5QualityEnhancement(GateBase):
         if not cross_validation["passed"]:
             errors.extend(cross_validation["errors"])
 
+        # 3.5 v10 Phase 3：估值一致性检查（检查前移）
+        # DCF vs 可比公司偏差超阈值时发出 warning
+        try:
+            _vr = context.get("valuation", {})
+            if isinstance(_vr, dict) and _vr.get("method_details"):
+                _methods = _vr["method_details"]
+                _vals = list(_methods.values())
+                if len(_vals) >= 2:
+                    _max_v = max(_vals)
+                    _min_v = min(_vals)
+                    _dev = abs(_max_v - _min_v) / max(_max_v, _min_v, 1e-6)
+                    if _dev > 0.40:
+                        warnings.append(
+                            f"估值一致性警告：多方法偏差 {_dev:.0%}（>{'40%'}），"
+                            f"需人工复核估值假设"
+                        )
+                        logger.warning(f"Gate5 估值一致性: 偏差 {_dev:.0%}，方法 {list(_methods.keys())}")
+        except Exception as e:
+            logger.warning(f"Gate5 估值一致性检查失败（非阻断）: {e}")
+
         # 4. 计算得分
         score = 100.0
         if errors:
