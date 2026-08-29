@@ -207,14 +207,22 @@ class Gate3ChapterWriting(GateBase):
                 # v10：wind-only 模式下 facts 是 dict，需要包装为兼容对象
                 if isinstance(facts, dict):
                     class _FactsCompat:
-                        """dict 包装，兼容 ctx.facts.operational 等属性访问。"""
+                        """dict 包装，兼容 ctx.facts.operational/financial 等属性访问。"""
                         def __init__(self, d: dict):
                             self._d = d
-                            self.operational = type('O', (), {k: v for k, v in d.items() if isinstance(v, (int, float, str)) and k not in ('revenue', 'net_income', 'total_assets', 'operating_cash_flow')})()
-                            self.revenue = d.get('revenue')
-                            self.net_income = d.get('net_income')
-                            self.total_assets = d.get('total_assets')
-                            self.operating_cash_flow = d.get('operating_cash_flow')
+                            # operational: 运营数据
+                            self.operational = type('O', (), {
+                                k: v for k, v in d.items()
+                                if isinstance(v, (int, float, str))
+                                and k not in ('revenue', 'net_income', 'total_assets', 'operating_cash_flow')
+                            })()
+                            # financial: 财务数据（含 revenue/net_income 等）
+                            self.financial = type('F', (), {
+                                'revenue': d.get('revenue'),
+                                'net_income': d.get('net_income'),
+                                'total_assets': d.get('total_assets'),
+                                'operating_cash_flow': d.get('operating_cash_flow'),
+                            })()
                     ctx.facts = _FactsCompat(facts)
                 else:
                     ctx.facts = facts
