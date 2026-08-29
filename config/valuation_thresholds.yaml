@@ -1,0 +1,83 @@
+# 估值自洽阈值配置（v10 Phase 2，治理方案 v3.0 P0-3）
+#
+# 分公司类型差异化阈值，替代硬编码 0.20/0.40。
+# HeavySkill K8 审查要求：DCF/PS/EV-Rev 偏差 <40% 过宽，需分行业设置。
+#
+# 超阈值处理：
+#   warning: 日志警告（不阻断）
+#   require_human_review: 标记需人工复核
+#   block_delivery: 阻断报告交付（仅 OCF 负的亏损公司）
+
+convergence:
+  default_threshold: 0.30  # 默认 30%
+
+  by_type:
+    # 亏损公司（OCF 正）：有扭亏路径，EV/Revenue 为主
+    loss_with_ocf:
+      methods: [ev_revenue, ps]
+      threshold: 0.25
+      condition: "net_income < 0 and operating_cashflow > 0"
+      exceed_warning_threshold: 0.40
+      block_on_exceed: false
+
+    # 亏损公司（OCF 负）：最严路径，PS 为主
+    loss_no_ocf:
+      methods: [ps]
+      threshold: 0.20
+      condition: "net_income < 0 and operating_cashflow <= 0"
+      exceed_warning_threshold: 0.35
+      block_on_exceed: true  # 阻断交付
+
+    # 盈利高增长（ROE>15%, g>20%）
+    profitable_growth:
+      methods: [dcf, ps, ev_revenue]
+      threshold: 0.25
+      condition: "roe > 0.15 and revenue_growth > 0.20"
+      exceed_warning_threshold: 0.40
+      block_on_exceed: false
+
+    # 盈利稳定（ROE>10%, g<15%）
+    profitable_stable:
+      methods: [dcf, pe, pb]
+      threshold: 0.20
+      condition: "roe > 0.10 and revenue_growth < 0.15"
+      exceed_warning_threshold: 0.40
+      block_on_exceed: false
+
+    # 周期公司（利润波动>50%）
+    cyclical:
+      methods: [pb, ev_ebitda, dcf]
+      threshold: 0.30
+      condition: "profit_volatility > 0.50"
+      exceed_warning_threshold: 0.45
+      block_on_exceed: false
+
+    # 高杠杆（净负债/EBITDA>5）
+    high_leverage:
+      methods: [ev_ebitda, dcf]
+      threshold: 0.30
+      condition: "net_debt / ebitda > 5"
+      exceed_warning_threshold: 0.45
+      block_on_exceed: false
+
+    # 金融公司
+    financial:
+      methods: [pb, ddm]
+      threshold: 0.20
+      condition: "sector == 'financial'"
+      exceed_warning_threshold: 0.35
+      block_on_exceed: false
+
+  # 评级-目标价映射阈值
+  rating_thresholds:
+    buy: 0.30        # 上行空间 >=30% → 买入
+    overweight: 0.15 # 上行空间 15-30% → 增持
+    neutral_upper: 0.15  # 上行空间 <=15% → 中性
+    neutral_lower: -0.15 # 下行空间 <=15% → 中性
+    underweight: -0.30   # 下行空间 15-30% → 减持
+    sell: -0.30          # 下行空间 >=30% → 卖出
+
+  # 翻转阈值敏感度
+  flip_threshold:
+    sensitivity: 0.20  # 20% 偏差作为敏感度阈值
+    min_gap: 0.05      # 净债务≈0 判断阈值（ev_rev_gap < 5%）

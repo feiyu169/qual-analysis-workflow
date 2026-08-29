@@ -1,12 +1,12 @@
 """
-估值仲裁器（v10 新建，HeavySkill K8 审查 P0-5/P0-6）。
+估值仲裁器（v10，治理方案 v3.0 Phase 2 配置化）。
 
 ValuationArbiter 是估值模块的**唯一出口**。
 gate5.py 必须只消费此结论，不得自行执行 DCF→PE→PS 降级链。
 
-仲裁规则（K8 修订）：
-- 取消固定 60/40 权重和固定 30% 阈值
-- 分档处理：<20% 可加权，20-40% 披露偏差，>40% 以主方法为准
+仲裁规则（从 valuation_thresholds.yaml 加载，不再硬编码）：
+- 分公司类型差异化阈值（亏损/盈利/周期/高杠杆/金融）
+- 分档处理：<阈值 可加权，阈值-警告阈值 披露偏差，>警告阈值 以主方法为准
 - 亏损公司不得先触发 DCF 再被覆盖
 """
 from __future__ import annotations
@@ -43,7 +43,50 @@ class ValuationVerdict:
 
 
 class ValuationArbiter:
-    """估值仲裁器（唯一出口）。"""
+    """估值仲裁器（唯一出口，配置从 valuation_thresholds.yaml 加载）。"""
+
+    def __init__(self, config_path: str | None = None) -> None:
+        """初始化仲裁器，加载阈值配置。"""
+        import os
+        _default = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "config", "valuation_thresholds.yaml",
+        )
+        self._config_path = config_path or _default
+        self._config = self._load_config()
+
+    def _load_config(self) -> dict:
+        """加载阈值配置。"""
+        try:
+            import yaml
+            with open(self._config_path, encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+        except Exception:
+            return {}
+
+    def _get_threshold(self, company_type: str = "default") -> float:
+        """获取公司类型对应的自洽阈值。"""
+        by_type = self._config.get("convergence", {}).get("by_type", {})
+        if company_type in by_type:
+            return by_type[company_type].get("threshold", 0.30)
+        return self._config.get("convergence", {}).get("default_threshold", 0.30)
+
+    def _get_exceed_warning_threshold(self, company_type: str = "default") -> float:
+        """获取超阈值警告线。"""
+        by_type = self._config.get("convergence", {}).get("by_type", {})
+        if company_type in by_type:
+            return by_type[company_type].get("exceed_warning_threshold", 0.40)
+        return 0.40
+
+    def _classify_company(self, financials: Financials) -> str:
+        """根据财务数据自动分类公司类型。"""
+        if financials.is_loss_company:
+            if financials.has_positive_ocf:
+                return "loss_with_ocf"
+            return "loss_no_ocf"
+        if financials.leverage > 0.7:
+            return "high_leverage"
+        return "profitable_stable"
 
     def arbitrate(
         self,
@@ -93,7 +136,11 @@ class ValuationArbiter:
         for name, value in cross_values.items():
             deviations[name] = abs(primary_value - value) / max(primary_value, value, 1e-6)
 
-        # Step 5：仲裁（分档处理）
+        # Step 5：仲裁（从配置加载阈值，不再硬编码）
+        company_type = self._classify_company(financials)
+        threshold = self._get_threshold(company_type)
+        warn_threshold = self._get_exceed_warning_threshold(company_type)
+
         if not deviations:
             target = primary_value
             method_desc = f"{primary_name}（单一方法）"
@@ -102,15 +149,15 @@ class ValuationArbiter:
             max_dev_name = max(deviations, key=lambda k: deviations[k])
             max_dev = deviations[max_dev_name]
 
-            if max_dev < 0.20:
+            if max_dev < threshold:
                 all_values = [primary_value, *list(cross_values.values())]
                 target = sum(all_values) / len(all_values)
                 method_desc = f"{primary_name}+{'+'.join(cross_values)} 等权（偏差 {max_dev:.0%}）"
                 reconciliation = (
                     f"主方法 {primary_name}={primary_value:.2f}，"
-                    f"交叉验证偏差 {max_dev:.0%}（<20%），取等权均值。"
+                    f"交叉验证偏差 {max_dev:.0%}（<{threshold:.0%}），取等权均值。"
                 )
-            elif max_dev < 0.40:
+            elif max_dev < warn_threshold:
                 target = primary_value
                 method_desc = f"{primary_name}（主）+ {max_dev_name} 偏差 {max_dev:.0%}"
                 reconciliation = (
@@ -141,8 +188,13 @@ class ValuationArbiter:
 
         upside = (target / financials.current_price - 1) * 100 if financials.current_price > 0 else 0
 
-        # v10 P0-2：评级-目标价映射（CFA V-B：估值结论必须与投资建议一致）
-        rating, rating_rationale = _derive_rating(upside)
+        # v10 Phase 2：评级-目标价映射（从配置加载阈值）
+        rating_thresholds = self._config.get("convergence", {}).get("rating_thresholds", {})
+        rating, rating_rationale = _derive_rating(
+            upside,
+            buy_threshold=rating_thresholds.get("buy", 0.30),
+            overweight_threshold=rating_thresholds.get("overweight", 0.15),
+        )
 
         return ValuationVerdict(
             target_price=round(target, 2),
@@ -183,22 +235,30 @@ class ValuationArbiter:
         )
 
 
-def _derive_rating(upside_pct: float) -> tuple[str, str]:
-    """根据上行空间推导投资评级（CFA V-B：估值结论必须与投资建议一致）。
+def _derive_rating(
+    upside_pct: float,
+    buy_threshold: float = 0.30,
+    overweight_threshold: float = 0.15,
+) -> tuple[str, str]:
+    """根据上行空间推导投资评级（CFA V-B，阈值从配置加载）。
 
     Args:
-        upside_pct: 上行空间百分比（如 25.0 表示 +25%）
+        upside_pct: 上行空间百分比
+        buy_threshold: 买入阈值（默认 30%）
+        overweight_threshold: 增持阈值（默认 15%）
 
     Returns:
         (评级, 理由)
     """
-    if upside_pct >= 30:
-        return "买入", f"上行空间 {upside_pct:.1f}%（≥30%），估值显著低估"
-    elif upside_pct >= 15:
-        return "增持", f"上行空间 {upside_pct:.1f}%（15-30%），估值温和低估"
-    elif upside_pct >= -15:
-        return "中性", f"上行/下行空间 {upside_pct:.1f}%（±15%），估值合理"
-    elif upside_pct >= -30:
-        return "减持", f"下行空间 {abs(upside_pct):.1f}%（15-30%），估值温和高估"
+    buy_pct = buy_threshold * 100
+    ow_pct = overweight_threshold * 100
+    if upside_pct >= buy_pct:
+        return "买入", f"上行空间 {upside_pct:.1f}%（≥{buy_pct:.0f}%），估值显著低估"
+    elif upside_pct >= ow_pct:
+        return "增持", f"上行空间 {upside_pct:.1f}%（{ow_pct:.0f}-{buy_pct:.0f}%），估值温和低估"
+    elif upside_pct >= -ow_pct:
+        return "中性", f"上行/下行空间 {upside_pct:.1f}%（±{ow_pct:.0f}%），估值合理"
+    elif upside_pct >= -buy_pct:
+        return "减持", f"下行空间 {abs(upside_pct):.1f}%（{ow_pct:.0f}-{buy_pct:.0f}%），估值温和高估"
     else:
-        return "卖出", f"下行空间 {abs(upside_pct):.1f}%（≥30%），估值显著高估"
+        return "卖出", f"下行空间 {abs(upside_pct):.1f}%（≥{buy_pct:.0f}%），估值显著高估"
