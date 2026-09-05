@@ -161,6 +161,97 @@ class DataAnchor:
         pts = self.anchors.get(k, [])
         return sorted(pts, key=lambda dp: dp.fiscal_year if dp.fiscal_year else 0)
 
+    # ============================================================
+    # 宿主强约束接口（v10 Phase 1：Dayu 风格数据访问层）
+    # ============================================================
+
+    def get_latest(self, metric: str) -> DataPoint | None:
+        """获取最新财年的数据点。"""
+        points = self.get_metric_points(metric)
+        return points[-1] if points else None
+
+    def get_by_year(self, metric: str, year: int) -> DataPoint | None:
+        """获取指定财年的数据点。"""
+        for dp in self.get_metric_points(metric):
+            if dp.fiscal_year == year:
+                return dp
+        return None
+
+    def get_series(self, metric: str) -> list[DataPoint]:
+        """获取某指标的多年序列（等同 get_metric_points）。"""
+        return self.get_metric_points(metric)
+
+    def get_by_id(self, point_id: str) -> DataPoint | None:
+        """通过 data_point_id 获取数据点（格式：metric_fyYYYY）。
+
+        支持 canonical key（营业收入_fy2025）和英文别名（revenue_fy2025）。
+        """
+        parts = point_id.rsplit("_fy", 1)
+        if len(parts) != 2:
+            parts = point_id.rsplit("_", 1)
+        if len(parts) != 2:
+            return None
+        metric_part, fy_str = parts
+        try:
+            fy = int(fy_str.replace("fy", "").replace("FY", ""))
+        except ValueError:
+            return None
+        # 英文别名 → canonical key 映射
+        _EN_TO_CANONICAL = {
+            "revenue": "营业收入", "net_profit": "归母净利润",
+            "operating_profit": "营业利润", "total_assets": "总资产",
+            "operating_cashflow": "经营活动现金流量净额",
+        }
+        canonical = _EN_TO_CANONICAL.get(metric_part, metric_part)
+        canonical = canonical_key(canonical)
+        points = self.anchors.get(canonical, [])
+        for dp in points:
+            if dp.fiscal_year == fy:
+                return dp
+        return None
+
+    def format_table(self, metrics: list[str], years: list[int] | None = None) -> str:
+        """格式化数据表（LLM 可读，宿主强约束核心接口）。
+
+        Args:
+            metrics: 要展示的指标列表
+            years: 财年列表（默认取最新 3 年）
+
+        Returns:
+            Markdown 格式数据表
+        """
+        if years is None:
+            years = sorted(set(
+                dp.fiscal_year for pts in self.anchors.values()
+                for dp in pts if dp.fiscal_year
+            ))[-3:]
+
+        # 表头
+        header = "| 指标 | " + " | ".join(f"FY{y}" for y in years) + " | 单位 |"
+        sep = "|------" + "|------" * len(years) + "|------|"
+        rows = [header, sep]
+
+        for metric in metrics:
+            k = canonical_key(metric)
+            points = self.anchors.get(k, [])
+            fy_map = {dp.fiscal_year: dp for dp in points}
+
+            cells = [f"**{metric}**"]
+            for y in years:
+                dp = fy_map.get(y)
+                if dp:
+                    cells.append(f"{dp.value:.2f}")
+                else:
+                    cells.append("—")
+            # 单位
+            unit = "亿元"
+            if points:
+                unit = points[0].unit
+            cells.append(unit)
+            rows.append("| " + " | ".join(cells) + " |")
+
+        return "\n".join(rows)
+
     def attribute_value(self, metric: str, value: float,
                         tolerance: float = 0.01) -> tuple[int | None, float | None]:
         """财年归因：数值 → 匹配的财年（架构级财年语义单源——FiscalSemantics 核心）
