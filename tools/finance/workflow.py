@@ -971,6 +971,7 @@ def _build_chapter_prompt(
 
     # 数据铁律：权威锚点（禁止改动数字/单位/正负号）
     data_anchor = ""
+    data_table = ""
     if ctx.wind:
         w = ctx.wind
         labels = (w._year_labels or {}).get("财年", [2023, 2024, 2025])
@@ -996,6 +997,18 @@ def _build_chapter_prompt(
             last = ocf[-1]
             rows.append(f"- 经营现金流 FY{fy_last} = {last} 亿元（**{'净流出' if last < 0 else '净流入'}**）")
         data_anchor = "\n".join(rows)
+
+        # v10：生成 DataAnchor 格式化数据表（宿主强约束）
+        try:
+            from .qual_v8.data_anchor import get_data_anchor
+            anchor = get_data_anchor(wind_data if hasattr(ctx, 'wind_data') else (ctx.wind or {}))
+            if anchor:
+                data_table = anchor.format_table(
+                    metrics=["营业收入", "营业利润", "归母净利润", "经营活动现金流量净额", "总资产", "归母净资产"],
+                    years=labels if labels else [2023, 2024, 2025],
+                )
+        except Exception as e:
+            logger.warning(f"DataAnchor 数据表生成失败（非阻断）: {e}")
 
     # 构建提示
     prompt = f"""你是一位资深买方投资分析师。请撰写「第{chapter_num}章: {chapter_title}」。
@@ -1112,6 +1125,13 @@ def _build_chapter_prompt(
 - 上述三个小节标题必须严格使用 `## 结论要点`、`## 详细情况`、`## 证据与出处`
 - 绝对禁止使用 `### 结论要点`、`### 详细情况`、`### 证据与出处`
 - 不得使用其他变体（如"核心观点"、"分析详情"、"数据来源"等）
+
+## 📊 Wind 锚点数据表（宿主强约束——程序自动注入，禁止修改）
+
+{data_table}
+
+**数值引用规则**：需要引用上表数据时，使用 `[{{指标名}}]` 占位符（如 `[{{营业收入}}]`），
+系统自动回填为上表中的真实数值。禁止直接写出数字，禁止编造表中没有的数值。
 """
     return prompt
 
